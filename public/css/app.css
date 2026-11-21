@@ -161,3 +161,8 @@ details>summary{cursor:pointer;font-weight:700;padding:6px 0}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14.5px}
 .kv dt{color:var(--muted)} .kv dd{margin:0;font-weight:600}
 @media print{.tabbar,.side,.actionbar,.search,.band .btn,.no-print{display:none!important}.view{padding:0}body{background:#fff}}
+
+/* פתיחת יום חדש / ניקוי הדף הנוכחי */
+.daybar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px}
+.daybar .grow{flex:1}
+@media (max-width:520px){.daybar #dnew,.daybar #dclear{flex:1 1 45%}}

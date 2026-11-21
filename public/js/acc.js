@@ -7,6 +7,7 @@ import { normPhone, phoneProblem, fmtPhone } from './phone.js';
 import { openSendSheet } from './wa-ui.js';
 import { openPrivate } from './features/wa-private.js';
 import { R } from './registry.js';
+import { openDaySheet, clearPageSheet, stepDay } from './day-tools.js';
 
 const KINDS = { morning: 'חשבון בוקר', split: 'פיצול', collectors: 'חשבון גובים', work: 'איסוף יום' };
 
@@ -15,7 +16,7 @@ export async function renderAccounts(view) {
   const L = await get('/api/accounts');
   const kind = vs.kind || '';
   view.innerHTML = `<div class="band"><div class="grow"><div class="eyebrow">${L.length} חשבונות שמורים</div><h1>חשבונות</h1></div>
-    ${App.can.finance ? `<button class="btn sm" id="newacc">+ חשבון חדש</button>` : ''}</div>
+    ${App.can.finance ? `<button class="btn sm" id="newday">פתיחת יום חדש</button> <button class="btn sm" id="newacc">+ חשבון חדש</button>` : ''}</div>
     <div class="search"><input class="in" id="aq" type="search" placeholder="חיפוש לפי תאריך או כותרת…" value="${esc(vs.q || '')}"></div>
     <div class="chips" style="margin-bottom:10px">${[['', 'הכול'], ...Object.entries(KINDS)].map(([k, t]) => `<button class="chip" data-k="${k}" aria-pressed="${kind === k}">${t}</button>`).join('')}</div>
     <div id="alist"></div>`;
@@ -28,6 +29,12 @@ export async function renderAccounts(view) {
   };
   $('#aq').oninput = () => { viewState.set('accounts', { q: $('#aq').value }); draw(); };
   $$('.chip', view).forEach(b => b.onclick = () => { viewState.set('accounts', { kind: b.dataset.k }); $$('.chip', view).forEach(x => x.setAttribute('aria-pressed', x === b)); draw(); });
+  const ndb = $('#newday'); if (ndb) ndb.onclick = () => {
+    const k = viewState.get('accounts').kind;
+    if (k) return openDaySheet(k);
+    const s = openSheet(`<div class="hd"><h2>פתיחת יום חדש</h2><button class="x" data-close>×</button></div><p>באיזה טאב?</p><div class="grid" style="grid-template-columns:1fr">${Object.entries(KINDS).map(([k, t]) => `<button class="btn ghost xl" data-dk="${k}">${t}</button>`).join('')}</div>`);
+    $$('[data-dk]', s.el).forEach(b => b.onclick = () => { s.close(); openDaySheet(b.dataset.dk); });
+  };
   const nb = $('#newacc'); if (nb) nb.onclick = () => {
     const s = openSheet(`<div class="hd"><h2>חשבון חדש</h2><button class="x" data-close>×</button></div><div class="grid" style="grid-template-columns:1fr">
       <label class="f">תאריך<input class="in" type="date" id="nd" value="${todayISO()}"></label>
@@ -44,7 +51,7 @@ export async function renderNew(view, [kind], q) {
   let op = sessionStorage.getItem(k); if (!op) { op = uid(); sessionStorage.setItem(k, op); }
   const r = await save('POST', '/api/accounts', { kind, date: q.get('date') || todayISO(), opId: op }, { label: 'פתיחת חשבון' });
   sessionStorage.removeItem(k);
-  location.replace(`#/acc/${r.id}?edit=1`);
+  location.replace(q.get('view') === '1' ? `#/acc/${r.id}` : `#/acc/${r.id}?edit=1`);
 }
 
 // ---------- מסך חשבון ----------
@@ -66,7 +73,8 @@ export async function renderAccount(view, [id], q) {
 function header(ctx, extra = '') {
   const a = ctx.a;
   return `<div class="band"><div class="grow"><div class="eyebrow">${KINDS[a.kind]} · ${esc(weekday(a.date))}</div><h1>${esc(a.title || KINDS[a.kind])}</h1>${a._updatedBy ? `<div class="small" style="color:var(--band-muted)">עודכן ${when(a._updatedAt)} ע״י ${esc(a._updatedBy)}</div>` : ''}</div>
-  <div class="row no-print">${App.can.finance ? `<a class="btn sm" href="#/acc/${a.id}?edit=1">עריכה</a>` : ''}<button class="btn sm" data-act="print">הדפסה</button>${(R.accountActions[a.kind] || []).concat(R.accountActions['*'] || []).map((x, i) => (!x.can || x.can(App, a)) ? `<button class="btn sm" data-xact="${i}">${esc(x.label)}</button>` : '').join('')}${extra}</div></div>`;
+  <div class="row no-print">${App.can.finance ? `<a class="btn sm" href="#/acc/${a.id}?edit=1">עריכה</a>` : ''}<button class="btn sm" data-act="print">הדפסה</button>${(R.accountActions[a.kind] || []).concat(R.accountActions['*'] || []).map((x, i) => (!x.can || x.can(App, a)) ? `<button class="btn sm" data-xact="${i}">${esc(x.label)}</button>` : '').join('')}${extra}</div></div>
+  <div class="daybar no-print"><button class="btn ghost sm" id="dprev">‹ יום קודם</button><button class="btn ghost sm" id="dnext">יום הבא ›</button>${App.can.finance ? `<span class="grow"></span><button class="btn sm" id="dnew">פתיחת יום חדש</button><button class="btn danger sm" id="dclear">ניקוי הדף הנוכחי</button>` : ''}</div>`;
 }
 
 // items לשליחה: {ref,name,phone,amount,time,collector,date}
@@ -132,6 +140,10 @@ function bind(ctx) {
   ctx.reload = async () => { ctx.a = await get('/api/accounts/' + ctx.id); const y = window.scrollY; draw(ctx); window.scrollTo(0, y); };
   const acts = (R.accountActions[ctx.a.kind] || []).concat(R.accountActions['*'] || []);
   $$('[data-xact]', view).forEach(b => b.onclick = () => acts[+b.dataset.xact].run(ctx));
+  $('#dprev', view).onclick = () => stepDay(ctx.a.kind, ctx.a.date, -1);
+  $('#dnext', view).onclick = () => stepDay(ctx.a.kind, ctx.a.date, 1);
+  const dn = $('#dnew', view); if (dn) dn.onclick = () => openDaySheet(ctx.a.kind, ctx.a.date);
+  const dc = $('#dclear', view); if (dc) dc.onclick = () => clearPageSheet(ctx);
   (R.panelBinders[ctx.a.kind] || []).concat(R.panelBinders['*'] || []).forEach(f => { try { f(ctx); } catch (e) { console.error(e); } });
   const fq = $('#fq', view); let t;
   fq.oninput = () => { clearTimeout(t); t = setTimeout(() => { ctx.filter = fq.value; persist(ctx); const pos = fq.selectionStart; draw(ctx); const n = $('#fq', ctx.view); n.focus(); n.setSelectionRange(pos, pos); }, 180); };
