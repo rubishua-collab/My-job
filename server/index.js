@@ -165,6 +165,8 @@ r.patch('/api/users/:id', (req, res, { user, params, body }) => {
 // ---- וואטסאפ ----
 r.get('/api/wa/status', async (req, res, { user }) => { need(can.send(user)); return { ...(await wa.waStatus({ live: true })), requireOptIn: kvGet('wa_require_opt_in', true), maps: kvGet('wa_template_maps', {}), vars: wa.VARS }; });
 r.post('/api/wa/settings', (req, res, { user, body }) => { need(can.waConfig(user)); if (body.requireOptIn !== undefined) { kvSet('wa_require_opt_in', !!body.requireOptIn); logAudit({ user, action: 'הגדרת חובת הסכמה', note: String(!!body.requireOptIn) }); } return { ok: true }; });
+r.post('/api/wa/webhooks/subscribe', async (req, res, { user }) => { need(can.waConfig(user)); const out = await wa.subscribeWebhooks(); logAudit({ user, action: 'רישום לדיווחי וואטסאפ', note: out.fields.join(',') }); return out; });
+r.get('/api/wa/webhooks', async (req, res, { user }) => { need(can.send(user)); try { return await wa.webhookStatus(); } catch (e) { return { error: e.message }; } });
 r.post('/api/wa/templates/sync', async (req, res, { user }) => { need(can.send(user)); return { count: await wa.syncTemplates() }; });
 r.post('/api/wa/templates', async (req, res, { user, body }) => { need(can.waConfig(user)); return wa.submitTemplate({ ...body, user }); });
 r.post('/api/wa/templates/map', (req, res, { user, body }) => { need(can.waConfig(user)); wa.setTemplateOrder(body.name, body.language, body.order || []); return { ok: true }; });

@@ -96,6 +96,30 @@ export async function syncTemplates() {
   return all.length;
 }
 
+// רישום אוטומטי לדיווחי וואטסאפ (messages = סטטוס מסירה והודעות נכנסות כמו ״הסר״), במקום לחפש את המסך ב-Meta
+export async function subscribeWebhooks() {
+  const c = cfg();
+  if (!c.token || !c.wabaId || !c.appSecret || !c.verifyToken || !c.publicUrl) throw Object.assign(new Error('חסרים פרטי חיבור — השלם קודם את כל השורות במסך החיבור'), { status: 400 });
+  const app = await graph('GET', '/app?fields=id,name');
+  const appToken = app.id + '|' + c.appSecret;
+  const body = new URLSearchParams({ object: 'whatsapp_business_account', callback_url: c.publicUrl + '/webhooks/whatsapp', verify_token: c.verifyToken, fields: 'messages', include_values: 'true', access_token: appToken });
+  const r1 = await fetch(`${c.graph}/${app.id}/subscriptions`, { method: 'POST', body, signal: AbortSignal.timeout(30000) });
+  const j1 = await r1.json().catch(() => ({}));
+  if (!r1.ok || j1.error) throw Object.assign(new Error('הרישום לדיווחים נכשל: ' + heError(j1.error?.code, j1.error?.message || ('HTTP ' + r1.status))), { status: 502 });
+  // מחבר את האפליקציה לחשבון הוואטסאפ העסקי, כדי שהדיווחים של החשבון יגיעו אליה
+  await graph('POST', `/${c.wabaId}/subscribed_apps`);
+  return webhookStatus(app);
+}
+export async function webhookStatus(app) {
+  const c = cfg();
+  app = app || await graph('GET', '/app?fields=id,name');
+  const r = await fetch(`${c.graph}/${app.id}/subscriptions?access_token=${encodeURIComponent(app.id + '|' + c.appSecret)}`, { signal: AbortSignal.timeout(20000) });
+  const j = await r.json().catch(() => ({}));
+  const w = (j.data || []).find(x => x.object === 'whatsapp_business_account');
+  const fields = (w?.fields || []).map(f => f.name || f);
+  return { callback: w?.callback_url || '', fields, messages: fields.includes('messages') };
+}
+
 // הגשת תבנית חדשה לאישור Meta. הטקסט כולל שמות משתנים בעברית בסוגריים מסולסלים: {שם} {סכום} ...
 export const VARS = { 'שם פרטי': 'first', 'שם': 'name', 'סכום': 'amount', 'תאריך': 'date', 'שעה': 'time', 'פירוט': 'details', 'גובה': 'collector' };
 export function compileTemplate(text) {
