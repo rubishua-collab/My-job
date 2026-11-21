@@ -234,15 +234,36 @@ r.get('/api/events', (req, res, { user }) => {
 });
 r.get('/api/health', () => ({ ok: true, at: new Date().toISOString() }));
 
+// ---- אוספים כלליים: יכולות נוספות שומרות מסמכים דרך כאן, עם הרשאה לכל אוסף ----
+export const COLLECTIONS = {
+  loans: { read: can.finance, write: can.finance }, loan_requests: { read: can.finance, write: can.finance },
+  clients: { read: can.finance, write: can.finance }, contracts: { read: can.sensitive, write: can.sensitive },
+  settings: { read: can.finance, write: can.finance },
+};
+const colRule = (col, mode, user) => { const c = COLLECTIONS[col]; if (!c) throw err(404, 'אוסף לא מוכר'); need(c[mode](user)); };
+r.get('/api/docs/:col', (req, res, { user, params }) => { colRule(params.col, 'read', user); return listDocs(params.col).map(x => ({ id: x.id, _version: x.version, _updatedAt: x.updated_at, _updatedBy: x.updated_by, ...x.data })); });
+r.get('/api/docs/:col/:id', (req, res, { user, params }) => { colRule(params.col, 'read', user); const d = getDoc(params.col, params.id); if (!d || d.deleted) throw err(404, 'לא נמצא'); return { id: d.id, _version: d.version, ...d.data }; });
+r.put('/api/docs/:col/:id', (req, res, { user, params, body }) => { colRule(params.col, 'write', user); return once(body.opId, user, () => { const data = { ...body.data }; ['id', '_version', '_updatedAt', '_updatedBy'].forEach(k => delete data[k]); const out = putDoc(params.col, params.id, data, { user, baseVersion: body.baseVersion, note: body.note, action: body.action }); return { id: params.id, version: out.version }; }); });
+r.post('/api/docs/:col', (req, res, { user, params, body }) => { colRule(params.col, 'write', user); return once(body.opId, user, () => { const id = body.id || newId(params.col[0].toUpperCase()); const data = { ...body.data }; delete data.id; const out = putDoc(params.col, id, data, { user }); return { id, version: out.version }; }); });
+r.del('/api/docs/:col/:id', (req, res, { user, params }) => { colRule(params.col, 'write', user); need(user.role === 'owner', 'רק בעל התוכנה יכול למחוק'); deleteDoc(params.col, params.id, { user }); return { ok: true }; });
+
+// ---- טעינת יכולות נוספות מהתיקייה server/features ----
+export const featureCtx = { r, err, need, can, db, getDoc, listDocs, putDoc, deleteDoc, once, newId, now, logAudit, kvGet, kvSet, DATA_DIR, COLLECTIONS, wa, send, bus };
+const FDIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'features');
+if (fs.existsSync(FDIR)) for (const f of fs.readdirSync(FDIR).filter(f => f.endsWith('.js')).sort()) {
+  const m = await import(path.join(FDIR, f)); if (m.register) await m.register(featureCtx);
+}
+
 // ---- שרת ----
 const PUBLIC_API = new Set(['/api/login', '/api/health', '/webhooks/whatsapp']);
+export const isPublic = (p) => PUBLIC_API.has(p) || p.startsWith('/api/public/');
 export const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   try {
     if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/webhooks/')) {
       const m = r.match(req.method, url.pathname); if (!m) return send(res, 404, { error: 'לא נמצא' });
       const token = parseCookies(req).sid; const user = sessionUser(token);
-      if (!user && !PUBLIC_API.has(url.pathname)) return send(res, 401, { error: 'צריך להתחבר' });
+      if (!user && !isPublic(url.pathname)) return send(res, 401, { error: 'צריך להתחבר' });
       if (req.method !== 'GET' && !url.pathname.startsWith('/webhooks/')) {
         // הגנה מ-CSRF: בקשות שינוי רק מאותו מקור
         const origin = req.headers.origin; if (origin && new URL(origin).host !== req.headers.host) return send(res, 403, { error: 'מקור לא מורשה' });

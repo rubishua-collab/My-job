@@ -5,6 +5,7 @@ import { App, onLive } from './app.js';
 import { calcMorning, calcCollectors, calcSplit, workGroups, calcWork, wExpList, normName, num, r2, sum, collKey, cleanColl, normStatus, CHANGE, NOC_SP } from './calc.js';
 import { normPhone, phoneProblem, fmtPhone } from './phone.js';
 import { openSendSheet } from './wa-ui.js';
+import { R } from './registry.js';
 
 const KINDS = { morning: 'חשבון בוקר', split: 'פיצול', collectors: 'חשבון גובים', work: 'איסוף יום' };
 
@@ -64,7 +65,7 @@ export async function renderAccount(view, [id], q) {
 function header(ctx, extra = '') {
   const a = ctx.a;
   return `<div class="band"><div class="grow"><div class="eyebrow">${KINDS[a.kind]} · ${esc(weekday(a.date))}</div><h1>${esc(a.title || KINDS[a.kind])}</h1>${a._updatedBy ? `<div class="small" style="color:var(--band-muted)">עודכן ${when(a._updatedAt)} ע״י ${esc(a._updatedBy)}</div>` : ''}</div>
-  <div class="row no-print">${App.can.finance ? `<a class="btn sm" href="#/acc/${a.id}?edit=1">עריכה</a>` : ''}<button class="btn sm" data-act="print">הדפסה</button>${extra}</div></div>`;
+  <div class="row no-print">${App.can.finance ? `<a class="btn sm" href="#/acc/${a.id}?edit=1">עריכה</a>` : ''}<button class="btn sm" data-act="print">הדפסה</button>${(R.accountActions[a.kind] || []).concat(R.accountActions['*'] || []).map((x, i) => (!x.can || x.can(App, a)) ? `<button class="btn sm" data-xact="${i}">${esc(x.label)}</button>` : '').join('')}${extra}</div></div>`;
 }
 
 // items לשליחה: {ref,name,phone,amount,time,collector,date}
@@ -95,7 +96,7 @@ function draw(ctx) {
   view.innerHTML = header(ctx) + `
   <div class="search no-print"><input class="in" id="fq" type="search" placeholder="סינון: שם, טלפון, גובה, שליח או שעה…" value="${esc(ctx.filter)}" autocomplete="off">
   ${colls.length > 1 ? `<div class="chips" style="margin-top:8px">${['', ...colls].map(c => `<button class="chip" data-c="${esc(c)}" aria-pressed="${ctx.coll === c}">${c ? esc(c) : 'כל הגובים'}</button>`).join('')}</div>` : ''}</div>
-  ${body}${App.can.send ? actionBar(ctx, vis) : ''}`;
+  ${body}${(R.accountPanels[a.kind] || []).concat(R.accountPanels['*'] || []).map(f => { try { return f(ctx) || ''; } catch (e) { console.error(e); return ''; } }).join('')}${App.can.send ? actionBar(ctx, vis) : ''}`;
   bind(ctx); if (App.can.send && ctx.sel.size) exactCount(ctx);
 }
 function persist(ctx) { viewState.set('acc:' + ctx.id, { sel: [...ctx.sel], filter: ctx.filter, coll: ctx.coll }); }
@@ -126,6 +127,10 @@ function actionBar(ctx, vis) {
 
 function bind(ctx) {
   const { view } = ctx;
+  ctx.reload = async () => { ctx.a = await get('/api/accounts/' + ctx.id); const y = window.scrollY; draw(ctx); window.scrollTo(0, y); };
+  const acts = (R.accountActions[ctx.a.kind] || []).concat(R.accountActions['*'] || []);
+  $$('[data-xact]', view).forEach(b => b.onclick = () => acts[+b.dataset.xact].run(ctx));
+  (R.panelBinders[ctx.a.kind] || []).concat(R.panelBinders['*'] || []).forEach(f => { try { f(ctx); } catch (e) { console.error(e); } });
   const fq = $('#fq', view); let t;
   fq.oninput = () => { clearTimeout(t); t = setTimeout(() => { ctx.filter = fq.value; persist(ctx); const pos = fq.selectionStart; draw(ctx); const n = $('#fq', ctx.view); n.focus(); n.setSelectionRange(pos, pos); }, 180); };
   $$('[data-c]', view).forEach(b => b.onclick = () => { ctx.coll = b.dataset.c; persist(ctx); draw(ctx); });
@@ -328,6 +333,7 @@ function renderEditor(ctx) {
     <div id="ed-sum"></div></div>
     ${Object.entries(spec).map(([li, cols]) => `<div class="card"><div class="row sp"><h2>${LIST_NAMES[li]} (${(a[li] || []).length})</h2><div class="row"><button class="btn ghost sm" data-paste="${li}">הדבקה מאקסל</button><button class="btn sm" data-add="${li}">+ שורה</button></div></div>
       <div class="tbl-wrap"><table><thead><tr><th>#</th>${cols.map(c => `<th>${c[1]}</th>`).join('')}<th></th></tr></thead><tbody>${(a[li] || []).map((r, ri) => `<tr><td>${ri + 1}</td>${cols.map(c => `<td>${cell(r, c, li, ri)}</td>`).join('')}<td><button class="x" data-del="${li}|${ri}" aria-label="מחק">×</button></td></tr>`).join('')}</tbody></table></div></div>`).join('')}
+    ${(R.editorActions[a.kind] || []).length ? `<div class="card row">${R.editorActions[a.kind].map((x, i) => `<button class="btn ghost" data-eact="${i}">${esc(x.label)}</button>`).join('')}</div>` : ''}
     <div class="actionbar"><div id="ed-err"></div><div class="row"><button class="btn xl" id="ed-save" style="flex:2">שמור</button><a class="btn ghost" href="#/acc/${a.id}" style="flex:1">ביטול</a></div></div>`;
     summary();
     $$('[data-l]', view).forEach(inp => inp.onchange = () => {
@@ -345,6 +351,7 @@ function renderEditor(ctx) {
       const s = openSheet(`<div class="hd"><h2>הדבקה מאקסל</h2><button class="x" data-close>×</button></div><p class="small muted">העתק מאקסל עמודות בסדר הזה: ${cols.map(c => c[1]).join(' · ')}. כל שורה תתווסף לסוף הרשימה.</p><textarea class="in" id="pt" style="min-height:200px"></textarea><button class="btn xl" id="pok" style="margin-top:10px">הוסף</button>`);
       $('#pok', s.el).onclick = () => { const lines = $('#pt', s.el).value.split(/\r?\n/).filter(l => l.trim()); for (const l of lines) { const parts = l.split('\t'); const r = {}; cols.forEach(([k, , t], i) => { const v = (parts[i] || '').trim(); r[k] = t === 'n' ? num(v) : t === 'b' ? !!v : t === 'k' ? (/הוצ|^e$/.test(v) ? 'e' : 'd') : v; }); if (a.kind === 'work' && li === 'entries') r.s = ''; (a[li] ||= []).push(r); } s.close(); drawE(); toast(lines.length + ' שורות נוספו'); };
     });
+    $$('[data-eact]', view).forEach(b => b.onclick = () => R.editorActions[a.kind][+b.dataset.eact].run(a, drawE, ctx));
     $('#ed-save', view).onclick = async (ev) => {
       ev.target.disabled = true;
       if (a.kind === 'split') (a.records || []).forEach(r => { if (r.n && !r.fn) { const p = String(r.n).trim().split(' '); r.fn = p[0]; r.ln = p.slice(1).join(' '); } });

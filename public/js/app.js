@@ -4,6 +4,8 @@ import { $, $$, esc, fmt, money, dmy, weekday, todayISO, when, toast, openSheet,
 import { fmtPhone } from './phone.js';
 import { renderAccounts, renderAccount, renderNew } from './acc.js';
 import { renderWa, renderBatch } from './wa-ui.js';
+import { R } from './registry.js';
+import './features/index.js';
 
 export const App = { me: null, can: {}, route: '', live: null };
 
@@ -42,7 +44,7 @@ export async function go() {
   }
   App.route = h;
   if (App.me) drawNav();
-  const fn = routes[rname] || renderToday;
+  const fn = routes[rname] || R.routes[rname] || renderToday;
   const view = $('#view');
   try {
     const out = await fn(view, rest.map(decodeURIComponent), new URLSearchParams(qs || ''));
@@ -123,7 +125,8 @@ async function renderToday(view, args, q) {
     ${groupsHtml}
     ${d.works.map(w => `<a class="btn ghost" href="#/acc/${w.id}">פתח את ${esc(w.title)}</a> `).join('')}
     ${d.splits.map(w => `<a class="btn ghost" href="#/acc/${w.id}">פתח את ${esc(w.title)}</a> `).join('')}
-    ${d.morning.map(w => `<a class="btn ghost" href="#/acc/${w.id}">${esc(w.title)} · קרן סופית ${money(w.final)}</a> `).join('')}`;
+    ${d.morning.map(w => `<a class="btn ghost" href="#/acc/${w.id}">${esc(w.title)} · קרן סופית ${money(w.final)}</a> `).join('')}
+    ${R.todayPanels.map(f => { try { return f(d, App) || ''; } catch (e) { return ''; } }).join('')}`;
   $('#tdate').onchange = (e) => { viewState.set('today', { date: e.target.value }); location.hash = '#/today?date=' + e.target.value; };
   $$('.kpi', view).forEach(b => b.onclick = () => { viewState.set('today', { kpi: b.dataset.k }); renderToday(view, args, q); });
   $$('[data-mark]', view).forEach(b => b.onclick = async () => {
@@ -192,6 +195,7 @@ async function renderMore(view) {
     App.can.finance && ['#/loans', 'הלוואות ולוחות סילוקין'], App.can.finance && ['#/requests', 'בקשות להלוואה'],
     App.can.sensitive && ['#/contracts', 'חוזים חתומים וקבצים'], App.can.finance && ['#/migration', 'דוח התאמת נתונים וגיבוי'],
     App.can.finance && ['#/audit', 'יומן שינויים'], App.can.users && ['#/users', 'משתמשים והרשאות'],
+    ...R.more.filter(m => !m.can || m.can(App)).sort((a, b) => (a.order || 50) - (b.order || 50)).map(m => [m.href, m.label]),
   ].filter(Boolean);
   view.innerHTML = `<div class="band"><div class="grow"><h1>עוד</h1></div></div><div class="list">${L.map(([h, t]) => `<a class="li noc link" href="${h}" style="text-decoration:none;color:inherit"><div class="t">${t}</div><div class="a">‹</div></a>`).join('')}</div>
   <div class="card" style="margin-top:12px"><h2>התקנה באייפון</h2><ol class="small" style="margin:0;padding-inline-start:20px"><li>פתח את הקישור בדפדפן Safari.</li><li>לחץ על כפתור השיתוף (ריבוע עם חץ למעלה).</li><li>בחר ״הוספה למסך הבית״ ואשר.</li></ol></div>

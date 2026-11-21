@@ -8,7 +8,7 @@ const assert = require('assert');
 const ROOT = path.resolve(__dirname, '..');
 const OUT = process.env.SHOTS || path.join(os.tmpdir(), 'yoman-e2e');
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'yoman-data-'));
-const PORT = 8093, URL = 'http://localhost:' + PORT;
+const PORT = +process.env.E2E_PORT || 8093, FPORT = PORT + 5, URL = 'http://localhost:' + PORT;
 fs.mkdirSync(OUT, { recursive: true });
 const log = (...a) => console.log('✓', ...a);
 const results = [];
@@ -16,8 +16,8 @@ let failShot = null;
 const step = async (name, fn) => { try { await fn(); results.push({ name, ok: true }); log(name); } catch (e) { if (failShot) await failShot('fail-' + results.length).catch(() => {}); results.push({ name, ok: false, err: e.message }); console.log('✗', name, '\n   ', e.message.split('\n')[0]); } };
 
 (async () => {
-  const env = { ...process.env, DATA_DIR: DATA, PORT: String(PORT), WA_GRAPH_URL: 'http://localhost:8098', WA_TOKEN: 'TEST_TOKEN', WA_PHONE_NUMBER_ID: 'PN1', WA_BUSINESS_ACCOUNT_ID: 'WABA1', WA_APP_SECRET: 'testsecret', WA_VERIFY_TOKEN: 'verifyme', PUBLIC_URL: URL, COOKIE_SECURE: '0', OWNER_USERNAME: 'owner', OWNER_PASSWORD: 'Owner-pass-1', IMPORT_ON_START: process.env.BACKUP };
-  const fake = await import(path.join(ROOT, 'test/fake-graph.js')).then(m => m.startFakeGraph({ port: 8098, appUrl: URL, appSecret: 'testsecret' }));
+  const env = { ...process.env, DATA_DIR: DATA, PORT: String(PORT), WA_GRAPH_URL: 'http://localhost:' + FPORT, WA_TOKEN: 'TEST_TOKEN', WA_PHONE_NUMBER_ID: 'PN1', WA_BUSINESS_ACCOUNT_ID: 'WABA1', WA_APP_SECRET: 'testsecret', WA_VERIFY_TOKEN: 'verifyme', PUBLIC_URL: URL, COOKIE_SECURE: '0', OWNER_USERNAME: 'owner', OWNER_PASSWORD: 'Owner-pass-1', IMPORT_ON_START: process.env.BACKUP };
+  const fake = await import(path.join(ROOT, 'test/fake-graph.js')).then(m => m.startFakeGraph({ port: FPORT, appUrl: URL, appSecret: 'testsecret' }));
   const srv = spawn(process.execPath, ['--no-warnings', 'server/index.js'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let slog = ''; srv.stdout.on('data', d => slog += d); srv.stderr.on('data', d => slog += d);
   for (let i = 0; i < 50 && !slog.includes('פועל'); i++) await new Promise(r => setTimeout(r, 200));
