@@ -96,6 +96,15 @@ export async function syncTemplates() {
   return all.length;
 }
 
+// רישום המספר העסקי בפלטפורמה (פותר שגיאה 133010). ה-PIN הוא קוד אימות דו-שלבי בן 6 ספרות שבעל העסק בוחר
+export async function registerPhone(pin) {
+  const c = cfg();
+  if (!c.token || !c.phoneId) throw Object.assign(new Error('חסר חיבור לחשבון העסקי'), { status: 400 });
+  if (!/^\d{6}$/.test(String(pin || ''))) throw Object.assign(new Error('קוד ה-PIN צריך להיות בדיוק 6 ספרות'), { status: 400 });
+  await graph('POST', `/${c.phoneId}/register`, { messaging_product: 'whatsapp', pin: String(pin) });
+  return { ok: true };
+}
+
 // רישום אוטומטי לדיווחי וואטסאפ (messages = סטטוס מסירה והודעות נכנסות כמו ״הסר״), במקום לחפש את המסך ב-Meta
 export async function subscribeWebhooks() {
   const c = cfg();

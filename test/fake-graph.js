@@ -23,6 +23,7 @@ export function startFakeGraph({ port = 8099, appUrl, appSecret, phoneId = 'PN1'
     if (req.method === 'GET' && u.pathname === '/' + phoneId) return j(200, { display_phone_number: '+972 50-000-0000', verified_name: 'בדיקה (דמה)', quality_rating: 'GREEN', messaging_limit_tier: 'TIER_1K', id: phoneId });
     if (req.method === 'GET' && u.pathname === `/${wabaId}/message_templates`) return j(200, { data: templates });
     if (req.method === 'POST' && u.pathname === `/${wabaId}/message_templates`) { const t = JSON.parse(b); templates.push({ ...t, status: 'PENDING' }); return j(200, { id: 'T' + templates.length, status: 'PENDING', category: t.category }); }
+    if (req.method === 'POST' && u.pathname === `/${phoneId}/register`) return j(200, { success: true });
     if (req.method === 'GET' && u.pathname === '/app') return j(200, { id: 'APP1', name: 'Yoman' });
     if (req.method === 'POST' && u.pathname === `/${wabaId}/subscribed_apps`) return j(200, { success: true });
     if (req.method === 'POST' && u.pathname === `/${phoneId}/messages`) {
