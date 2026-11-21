@@ -99,7 +99,24 @@ export function clientCard(u, key) {
   const consent = can.send(u) ? db.prepare('SELECT * FROM wa_consent WHERE phone IN (' + [...c.phones].map(() => '?').join(',') + ')').all(...c.phones) : [];
   const totals = { work: sum(rows.filter(r => r.kind === 'work').map(r => r.amount)), workGot: sum(rows.filter(r => r.kind === 'work' && r.s === ST_GOT).map(r => r.ga != null && r.ga !== '' ? +r.ga : r.amount)), interest: sum(rows.filter(r => r.kind === 'morning').map(r => +r.i || 0)), principal: sum(rows.filter(r => r.kind === 'morning').map(r => +r.p || 0)) };
   const lastSplit = rows.find(r => r.kind === 'split');
-  return { key, name: c.name, phones: [...c.phones], collectors: [...c.colls], rows, samePhone, msgs, consent, totals: can.finance(u) ? totals : null, balance: lastSplit ? { date: lastSplit.date, amount: sum(rows.filter(r => r.kind === 'split' && r.acc === lastSplit.acc).map(r => r.amount)) } : null };
+  // הלוואות וחוזים של הלקוח (לפי שם, או לפי אותו טלפון) — רק לבעלים ולמנהל
+  const loans = [], contracts = [];
+  if (can.sensitive(u)) {
+    const mineP = (p) => { const n = normPhone(p); return !!n && c.phones.has(n); };
+    for (const r of listDocs('loans')) {
+      const L = { id: r.id, ...r.data }; if (normName(L.name) !== key && !mineP(L.phone)) continue;
+      const s = lnSum(L);
+      loans.push({ id: r.id, name: L.name, date: L.date, amount: +L.amount || 0, type: L.type, rate: L.rate, n: L.n, remain: s ? s.remain : null, paidSum: s ? s.paidSum : null, status: s ? s.st.txt : '', cls: s ? s.st.cls : '', next: s && s.next ? { date: s.next.date, payment: s.next.payment } : null, lateAmt: s ? s.lateAmt : 0, closed: s ? !!s.closed : false });
+    }
+    const files = db.prepare("SELECT id,name,mime,field,owner_id FROM files WHERE owner_col='contracts' OR owner_col IS NULL").all();
+    for (const r of listDocs('contracts')) {
+      const d = r.data.d || {}; const sg = r.data.signer || {};
+      if (normName(d.o) !== key && normName(sg.name) !== key && !mineP(d.q) && !mineP(sg.phone)) continue;
+      const st = r.data.status || 'draft';
+      contracts.push({ id: r.id, title: d.o || '', amount: +d.a || 0, date: d.t || '', status: st, statusName: st === 'signed' ? 'נחתם' : st === 'sent' ? 'נשלח' : 'ממתין', signedAt: r.data.signedAt || (sg.when || ''), sentAt: r.data.sentAt || '', files: st === 'signed' || r.data.signer ? files.filter(f => f.owner_id === r.id).map(f => ({ id: f.id, name: f.name, field: f.field, mime: f.mime })) : [] });
+    }
+  }
+  return { key, name: c.name, phones: [...c.phones], collectors: [...c.colls], rows, samePhone, msgs, consent, loans, contracts, totals: can.finance(u) ? totals : null, balance: lastSplit ? { date: lastSplit.date, amount: sum(rows.filter(r => r.kind === 'split' && r.acc === lastSplit.acc).map(r => r.amount)) } : null };
 }
 
 // ---- מסך ״היום״ ----

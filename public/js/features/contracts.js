@@ -12,7 +12,7 @@ import {
 import { SG, renderEditor, formCss, sgLinkOf, sgLinkMsg, sgPdfOf, busyOn } from './contracts-form.js';
 import { fxOwnIds } from './contracts-fx.js';
 
-const L = { q: '', openFiles: {}, delFor: null, regenFor: null, settings: null, view: null, pendingRecv: null };
+const L = { only: null, q: '', openFiles: {}, delFor: null, regenFor: null, settings: null, view: null, pendingRecv: null };
 const owner = () => App.me && App.me.role === 'owner';
 const fileUrl = id => '/api/files/' + encodeURIComponent(id);
 const lastFile = (r, field) => (r.files || []).filter(f => f.field === field).pop();
@@ -99,7 +99,10 @@ function drawList() {
   const view = L.view; if (!view || !$('#sg-recs', view)) return;
   const q = L.q.trim();
   let rows = SG.recs.slice();
-  if (q) rows = rows.filter(r => sgQMatch(r, q)).sort((a, b) => (sgQDate(b) + b.created).localeCompare(sgQDate(a) + a.created));
+  // קישור ישיר לחוזה אחד (#/contracts-manage/view/<id>, למשל מכרטיס הלקוח)
+  const only = L.only && SG.recs.find(r => r.id === L.only);
+  if (only) rows = [only];
+  else if (q) rows = rows.filter(r => sgQMatch(r, q)).sort((a, b) => (sgQDate(b) + b.created).localeCompare(sgQDate(a) + a.created));
   else rows.sort((a, b) => String(b.created).localeCompare(String(a.created)));
   const cnt = SG.recs.length, by = k => SG.recs.filter(r => (SG_STAT[r.status] ? r.status : 'draft') === k).length;
   $('#sg-n', view).textContent = cnt ? (by('draft') + ' ממתינים · ' + by('sent') + ' נשלחו · ' + by('signed') + ' נחתמו') : '';
@@ -110,7 +113,7 @@ function drawList() {
     const groups = new Map(); rows.forEach(r => { const k = sgQNorm(r.d.o) || '\u0000'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
     groups.forEach(list => { if (list.length > 1) body += '<div class="sg-qgrp">' + esc(list[0].d.o || 'ללא שם') + ' · ' + list.length + ' חוזים, מהחדש לישן</div>'; list.forEach(r => { body += recHTML(r); }); });
   } else body = rows.map(recHTML).join('');
-  $('#sg-recs', view).innerHTML = (j ? sendNowHTML(j) : '') + (body || '<div class="empty">' + (cnt ? 'לא נמצאו חוזים עבור השם שהוזן' : 'עוד אין חוזים שמורים. לחץ ״+ חוזה חדש״ כדי להתחיל.') + '</div>');
+  $('#sg-recs', view).innerHTML = (only ? '<div class="note info row sp"><span>מוצג חוזה אחד מתוך ' + cnt + '</span><a class="btn plain sm" href="#/contracts-manage" data-act-all="1">כל החוזים</a></div>' : (L.only ? '<div class="note warn">החוזה לא נמצא (אולי נמחק). מוצגים כל החוזים.</div>' : '')) + (j ? sendNowHTML(j) : '') + (body || '<div class="empty">' + (cnt ? 'לא נמצאו חוזים עבור השם שהוזן' : 'עוד אין חוזים שמורים. לחץ ״+ חוזה חדש״ כדי להתחיל.') + '</div>');
 }
 
 async function updateStatus(id, status) { try { await save('POST', '/api/sign/' + encodeURIComponent(id) + '/status', { status }, { label: 'סטטוס חוזה' }); toast('הסטטוס עודכן: ' + SG_STAT[status]); } catch (e) { toast('העדכון נכשל: ' + e.message); } await refresh(); }
@@ -250,6 +253,7 @@ async function renderList(view) {
 route('contracts-manage', async (view, args) => {
   if (!App.can.sensitive) { view.innerHTML = '<div class="band"><div class="grow"><h1>חוזים לחתימה</h1></div></div><div class="note err">חוזים ותעודות זהות זמינים רק לבעלים ולמנהל.</div>'; return; }
   const [mode, id] = args;
+  L.only = mode === 'view' && id ? id : null;
   if (mode === 'new') { if (!SG.recs.length) await load().catch(() => {}); return renderEditor(view, null); }
   if (mode === 'dup') { if (!SG.recs.length) await load().catch(() => {}); const d = L.dup; L.dup = null; return renderEditor(view, null, d || null); }
   if (mode === 'edit' && id) {

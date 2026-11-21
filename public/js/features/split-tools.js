@@ -267,7 +267,7 @@ function learnNote(ln, isNote) {
 const xferRows = A => (A.records || []).filter(r => r && !r.xd && !r.side && r.c !== CHANGE && String(r.n || '').trim() && (normTime(r.t) || r.na));
 
 /* חלוקה אוטומטית בין גובים (app.html 3043-3085, ללא שינוי בכלל החלוקה). hist = היסטוריית settings/ar_hist במקום localStorage */
-function arrangeCore(valid, pool, names, date, hist) {
+export function arrangeCore(valid, pool, names, date, hist) {
   const done = valid.filter(e => normStatus(e.s) === ST_GOT), nN = names.length;
   if (!hist || typeof hist !== 'object') hist = {};
   /* running balance from earlier days, so the extra person goes to the collector who collected fewer in total */

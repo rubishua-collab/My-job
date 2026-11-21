@@ -131,7 +131,7 @@ r.get('/api/audit', (req, res, { user, q }) => { need(can.finance(user)); return
 // ---- גיבוי, ייבוא ודוח התאמה ----
 r.get('/api/backup', (req, res, { user }) => {
   need(user.role === 'owner', 'רק בעל התוכנה יכול להוריד גיבוי מלא');
-  const cols = {}; for (const x of db.prepare('SELECT col,id,data,version FROM docs').all()) (cols[x.col] ||= []).push({ id: x.id, data: JSON.parse(x.data), version: x.version });
+  const cols = {}; for (const x of db.prepare('SELECT col,id,data,version FROM docs WHERE deleted=0').all()) (cols[x.col] ||= []).push({ id: x.id, data: JSON.parse(x.data), version: x.version });
   const files = db.prepare('SELECT * FROM files').all().map(f => ({ sourceId: f.source_id || f.id, source: f.source, owner: (f.owner_col || '') + '/' + (f.owner_id || ''), field: f.field, name: f.name, mime: f.mime, size: f.size, sha256: f.sha256, base64: fs.readFileSync(path.join(DATA_DIR, f.path)).toString('base64') }));
   const extra = { audit: db.prepare('SELECT * FROM audit').all(), wa_consent: db.prepare('SELECT * FROM wa_consent').all(), wa_batches: db.prepare('SELECT * FROM wa_batches').all(), wa_messages: db.prepare('SELECT * FROM wa_messages').all(), kv: db.prepare('SELECT * FROM kv').all() };
   logAudit({ user, action: 'הורדת גיבוי מלא' });
