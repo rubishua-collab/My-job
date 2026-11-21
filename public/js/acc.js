@@ -5,6 +5,7 @@ import { App, onLive } from './app.js';
 import { calcMorning, calcCollectors, calcSplit, workGroups, calcWork, wExpList, normName, num, r2, sum, collKey, cleanColl, normStatus, CHANGE, NOC_SP } from './calc.js';
 import { normPhone, phoneProblem, fmtPhone } from './phone.js';
 import { openSendSheet } from './wa-ui.js';
+import { openPrivate } from './features/wa-private.js';
 import { R } from './registry.js';
 
 const KINDS = { morning: 'חשבון בוקר', split: 'פיצול', collectors: 'חשבון גובים', work: 'איסוף יום' };
@@ -71,7 +72,7 @@ function header(ctx, extra = '') {
 // items לשליחה: {ref,name,phone,amount,time,collector,date}
 function itemsOf(ctx) {
   const a = ctx.a;
-  if (a.kind === 'split') return (a.records || []).filter(r => r.n || r.a).map(r => ({ ref: r._k, name: r.n, phone: r.ph, amount: num(r.a), time: r.t || '', collector: r.c || '', date: dmy(a.date), side: !!r.side, h: r.h, note: r.note }));
+  if (a.kind === 'split') return (a.records || []).filter(r => r.n || r.a).map(r => ({ ref: r._k, name: r.n, first: r.fn, phone: r.ph, amount: num(r.a), time: r.t || '', collector: r.c || '', date: dmy(a.date), side: !!r.side, h: r.h, note: r.note }));
   if (a.kind === 'work') return (a.entries || []).filter(e => e.n || e.a).map(e => ({ ref: e._k, name: e.n, phone: e.p, amount: num(e.a), time: normStatus(e.s) ? '' : (e.t || ''), collector: cleanColl(e.c), date: dmy(a.date), s: normStatus(e.s), by: e.by }));
   if (a.kind === 'collectors') return (a.entries || []).filter(e => e.k !== 'e').map(e => ({ ref: e._k, name: e.n, phone: '', amount: num(e.a), time: e.t || '', collector: (e.c || '').trim(), date: dmy(a.date), by: e.by }));
   if (a.kind === 'morning') return (a.rows || []).map(r => ({ ref: r._k, name: r.n, phone: '', amount: r2((+r.i || 0) + (+r.p || 0)), time: '', collector: '', date: dmy(a.date), i: r.i, p: r.p }));
@@ -122,7 +123,8 @@ function actionBar(ctx, vis) {
   const allVisSel = vis.length && vis.every(v => ctx.sel.has(v.ref));
   return `<div class="actionbar no-print"><div class="row sp"><label class="row" style="font-weight:700;cursor:pointer"><input type="checkbox" id="selall" class="ck" style="width:24px;height:24px" ${allVisSel ? 'checked' : ''}> בחר את כל תוצאות הסינון (${vis.length})</label>
     ${ctx.sel.size ? `<button class="btn plain sm" id="selnone">נקה בחירה (${ctx.sel.size} שורות)</button>` : ''}</div>
-    <button class="btn wa ${ctx.sel.size ? 'xl' : ''}" id="sendwa" disabled>שלח בוואטסאפ ל־0 לקוחות</button><div id="sendinfo" class="small muted"></div></div>`;
+    <button class="btn wa ${ctx.sel.size ? 'xl' : ''}" id="sendpriv" ${ctx.sel.size ? '' : 'disabled'}>וואטסאפ פרטי · הכן הודעה אישית ל־${ctx.sel.size} שורות</button>
+    <button class="btn ghost" id="sendwa" disabled>שלח בוואטסאפ ל־0 לקוחות</button><div id="sendinfo" class="small muted">הכפתור התחתון שולח דרך החשבון העסקי (יעבוד אחרי אישור Meta)</div></div>`;
 }
 
 function bind(ctx) {
@@ -149,6 +151,7 @@ function bindBar(ctx) {
   const v = ctx.view;
   const sa = $('#selall', v); if (sa) sa.onchange = () => { for (const r of ctx.visible) sa.checked ? ctx.sel.add(r) : ctx.sel.delete(r); persist(ctx); refreshBar(ctx); };
   const sn = $('#selnone', v); if (sn) sn.onclick = () => { ctx.sel.clear(); persist(ctx); refreshBar(ctx); };
+  const sp = $('#sendpriv', v); if (sp) sp.onclick = () => openPrivate(ctx.items.filter(i => ctx.sel.has(i.ref)), { col: 'accounts', id: ctx.a.id, title: ctx.a.title, kind: ctx.a.kind });
   const sw = $('#sendwa', v); if (sw) sw.onclick = () => {
     const chosen = ctx.items.filter(i => ctx.sel.has(i.ref));
     openSendSheet(chosen, { col: 'accounts', id: ctx.a.id, title: ctx.a.title, kind: ctx.a.kind }, { split: ctx.a.kind === 'split' });
@@ -273,12 +276,14 @@ async function rowSheet(ctx, key) {
     <label class="f" style="grid-column:1/-1">הערה<input class="in" id="rn" value="${esc(e.nt || '')}"></label>
     <label class="f" style="grid-column:1/-1">סיבת התיקון (נרשמת ביומן)<input class="in" id="rr" placeholder="למשל: סומן בטעות"></label></div>
     <div id="rerr"></div><button class="btn xl" id="rsave" style="margin-top:12px">שמור</button>
+    ${App.can.send ? '<button class="btn wa" id="rpriv" style="margin-top:8px;width:100%">הודעה פרטית בוואטסאפ ללקוח הזה</button>' : ''}
     <h3 style="margin-top:16px">היסטוריית השורה</h3><div id="rh" class="small muted">טוען…</div>`);
   get(`/api/accounts/${ctx.a.id}/history`).then(h => {
     const L = h.filter(x => x.item === key);
     $('#rh', s.el).innerHTML = L.length ? `<div class="list">${L.map(x => { const b = JSON.parse(x.before || '{}'), af = JSON.parse(x.after || '{}'); return `<div class="li noc"><div class="t">${esc(b.s || 'ממתין')} ← ${esc(af.s || 'ממתין')}${af.by && af.by !== b.by ? ' · אסף: ' + esc(af.by === '@' ? 'הגובה' : af.by) : ''}</div><div class="a small">${when(x.at)}</div><div class="m"><span>${esc(x.user_name)}</span></div></div>`; }).join('')}</div>` : 'אין שינויים מתועדים';
   }).catch(() => { $('#rh', s.el).textContent = ''; });
   const opId = uid();
+  const rp = $('#rpriv', s.el); if (rp) rp.onclick = () => { const it = itemsOf(ctx).find(x => x.ref === key); s.close(); openPrivate([it], { col: 'accounts', id: ctx.a.id, title: ctx.a.title + ' · ' + e.n, kind: ctx.a.kind }); };
   $('#rsave', s.el).onclick = async (ev) => {
     const btn = ev.target; btn.disabled = true;
     let by = $('#rb', s.el).value.trim(); if (by === 'הגובה עצמו') by = '@';

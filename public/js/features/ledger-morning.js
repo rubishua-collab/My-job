@@ -4,6 +4,7 @@ import { get, save } from '../api.js';
 import { $, $$, esc, dmy, weekday, todayISO, toast, viewState } from '../ui.js';
 import { App, onLive } from '../app.js';
 import { openSendSheet } from '../wa-ui.js';
+import { openPrivate } from './wa-private.js';
 import { mbFill, fmtOrig } from './ledger-calc.js';
 
 // נוסח התבנית לשליחה הרשמית: אותה הודעה בדיוק כמו mbFill. Meta לא מאפשרת להחליף ביטויים בתבנית מאושרת,
@@ -35,11 +36,12 @@ export async function renderMorning(view, args, q) {
         <div class="t">${esc(g.n)}</div><div class="a"><span class="num">${fmtOrig(g.a)} ₪</span></div>
         <div class="m"><span>${g.t ? 'שעה ' + esc(g.t) : 'בלי שעה'}</span><span>${g.c ? 'גובה: ' + esc(g.c) : 'בלי גובה'}</span><span class="num">${esc(g.shown)}</span></div>
         <details style="grid-column:1/-1"><summary class="small">ההודעה</summary><div class="preview mb-msg">${esc(mbFill(st.tpl, g))}</div></details></div>`).join('') : `<div class="note warn">${d.list.length ? 'אין לקוחות עם טלפון אצל הגובה הזה.' : 'אין בפיצול של היום לקוחות עם טלפון.'}</div>`}</div>
-      <div class="actionbar"><button class="btn wa xl" id="mb-send" ${sel.length ? '' : 'disabled'}>שלח הודעות בוקר בוואטסאפ ל־${sel.length} לקוחות</button></div>`;
+      <div class="actionbar"><button class="btn wa xl" id="mb-priv" ${sel.length ? '' : 'disabled'}>וואטסאפ פרטי · הכן הודעה אישית ל־${sel.length} לקוחות</button><button class="btn ghost" id="mb-send" ${sel.length ? '' : 'disabled'}>שלח דרך החשבון העסקי ל־${sel.length} לקוחות</button></div>`;
     $$('[data-c]', view).forEach(b => b.onclick = () => { st.coll = b.dataset.c; viewState.set('mb', { coll: st.coll }); draw(); });
     $$('[data-sel]', view).forEach(c => c.onchange = () => { c.checked ? st.off.delete(c.dataset.sel) : st.off.add(c.dataset.sel); draw(); });
     $('#mb-all-on').onclick = () => { shown.forEach(g => st.off.delete(g.k)); draw(); };
     $('#mb-all-off').onclick = () => { shown.forEach(g => st.off.add(g.k)); draw(); };
+    $('#mb-priv').onclick = () => openPrivate(sel.map(g => ({ ref: g.k, name: g.n, phone: g.ph, amount: g.a, time: g.t, collector: g.c })), { col: 'accounts', id: d.work ? d.work.id : (d.split ? d.split.id : null), title: 'הודעות בוקר ' + dmy(d.date), kind: 'morning-msgs' });
     $('#mb-send').onclick = () => {
       const items = sel.map(g => itemOf(g, d.date));
       openSendSheet(items, { col: 'accounts', id: d.work ? d.work.id : (d.split ? d.split.id : null), title: 'הודעות בוקר ' + dmy(d.date) + (st.coll ? ' · ' + (st.coll === '__none' ? 'ללא גובה' : st.coll) : ''), kind: 'morning-msgs' });
