@@ -28,7 +28,7 @@ function drawNav() {
 const routes = {
   login: renderLogin, today: renderToday, accounts: renderAccounts, acc: renderAccount, new: renderNew,
   clients: renderClients, client: renderClient, wa: renderWa, batch: renderBatch, more: renderMore,
-  contracts: renderContracts, migration: renderMigration, users: renderUsers, audit: renderAudit,
+  migration: renderMigration, users: renderUsers, audit: renderAudit,
 };
 let leaving = null;
 export async function go() {
@@ -176,7 +176,7 @@ async function renderClients(view) {
 async function renderClient(view, [key]) {
   const c = await get('/api/clients/' + encodeURIComponent(key));
   const kinds = { morning: 'חשבון בוקר', split: 'פיצול', collectors: 'חשבון גובים', work: 'איסוף יום', loan: 'הלוואה', loan_request: 'בקשה', contract: 'חוזה', client: 'כרטיס' };
-  const link = (r) => ['morning', 'split', 'collectors', 'work'].includes(r.kind) ? `#/acc/${r.acc}?hl=${encodeURIComponent(r.key || '')}` : r.kind === 'loan' ? '#/loans/' + r.acc : r.kind === 'loan_request' ? '#/requests' : r.kind === 'contract' ? '#/contracts' : r.kind === 'client' ? '#/clients-db/' + r.acc : '';
+  const link = (r) => ['morning', 'split', 'collectors', 'work'].includes(r.kind) ? `#/acc/${r.acc}?hl=${encodeURIComponent(r.key || '')}` : r.kind === 'loan' ? '#/loans/' + r.acc : r.kind === 'loan_request' ? '#/requests' : r.kind === 'contract' ? '#/contracts-manage' : r.kind === 'client' ? '#/clients-db/' + r.acc : '';
   view.innerHTML = `<div class="band"><div class="grow"><div class="eyebrow">כרטיס לקוח</div><h1>${esc(c.name)}</h1></div><button class="btn sm" data-act="back">חזרה</button></div>
   <div class="card"><dl class="kv"><dt>טלפון</dt><dd>${c.phones.map(p => `<a href="tel:+${p}">${esc(fmtPhone(p))}</a>`).join(', ') || 'אין'}</dd><dt>גובים</dt><dd>${esc(c.collectors.join(', ') || '—')}</dd>
   ${c.balance ? `<dt>יתרה בפיצול האחרון</dt><dd>${money(c.balance.amount)} <span class="muted small">(${dmy(c.balance.date)})</span></dd>` : ''}
@@ -192,7 +192,7 @@ export const statusPill = (s) => `<span class="pill ${STATUS[s]?.[1] || ''}">${S
 // ---- עוד ----
 async function renderMore(view) {
   const L = [
-    App.can.sensitive && ['#/contracts', 'חוזים חתומים וקבצים'], App.can.finance && ['#/migration', 'דוח התאמת נתונים וגיבוי'],
+    App.can.finance && ['#/migration', 'דוח התאמת נתונים וגיבוי'],
     App.can.finance && ['#/audit', 'יומן שינויים'], App.can.users && ['#/users', 'משתמשים והרשאות'],
     ...R.more.filter(m => !m.can || m.can(App)).sort((a, b) => (a.order || 50) - (b.order || 50)).map(m => [m.href, m.label]),
   ].filter(Boolean);

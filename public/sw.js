@@ -1,6 +1,6 @@
 // Service worker: שומר את מעטפת האפליקציה לפתיחה מהירה. נתונים תמיד מהשרת (לא נשמרים במכשיר).
-const V = 'yoman-v2';
-const SHELL = ['/', '/index.html', '/css/app.css', '/js/app.js', '/js/api.js', '/js/ui.js', '/js/acc.js', '/js/wa-ui.js', '/js/calc.js', '/js/phone.js', '/manifest.webmanifest', '/icons/icon-192.png'];
+const V = 'yoman-v3';
+const SHELL = ['/', '/index.html', '/css/app.css', '/js/app.js', '/js/api.js', '/js/ui.js', '/js/acc.js', '/js/wa-ui.js', '/js/calc.js', '/js/phone.js', '/manifest.webmanifest', '/icons/icon-192.png', '/sign.html', '/js/sign.js'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {

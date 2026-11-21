@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="format-detection" content="telephone=no">
+<title>חתימה על מסמך</title>
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="stylesheet" href="/css/app.css">
+<script type="module" src="/js/sign.js"></script>
+</head>
+<body>
+<div id="sg-client" class="sgc-wrap">
+  <section id="v-load"><div class="boot">טוען את המסמך…</div></section>
+
+  <section id="v-err" hidden>
+    <h1>לא ניתן לפתוח את המסמך</h1>
+    <div class="note err" id="err-t"></div>
+  </section>
+
+  <section id="v-verify" hidden>
+    <div><h1 id="c-title">היתר עסקה</h1><p class="small muted" id="c-lead"></p></div>
+    <div class="card">
+      <h3>אימות</h3>
+      <p class="small muted" style="margin:2px 0 8px">הכניסו את מספר הוואטסאפ שאליו נשלח המסמך ואת קוד האימות שמופיע בהודעת הוואטסאפ.</p>
+      <label class="f" for="s-phone">מספר טלפון<input class="in n" id="s-phone" type="tel" inputmode="tel" autocomplete="tel"></label>
+      <label class="f" for="s-code" style="margin-top:8px">קוד אימות (6 ספרות)<input class="in n" id="s-code" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></label>
+      <div class="note err" id="ver-err" hidden></div>
+      <button class="btn" type="button" id="b-verify" style="margin-top:10px;width:100%">המשך למסמך</button>
+    </div>
+  </section>
+
+  <section id="v-sign" hidden>
+    <div><h1 id="c-title2"></h1><p class="small muted" id="c-lead2"></p></div>
+    <div class="card sg-summary" id="c-summary"></div>
+    <div id="c-paper" class="sgp" aria-label="נוסח החוזה"></div>
+    <div class="card">
+      <h3>פרטי החותם</h3>
+      <label class="f" for="s-name">שם מלא<input class="in" id="s-name" type="text" autocomplete="name"></label>
+      <label class="f" for="s-id" style="margin-top:8px">מספר תעודת זהות<input class="in n" id="s-id" type="text" inputmode="numeric" autocomplete="off"></label>
+    </div>
+    <div class="card">
+      <h3>צילום תעודת זהות (חובה)</h3>
+      <p class="small muted" style="margin:2px 0 8px">בלי צילום ת.ז. אי אפשר לחתום. הצילום נשמר עם המסמך החתום אצל מי ששלח לכם את המסמך בלבד.</p>
+      <div class="sg-idslot"><span class="lbl">צד קדמי, עם התמונה</span><img id="img-front" alt="" hidden><input id="in-front" type="file" accept="image/*"><button type="button" class="btn plain sm" id="clr-front" hidden>הסרה</button></div>
+      <div class="sg-idslot" style="margin-top:8px"><span class="lbl">ספח או צד אחורי (לא חובה)</span><img id="img-back" alt="" hidden><input id="in-back" type="file" accept="image/*"><button type="button" class="btn plain sm" id="clr-back" hidden>הסרה</button></div>
+    </div>
+    <div class="card">
+      <h3>חתימה</h3>
+      <p class="small muted" style="margin:2px 0 8px">חתמו עם האצבע בתוך המסגרת.</p>
+      <div class="sg-pad"><canvas id="pad" width="720" height="260" aria-label="אזור חתימה"></canvas><div class="guide"></div><div class="ph" id="pad-ph">חתמו כאן</div></div>
+      <div style="margin:8px 0"><button type="button" class="btn plain sm" id="pad-clr">ניקוי החתימה</button></div>
+      <label class="sg-check"><input type="checkbox" id="s-agree"><span id="c-agree"></span></label>
+      <p class="small muted" id="sign-hint"></p>
+      <div class="note err" id="sign-err" hidden></div>
+      <button type="button" class="btn xl" id="b-sign" disabled>חתימה וסיום</button>
+    </div>
+  </section>
+
+  <section id="v-done" hidden>
+    <div><h1>המסמך נחתם</h1><p class="small muted" id="done-lead"></p></div>
+    <div class="card">
+      <p style="margin:0 0 8px">המסמך החתום נשמר אצל מי ששלח לכם אותו. אפשר לשמור עותק גם אצלכם.</p>
+      <div class="row"><button type="button" class="btn" id="b-save">שמירת המסמך החתום (PDF)</button><a class="btn ghost" id="b-wa" href="#" target="_blank" rel="noopener" hidden>פתיחת וואטסאפ</a></div>
+    </div>
+    <div class="sg-previews" id="done-prev"></div>
+    <p class="sg-mono muted" id="done-fp"></p>
+  </section>
+</div>
+<div class="sg-busy" id="busy" hidden>מכין את המסמך החתום…</div>
+</body>
+</html>

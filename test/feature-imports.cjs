@@ -231,7 +231,7 @@ const COLL_TEXT = 'חובות\n1. ישראל ישראלי – 1,500 ₪ – רו
   });
 
   await step('ייצוא דוחות ל-Excel (כל החשבונות) — סכומים לפי חשבונות הבוקר', async () => {
-    await p.goto(URL + '/#/more'); await p.click('a[href="#/xlsx"]'); await p.waitForSelector('#xgo');
+    await p.goto(URL + '/#/xlsx'); await p.waitForSelector('#xgo');
     await p.click('[data-r=all]');
     const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#xgo')]);
     const f = path.join(TMP, 'r.xlsx'); await dl.saveAs(f); const x = await readXlsx(f);
