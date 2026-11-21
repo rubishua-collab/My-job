@@ -145,7 +145,7 @@ const step = async (name, fn) => { try { await fn(); results.push({ name, ok: tr
   await step('כניסה במחשב ועדכון חי: איסוף שסומן בטלפון מופיע במחשב', async () => {
     await d.goto(URL + '/#/login'); await d.fill('input[name=u]', 'owner'); await d.fill('input[name=p]', 'Owner-pass-1'); await d.click('form button'); await d.waitForSelector('.kpis');
     await d.goto(URL + '/#/today?date=2026-11-21'); await d.waitForSelector('.kpis');
-    assert.ok((await d.locator('.kpi.good .v').innerText()).includes('0'));
+    assert.ok((await d.locator('.kpi.good .v').first().innerText()).includes('0'));
     // רישום איסוף בטלפון, כולל שליח שאסף בפועל
     await p.goto(URL + '/#/acc/' + global.workId); await p.waitForSelector('.li[data-row]');
     await p.locator('.li[data-row]', { hasText: 'בדיקה שתיים' }).locator('.t').click(); await p.waitForSelector('#rs');
