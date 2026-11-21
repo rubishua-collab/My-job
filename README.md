@@ -50,6 +50,8 @@ OWNER_USERNAME=owner OWNER_PASSWORD='סיסמה-חזקה' IMPORT_ON_START=/path/
 | `WA_BUSINESS_ACCOUNT_ID` | מזהה חשבון הוואטסאפ העסקי (WABA) |
 | `WA_APP_SECRET` | ה-App Secret של אפליקציית Meta, לאימות חתימת ה-Webhook |
 | `WA_VERIFY_TOKEN` | מחרוזת שבוחרים ומזינים גם ב-Meta |
+| `ANTHROPIC_API_KEY` | לא חובה. מפעיל קריאת תמונות (רשימות, ת״ז) ופקודה חופשית דרך Claude |
+| `CONTRACTS_GAS_URL` | לא חובה. גיבוי חוזים חתומים ל-Google Drive דרך Apps Script |
 
 ב-Meta: WhatsApp → Configuration → Webhook לכתובת `PUBLIC_URL/webhooks/whatsapp`, עם השדה `messages`.
 
@@ -65,5 +67,5 @@ OWNER_USERNAME=owner OWNER_PASSWORD='סיסמה-חזקה' IMPORT_ON_START=/path/
 
 ## בדיקות
 ```bash
-BACKUP=/path/backup.json node test/e2e.cjs   # תהליך מלא באייפון ובמחשב מול שרת וואטסאפ מדומה
+BACKUP=/path/backup.json bash test/run-all.sh   # כל הבדיקות: תהליך מלא באייפון ובמחשב + כל יכולת בנפרד
 ```
