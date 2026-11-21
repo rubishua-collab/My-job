@@ -3,14 +3,14 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { db, getDoc, listDocs, putDoc, deleteDoc, once, newId, now, logAudit, kvGet, kvSet, DATA_DIR } from './db.js';
+import { bus, db, getDoc, listDocs, putDoc, deleteDoc, once, newId, now, logAudit, kvGet, kvSet, DATA_DIR } from './db.js';
 import { Router, parseCookies, readBody, send, serveStatic, SECURITY_HEADERS } from './http.js';
 import { login, logout, sessionUser, createUser, can, ROLES, hashPassword, publicUser } from './auth.js';
 import { listAccounts, filterForUser, search, clientCard, today, loansView, knownCollectors, clientIndex, KIND_NAMES } from './data.js';
 import { importBackup } from './importer.js';
 import { reconcile, metrics, dbCols, dbFiles } from './reconcile.js';
 import * as wa from './wa.js';
-import { calcMorning, prevMorning, normStatus, collKey, cleanColl, ST_GOT, r2 } from '../public/js/calc.js';
+import { calcMorning, prevMorning, normStatus, collKey, cleanColl, ST_GOT, r2, normName } from '../public/js/calc.js';
 import { normPhone } from '../public/js/phone.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
@@ -170,15 +170,25 @@ r.post('/api/wa/templates', async (req, res, { user, body }) => { need(can.waCon
 r.post('/api/wa/templates/map', (req, res, { user, body }) => { need(can.waConfig(user)); wa.setTemplateOrder(body.name, body.language, body.order || []); return { ok: true }; });
 r.post('/api/wa/prepare', (req, res, { user, body }) => {
   need(can.send(user));
-  const out = wa.buildRecipients({ items: body.items || [], merge: body.merge !== false, phoneIndex: phoneNames() });
+  const out = wa.buildRecipients({ items: resolvePhones(body.items), merge: body.merge !== false, phoneIndex: phoneNames() });
   const t = body.template ? db.prepare('SELECT * FROM wa_templates WHERE name=? AND language=?').get(body.template, body.language || 'he') : null;
   if (t) { const order = wa.templateOrder(t.name, t.language); out.recipients.forEach(x => { x.preview = wa.renderBody(t.body, order, x.vars); }); out.template = { ...t, order }; }
   return out;
 });
 function phoneNames() { const I = clientIndex(); return I.byPhone; }
+// שורות בלי טלפון (חשבון בוקר / חשבון גובים): המספר נלקח מהיסטוריית הלקוח רק אם יש לו מספר אחד בלבד
+function resolvePhones(items) {
+  const I = clientIndex();
+  return (items || []).slice(0, 2000).map(it => {
+    if (String(it.phone || '').trim()) return it;
+    const c = I.byName.get(normName(it.name));
+    if (c && c.phones.size === 1) return { ...it, phone: [...c.phones][0], resolved: true };
+    return { ...it, phone: '', reasonHint: c && c.phones.size > 1 ? 'ללקוח יש כמה מספרים בהיסטוריה' : '' };
+  });
+}
 r.post('/api/wa/batches', (req, res, { user, body }) => {
   need(can.send(user));
-  const prep = wa.buildRecipients({ items: body.items || [], merge: body.merge !== false, phoneIndex: phoneNames() });
+  const prep = wa.buildRecipients({ items: resolvePhones(body.items), merge: body.merge !== false, phoneIndex: phoneNames() });
   const excluded = new Set(body.exclude || []);
   const recips = prep.recipients.filter(x => !x.optOut && !excluded.has(x.phone) && !x.needsOptIn);
   if (!recips.length) throw err(400, 'אין נמענים שאפשר לשלוח אליהם');
@@ -202,7 +212,7 @@ r.post('/api/wa/consent', (req, res, { user, body }) => {
 });
 r.post('/api/wa/phone-owner', (req, res, { user, body }) => {
   need(can.send(user)); const p = normPhone(body.phone); if (!p) throw err(400, 'מספר לא תקין');
-  const m = kvGet('phone_owner_ok', {}); if (body.name) m[p] = body.name; else delete m[p]; kvSet('phone_owner_ok', m);
+  const m = kvGet('phone_owner_ok', {}); if (body.name) m[p] = normName(body.name); else delete m[p]; kvSet('phone_owner_ok', m);
   logAudit({ user, action: 'אישור שיוך מספר ללקוח', item: p, note: body.name || 'בוטל' }); return { ok: true };
 });
 
@@ -214,6 +224,14 @@ r.post('/webhooks/whatsapp', (req, res, { raw }) => {
   send(res, 200, 'ok');
 });
 
+// עדכונים חיים: כשמכשיר אחד שומר, המכשירים האחרים מתעדכנים מיד
+r.get('/api/events', (req, res, { user }) => {
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+  res.write('retry: 3000\n\n');
+  const on = (e) => res.write('data: ' + JSON.stringify(e) + '\n\n');
+  const ping = setInterval(() => res.write(': ping\n\n'), 25000);
+  bus.on('change', on); req.on('close', () => { bus.off('change', on); clearInterval(ping); });
+});
 r.get('/api/health', () => ({ ok: true, at: new Date().toISOString() }));
 
 // ---- שרת ----

@@ -3,6 +3,8 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { EventEmitter } from 'node:events';
+export const bus = new EventEmitter(); bus.setMaxListeners(500);
 
 export const DATA_DIR = process.env.DATA_DIR || path.resolve('data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -92,7 +94,7 @@ export function putDoc(col, id, data, { user, baseVersion, action = 'עדכון'
       .run(col, id, json, 1, t, t, user?.name || null);
   }
   logAudit({ user, action: cur ? action : 'יצירה', col, doc_id: id, item, before: cur ? cur.data : null, after: json, note });
-  return getDoc(col, id);
+  const d = getDoc(col, id); bus.emit('change', { col, id, version: d.version, by: user?.name || '' }); return d;
 }
 export function deleteDoc(col, id, { user, note } = {}) {
   const cur = qGet.get(col, id); if (!cur) return;

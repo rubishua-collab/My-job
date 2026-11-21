@@ -1,0 +1,31 @@
+# פריסה בלחיצה ב-Render (Blueprint). הדיסק הקבוע שומר את מסד הנתונים והקבצים.
+services:
+  - type: web
+    name: yoman-hesbon-boker
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    healthCheckPath: /api/health
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: DATA_DIR
+        value: /data
+      - key: PUBLIC_URL
+        sync: false
+      - key: OWNER_USERNAME
+        sync: false
+      - key: OWNER_PASSWORD
+        sync: false
+      - key: WA_TOKEN
+        sync: false
+      - key: WA_PHONE_NUMBER_ID
+        sync: false
+      - key: WA_BUSINESS_ACCOUNT_ID
+        sync: false
+      - key: WA_APP_SECRET
+        sync: false
+      - key: WA_VERIFY_TOKEN
+        generateValue: true

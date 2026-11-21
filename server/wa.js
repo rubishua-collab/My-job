@@ -1,6 +1,6 @@
 // WhatsApp Business Platform (Cloud API) — שליחה מצד השרת, תבניות מאושרות, הסכמה/הסרה, סטטוס מסירה לפי Webhook
 import crypto from 'node:crypto';
-import { db, now, newId, kvGet, kvSet, logAudit } from './db.js';
+import { db, now, newId, kvGet, kvSet, logAudit, bus } from './db.js';
 import { normPhone, phoneProblem, normName } from '../public/js/phone.js';
 
 const cfg = () => ({
@@ -25,6 +25,11 @@ export async function waStatus({ live = true } = {}) {
     { key: 'WA_VERIFY_TOKEN', ok: !!c.verifyToken, label: 'סיסמת אימות ל-Webhook (מחרוזת שתבחר ותזין גם ב-Meta)' },
     { key: 'PUBLIC_URL', ok: !!c.publicUrl, label: 'כתובת ציבורית של האפליקציה (https) — כדי ש-Meta תוכל לדווח על מסירה' },
   ];
+  // תבניות מסונכרנות אוטומטית מ-Meta אם עוד לא סונכרנו בעשר הדקות האחרונות
+  if (c.token && c.wabaId) {
+    const last = db.prepare('SELECT MAX(synced_at) t FROM wa_templates').get().t || 0;
+    if (now() - last > 10 * 60e3) { try { await syncTemplates(); } catch { /* מוצג בבדיקת החיבור */ } }
+  }
   const out = { configured: items.every(i => i.ok), items, webhookUrl: c.publicUrl ? c.publicUrl + '/webhooks/whatsapp' : '', lastWebhookAt: kvGet('wa_last_webhook', null), phone: null, error: null,
     templates: db.prepare('SELECT name,language,status,category,body,synced_at FROM wa_templates ORDER BY name').all() };
   if (live && c.token && c.phoneId) {
@@ -92,7 +97,7 @@ export async function syncTemplates() {
 }
 
 // הגשת תבנית חדשה לאישור Meta. הטקסט כולל שמות משתנים בעברית בסוגריים מסולסלים: {שם} {סכום} ...
-export const VARS = { 'שם': 'name', 'סכום': 'amount', 'תאריך': 'date', 'שעה': 'time', 'פירוט': 'details', 'גובה': 'collector' };
+export const VARS = { 'שם פרטי': 'first', 'שם': 'name', 'סכום': 'amount', 'תאריך': 'date', 'שעה': 'time', 'פירוט': 'details', 'גובה': 'collector' };
 export function compileTemplate(text) {
   const order = []; const body = String(text || '').replace(/\{([^{}]+)\}/g, (m, k) => {
     k = k.trim(); if (!VARS[k]) throw Object.assign(new Error('משתנה לא מוכר: {' + k + '}. אפשר: ' + Object.keys(VARS).map(x => '{' + x + '}').join(' ')), { status: 400 });
@@ -104,7 +109,7 @@ export async function submitTemplate({ name, language = 'he', category = 'UTILIT
   const c = cfg(); if (!c.token || !c.wabaId) throw Object.assign(new Error('חסר חיבור לחשבון העסקי'), { status: 400 });
   if (!/^[a-z0-9_]{1,512}$/.test(name)) throw Object.assign(new Error('שם תבנית: אותיות באנגלית קטנות, ספרות וקו תחתון בלבד'), { status: 400 });
   const { body, order } = compileTemplate(text);
-  const example = order.map(k => ({ name: 'ישראל ישראלי', amount: '1,250 ₪', date: '21.11.2026', time: '18:30', details: '800 ₪ + 450 ₪', collector: 'בן' }[k]));
+  const example = order.map(k => ({ first: 'ישראל', name: 'ישראל ישראלי', amount: '1,250 ₪', date: '21.11.2026', time: '18:30', details: '800 ₪ + 450 ₪', collector: 'בן' }[k]));
   const comp = [{ type: 'BODY', text: body, ...(order.length ? { example: { body_text: [example] } } : {}) },
     { type: 'FOOTER', text: 'להסרה מרשימת התפוצה השיבו "הסר"' }];
   const j = await graph('POST', `/${c.wabaId}/message_templates`, { name, language, category, components: comp });
@@ -133,11 +138,11 @@ export function buildRecipients({ items, merge = true, phoneIndex }) {
   const groups = new Map(); const skipped = [];
   for (const it of items) {
     const prob = phoneProblem(it.phone);
-    if (prob) { skipped.push({ ...it, reason: prob }); continue; }
+    if (prob) { skipped.push({ ...it, reason: it.reasonHint || prob }); continue; }
     const phone = normPhone(it.phone);
     const key = merge ? phone + '|' + normName(it.name) : phone + '|' + normName(it.name) + '|' + it.ref;
     if (!groups.has(key)) groups.set(key, { phone, name: String(it.name || '').trim(), lines: [], refs: [] });
-    const g = groups.get(key); g.lines.push(it); g.refs.push(it.ref);
+    const g = groups.get(key); g.lines.push(it); g.refs.push(it.ref); if (it.resolved) g.resolved = true;
   }
   // אותו מספר אצל שני לקוחות שונים — עוצרים את השליחה למספר הזה עד בדיקת השיוך
   const byPhone = new Map();
@@ -161,8 +166,8 @@ export function buildRecipients({ items, merge = true, phoneIndex }) {
       const details = g.lines.length > 1 ? g.lines.map(l => fmtMoney(l.amount) + (l.time ? ' (' + l.time + ')' : '')).join(' + ') : fmtMoney(total);
       const c = consent.get(phone);
       recipients.push({
-        phone, name: g.name, refs: g.refs, count: g.lines.length,
-        vars: { name: oneLine(g.name), amount: fmtMoney(total), date: oneLine(g.lines[0].date || ''), time: times[0] || '', details: oneLine(details), collector: oneLine(g.lines[0].collector || '') },
+        phone, name: g.name, refs: g.refs, count: g.lines.length, resolved: !!g.resolved,
+        vars: { first: oneLine(String(g.name).split(' ')[0]), name: oneLine(g.name), amount: fmtMoney(total), date: oneLine(g.lines[0].date || ''), time: times[0] || '', details: oneLine(details), collector: oneLine(g.lines[0].collector || '') },
         consent: c || 'unknown', optOut: c === 'opt_out', needsOptIn: requireOptIn && c !== 'opt_in',
       });
     }
