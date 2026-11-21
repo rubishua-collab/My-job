@@ -131,6 +131,8 @@ export function loansView() {
 export const knownCollectors = () => {
   const s = getDoc('settings', 'coll'); const set = new Map();
   for (const c of (s?.data?.coll || [])) set.set(collKey(c), cleanColl(c));
+  const del = new Set((s?.data?.del || []).map(c => collKey(c)));
   for (const r of listDocs('accounts')) for (const x of [...(r.data.entries || []), ...(r.data.records || [])]) if (x && x.c) { const k = collKey(cleanColl(x.c)); if (k && !set.has(k)) set.set(k, cleanColl(x.c)); }
+  for (const k of del) set.delete(k); // גובים שנמחקו מהרשימה, כמו במקור
   return [...set.values()].sort((a, b) => a.localeCompare(b, 'he'));
 };

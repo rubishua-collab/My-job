@@ -176,7 +176,7 @@ async function renderClients(view) {
 async function renderClient(view, [key]) {
   const c = await get('/api/clients/' + encodeURIComponent(key));
   const kinds = { morning: 'חשבון בוקר', split: 'פיצול', collectors: 'חשבון גובים', work: 'איסוף יום', loan: 'הלוואה', loan_request: 'בקשה', contract: 'חוזה', client: 'כרטיס' };
-  const link = (r) => ['morning', 'split', 'collectors', 'work'].includes(r.kind) ? `#/acc/${r.acc}?hl=${encodeURIComponent(r.key || '')}` : r.kind === 'loan' ? '#/loans/' + r.acc : r.kind === 'loan_request' ? '#/requests' : r.kind === 'contract' ? '#/contracts' : '';
+  const link = (r) => ['morning', 'split', 'collectors', 'work'].includes(r.kind) ? `#/acc/${r.acc}?hl=${encodeURIComponent(r.key || '')}` : r.kind === 'loan' ? '#/loans/' + r.acc : r.kind === 'loan_request' ? '#/requests' : r.kind === 'contract' ? '#/contracts' : r.kind === 'client' ? '#/clients-db/' + r.acc : '';
   view.innerHTML = `<div class="band"><div class="grow"><div class="eyebrow">כרטיס לקוח</div><h1>${esc(c.name)}</h1></div><button class="btn sm" data-act="back">חזרה</button></div>
   <div class="card"><dl class="kv"><dt>טלפון</dt><dd>${c.phones.map(p => `<a href="tel:+${p}">${esc(fmtPhone(p))}</a>`).join(', ') || 'אין'}</dd><dt>גובים</dt><dd>${esc(c.collectors.join(', ') || '—')}</dd>
   ${c.balance ? `<dt>יתרה בפיצול האחרון</dt><dd>${money(c.balance.amount)} <span class="muted small">(${dmy(c.balance.date)})</span></dd>` : ''}
