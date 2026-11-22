@@ -1,0 +1,17 @@
+{
+  "name": "tafrit-yomi-robi",
+  "version": "1.0.0",
+  "private": true,
+  "description": "תפריט יומי רובי — אפליקציית תזונה אישית (PWA) בעברית, עם מאגר התזונה הלאומי, חישובי יעדים, יומן ושקילות",
+  "type": "module",
+  "engines": { "node": ">=22.5" },
+  "scripts": {
+    "start": "node --no-warnings server/index.js",
+    "test": "node --no-warnings --test test/unit/*.test.js",
+    "e2e": "node test/e2e-iphone.cjs",
+    "build-foods": "python3 -I scripts/build-foods.py"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.12.0"
+  }
+}
