@@ -8,6 +8,7 @@ import { openSendSheet } from './wa-ui.js';
 import { openPrivate } from './features/wa-private.js';
 import { R } from './registry.js';
 import { openDaySheet, clearPageSheet, stepDay } from './day-tools.js';
+import { openRemoveSheet } from './acc-remove.js';
 
 const KINDS = { morning: 'חשבון בוקר', split: 'פיצול', collectors: 'חשבון גובים', work: 'איסוף יום' };
 
@@ -15,7 +16,7 @@ export async function renderAccounts(view) {
   const vs = viewState.get('accounts');
   const L = await get('/api/accounts');
   const kind = vs.kind || '';
-  view.innerHTML = `<div class="band"><div class="grow"><div class="eyebrow">${L.length} חשבונות שמורים</div><h1>חשבונות</h1></div>
+  view.innerHTML = `<div class="band"><div class="grow"><div class="eyebrow" id="acount">${L.length} חשבונות שמורים</div><h1>חשבונות</h1></div>
     ${App.can.finance ? `<button class="btn sm" id="newday">פתיחת יום חדש</button> <button class="btn sm" id="newacc">+ חשבון חדש</button>` : ''}</div>
     <div class="search"><input class="in" id="aq" type="search" placeholder="חיפוש לפי תאריך או כותרת…" value="${esc(vs.q || '')}"></div>
     <div class="chips" style="margin-bottom:10px">${[['', 'הכול'], ...Object.entries(KINDS)].map(([k, t]) => `<button class="chip" data-k="${k}" aria-pressed="${kind === k}">${t}</button>`).join('')}</div>
@@ -23,9 +24,16 @@ export async function renderAccounts(view) {
   const draw = () => {
     const q = $('#aq').value.trim(); const k = viewState.get('accounts').kind || '';
     const rows = L.filter(a => (!k || a.kind === k) && (!q || (a.title + ' ' + dmy(a.date) + ' ' + a.date).includes(q)));
-    $('#alist').innerHTML = rows.length ? `<div class="list">${rows.map(a => `<a class="li noc link" href="#/acc/${a.id}" style="text-decoration:none;color:inherit"><div class="t">${esc(a.title || KINDS[a.kind])} <span class="pill ${a.kind === 'morning' ? 'acc' : a.kind === 'work' ? 'ok' : a.kind === 'collectors' ? 'warn' : ''}">${KINDS[a.kind]}</span></div>
+    const canDel = App.me && App.me.role === 'owner';
+    $('#acount').textContent = L.length + ' חשבונות שמורים';
+    $('#alist').innerHTML = rows.length ? `<div class="list">${rows.map(a => `<div class="accrow" data-id="${a.id}"><a class="li noc link" href="#/acc/${a.id}" style="text-decoration:none;color:inherit"><div class="t">${esc(a.title || KINDS[a.kind])} <span class="pill ${a.kind === 'morning' ? 'acc' : a.kind === 'work' ? 'ok' : a.kind === 'collectors' ? 'warn' : ''}">${KINDS[a.kind]}</span></div>
       <div class="a">${a.headline ? money(a.headline.value) + `<div class="small muted">${esc(a.headline.label)}</div>` : ''}</div>
-      <div class="m"><span>${esc(weekday(a.date))} ${dmy(a.date)}</span><span>${a.rows} שורות</span>${a.updatedBy && a.updatedBy !== 'ייבוא' ? `<span>עודכן ע״י ${esc(a.updatedBy)}</span>` : ''}</div></a>`).join('')}</div>` : '<div class="empty">לא נמצאו חשבונות</div>';
+      <div class="m"><span>${esc(weekday(a.date))} ${dmy(a.date)}</span><span>${a.rows} שורות</span>${a.updatedBy && a.updatedBy !== 'ייבוא' ? `<span>עודכן ע״י ${esc(a.updatedBy)}</span>` : ''}</div></a>${canDel ? `<button class="accdel" data-rm="${a.id}" aria-label="מחיקת רישום ${esc(a.title || '')}">מחיקת<br>רישום</button>` : ''}</div>`).join('')}</div>` : '<div class="empty">לא נמצאו חשבונות</div>';
+  };
+  $('#alist').onclick = (e) => {
+    const b = e.target.closest('[data-rm]'); if (!b) return;
+    e.preventDefault();
+    openRemoveSheet(b.dataset.rm, () => { const i = L.findIndex(x => x.id === b.dataset.rm); if (i >= 0) L.splice(i, 1); draw(); });
   };
   $('#aq').oninput = () => { viewState.set('accounts', { q: $('#aq').value }); draw(); };
   $$('.chip', view).forEach(b => b.onclick = () => { viewState.set('accounts', { kind: b.dataset.k }); $$('.chip', view).forEach(x => x.setAttribute('aria-pressed', x === b)); draw(); });

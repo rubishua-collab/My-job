@@ -118,12 +118,11 @@ accountPanel('collectors', (ctx) => {
 
 // ===================== 4. מחיקת חשבון שמור (בעל התוכנה) =====================
 accountAction('*', {
-  label: 'מחק חשבון',
+  label: 'מחיקת רישום',
   can: (A) => A.me && A.me.role === 'owner',
   async run(ctx) {
-    const a = ctx.a;
-    if (!confirm(`למחוק את ״${a.title}״? החשבון יוסר מהרשימות ומהחישובים. אפשר להחזיר אותו משחזור גיבוי (״גיבוי מלא ושחזור״).`)) return;
-    try { await save('DELETE', '/api/accounts/' + encodeURIComponent(a.id), {}, { queue: false, label: 'מחיקת חשבון' }); toast('החשבון נמחק'); location.hash = '#/accounts'; }
-    catch (e) { toast('המחיקה נכשלה: ' + e.message); }
+    // אותה פעולה כמו ״מחיקת רישום״ במסך ״חשבונות״: מחיקה + ביטול ההשפעה על הקרן, בטרנזקציה אחת
+    const { openRemoveSheet } = await import('../acc-remove.js');
+    openRemoveSheet(ctx.a.id, () => { location.hash = '#/accounts'; });
   },
 });

@@ -166,3 +166,10 @@ details>summary{cursor:pointer;font-weight:700;padding:6px 0}
 .daybar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px}
 .daybar .grow{flex:1}
 @media (max-width:520px){.daybar #dnew,.daybar #dclear{flex:1 1 45%}}
+
+/* מחיקת רישום במסך חשבונות */
+.accrow{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:stretch;border-top:1px solid var(--line)}
+.accrow:first-child{border-top:0}
+.accrow>.li{border-top:0}
+.accdel{min-width:64px;min-height:48px;margin:8px;padding:6px 10px;border:1px solid var(--neg);border-radius:10px;background:var(--surface);color:var(--neg);font:inherit;font-size:13px;font-weight:700;line-height:1.2;cursor:pointer;align-self:center}
+.accdel:active{background:color-mix(in srgb,var(--neg) 12%,var(--surface))}

@@ -174,7 +174,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   });
   await step('מחיקת חשבון (בעלים) ושחזורו מגיבוי', async () => {
     const r = await api('POST', '/api/accounts', { kind: 'split', date: '2026-11-21' }); const id = r.json.id;
-    await p.goto(URL + '/#/acc/' + id); await p.click('[data-xact]:has-text("מחק חשבון")'); await p.waitForURL(/#\/accounts$/);
+    await p.goto(URL + '/#/acc/' + id); await p.click('[data-xact]:has-text("מחיקת רישום")'); await p.click('#rmgo'); await p.waitForURL(/#\/accounts$/);
     assert.strictEqual((await api('GET', '/api/accounts/' + id)).status, 404);
   });
 
