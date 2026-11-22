@@ -240,3 +240,10 @@ tr.mgpart td{background:color-mix(in srgb,var(--accent-soft) 25%,transparent)}
 .actionbar .savest{display:block;min-height:1.35em}
 /* בזמן הקלדה בשדה (מקלדת פתוחה באייפון) פס הוואטסאפ התחתון מוסתר — כך הוא לא מסתיר את השורה ולא גורם לגלילה */
 body.typing .actionbar.sendbar{display:none}
+
+/* חיפוש לפי שם הלקוח בעריכת איסוף יום */
+.edsearch{position:relative;margin:8px 0}
+.edsearch .in{width:100%;padding-inline-end:110px;font-size:17px}
+.edq-x{position:absolute;inset-inline-end:6px;top:50%;transform:translateY(-50%);min-height:36px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--accent);font:inherit;font-size:14px;font-weight:700;padding:0 10px;cursor:pointer}
+.edq-x[hidden]{display:none}
+tr[hidden]{display:none}

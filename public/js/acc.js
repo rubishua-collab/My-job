@@ -418,6 +418,18 @@ const LIST_NAMES = { rows: 'שורות גבייה (ריבית/קרן)', loans: '
 function renderEditor(ctx) {
   const a = structuredClone(ctx.a); const { view } = ctx; const spec = COLS[a.kind];
   const openMg = new Set();
+  // חיפוש לפי שם הלקוח ברשימת ״איסוף יום״: מסתיר שורות שלא מתאימות (בלי לצייר מחדש — המקלדת לא נסגרת).
+  // השורות עצמן לא משתנות: עריכה בתוצאה מעדכנת את השורה המקורית, ו״שמור״ שומר את כל הרשימה.
+  const edQ = {}; const searchable = (li) => a.kind === 'work' && li === 'entries';
+  const applyQ = (li) => {
+    const t = $(`table[data-tl="${li}"]`, view); if (!t) return;
+    // אותיות סופיות כמו רגילות (״עידן״ מוצא גם ״עידני״)
+    const fold = (v) => normName(v).replace(/[ךםןףץ]/g, c => ({ 'ך': 'כ', 'ם': 'מ', 'ן': 'נ', 'ף': 'פ', 'ץ': 'צ' })[c]);
+    const q = fold(edQ[li] || ''); let shown = 0;
+    $$('tbody tr', t).forEach(tr => { const n = tr.querySelector(`[data-l="${li}"][data-k="n"]`); const nm = n ? fold(n.value) : ''; const ok = !q || !nm || nm.includes(q); tr.hidden = !ok; if (ok) shown++; });
+    const em = $(`[data-edqe="${li}"]`, view); if (em) em.hidden = !q || shown > 0;
+    const x = $(`[data-edqx="${li}"]`, view); if (x) x.hidden = !q;
+  };
   // ״שמור שינויים״ בעריכה: שומר את כל השורות שנערכו בלחיצה אחת ונשאר באותו מקום. ״שמור וסיים״ חוזר לתצוגה
   let dirty = false, opIdE = uid(), editedAt = 0;
   // editedAt = מתי הוקלד השינוי בפועל. אירוע change של שדה טקסט מגיע לפעמים רק ביציאה מהשדה (למשל בלחיצה על ״שמור״), ולכן הוא לא מזיז את הזמן אם כבר נרשמה הקלדה
@@ -484,11 +496,14 @@ function renderEditor(ctx) {
     ${a.kind === 'morning' ? `<label class="f">קרן קיימת<input class="in n" id="ed-keren" inputmode="decimal" value="${esc(a.keren ?? '')}"></label><label class="f">משלוחים<input class="in n" id="ed-courier" inputmode="decimal" value="${esc(a.courier ?? '')}"></label>` : ''}</div>
     <div id="ed-sum"></div></div>
     ${Object.entries(spec).map(([li, cols]) => `<div class="card"><div class="row sp"><h2 id="ed-h-${li}">${LIST_NAMES[li]} (${a.kind === 'split' && li === 'records' ? customerCount(a[li]) : (a[li] || []).length})</h2><div class="row"><button class="btn ghost sm" data-paste="${li}">הדבקה מאקסל</button><button class="btn sm" data-add="${li}">+ שורה</button></div></div>
-      <div class="tbl-wrap"><table><thead><tr><th>#</th>${cols.map(c => `<th>${c[1]}</th>`).join('')}<th></th></tr></thead><tbody>${tbody(li, cols)}</tbody></table></div></div>`).join('')}
+      ${searchable(li) ? `<div class="edsearch" role="search"><input class="in" type="search" data-edq="${li}" value="${esc(edQ[li] || '')}" placeholder="חיפוש לפי שם הלקוח" aria-label="חיפוש לפי שם הלקוח" dir="rtl" inputmode="search" enterkeyhint="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"><button type="button" class="edq-x" data-edqx="${li}" aria-label="נקה חיפוש" ${edQ[li] ? '' : 'hidden'}>נקה חיפוש</button></div>` : ''}
+      <div class="tbl-wrap"><table data-tl="${li}"><thead><tr><th>#</th>${cols.map(c => `<th>${c[1]}</th>`).join('')}<th></th></tr></thead><tbody>${tbody(li, cols)}</tbody></table></div>${searchable(li) ? `<div class="empty edq-empty" data-edqe="${li}" hidden>לא נמצאו שורות בשם הזה</div>` : ''}</div>`).join('')}
     ${(R.editorActions[a.kind] || []).length ? `<div class="card row">${R.editorActions[a.kind].map((x, i) => `<button class="btn ghost" data-eact="${i}">${esc(x.label)}</button>`).join('')}</div>` : ''}
     <div class="actionbar"><div id="ed-err"></div><div class="row" style="align-items:center"><button class="btn xl" data-save id="ed-savestay" style="flex:2">שמור שינויים</button><button class="btn ghost" id="ed-save" style="flex:1">שמור וסיים</button><a class="btn plain" href="#/acc/${a.id}" style="flex:1">ביטול</a></div><span class="savest small" data-savest role="status" aria-live="polite"></span><div class="acctimes small" data-acctimes>${timesHTML(ctx.a._times)}</div></div>`;
     summary();
     paintSave(); // בעריכה הכפתור נמצא גם בפס התחתון הדביק
+    $$('[data-edq]', view).forEach(inp => { inp.addEventListener('input', () => { edQ[inp.dataset.edq] = inp.value; applyQ(inp.dataset.edq); }); inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } }); applyQ(inp.dataset.edq); });
+    $$('[data-edqx]', view).forEach(b => b.onclick = () => { const li = b.dataset.edqx; edQ[li] = ''; const inp = $(`[data-edq="${li}"]`, view); inp.value = ''; applyQ(li); inp.focus(); });
     $$('[data-l], #ed-date, #ed-title, #ed-keren, #ed-courier', view).forEach(i => i.addEventListener('input', touch));
     $$('[data-l]', view).forEach(inp => inp.onchange = () => { touch(inp.tagName === 'INPUT' && inp.type !== 'checkbox');
       const r = a[inp.dataset.l][+inp.dataset.r]; const k = inp.dataset.k; const col = spec[inp.dataset.l].find(c => c[0] === k);
