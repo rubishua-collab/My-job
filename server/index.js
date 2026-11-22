@@ -4,10 +4,10 @@ import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { bus, db, getDoc, listDocs, putDoc, deleteDoc, once, newId, now, logAudit, kvGet, kvSet, DATA_DIR } from './db.js';
+import { bus, db, getDoc, listDocs, putDoc, deleteDoc, once, newId, now, logAudit, kvGet, kvSet, DATA_DIR, touchSaved } from './db.js';
 import { Router, parseCookies, readBody, send, serveStatic, SECURITY_HEADERS } from './http.js';
 import { login, logout, sessionUser, createUser, can, ROLES, hashPassword, publicUser } from './auth.js';
-import { listAccounts, filterForUser, search, clientCard, today, loansView, knownCollectors, clientIndex, KIND_NAMES } from './data.js';
+import { listAccounts, filterForUser, search, clientCard, today, loansView, knownCollectors, clientIndex, KIND_NAMES, accTimes } from './data.js';
 import { importBackup } from './importer.js';
 import { reconcile, metrics, dbCols, dbFiles } from './reconcile.js';
 import * as wa from './wa.js';
@@ -42,7 +42,15 @@ r.get('/api/accounts/:id', (req, res, { user, params }) => {
   const a = filterForUser(user, { id: d.id, ...d.data }); if (!a) throw err(403, 'אין לך הרשאה לחשבון הזה');
   const extra = {};
   if (a.kind === 'morning') { const p = prevMorning(listDocs('accounts').map(x => ({ id: x.id, ...x.data })), a.date, a.id); extra.prev = p; }
-  return { ...a, _version: d.version, _updatedAt: d.updated_at, _updatedBy: d.updated_by, ...extra };
+  return { ...a, _version: d.version, _updatedAt: d.updated_at, _updatedBy: d.updated_by, _times: accTimes(d, d.data), ...extra };
+});
+// ״שמור״ בלי שינוי: מעדכן רק את מועד השמירה (בלי גרסה חדשה, בלי לגעת בנתונים)
+r.post('/api/accounts/:id/saved', (req, res, { user, params, body }) => {
+  need(can.finance(user) || user.role === 'collector');
+  return once(body.opId, user, () => {
+    const d = touchSaved('accounts', params.id, user); if (!d) throw err(404, 'החשבון לא נמצא');
+    const row = getDoc('accounts', params.id); return { ok: true, times: accTimes(row, row.data) };
+  });
 });
 r.post('/api/accounts', (req, res, { user, body }) => {
   need(can.finance(user));
@@ -72,7 +80,7 @@ r.put('/api/accounts/:id', (req, res, { user, params, body }) => {
     if (keyed.kind === 'morning') keyed.finalKeren = calcMorning(keyed).final;
     keyed.updatedAt = now(); keyed.edits = (keyed.edits || 0) + 1;
     const out = putDoc('accounts', params.id, keyed, { user, baseVersion: body.baseVersion, note: body.note });
-    return { id: params.id, version: out.version };
+    return { id: params.id, version: out.version, times: accTimes(out, out.data) };
   });
 });
 r.del('/api/accounts/:id', (req, res, { user, params }) => { need(user.role === 'owner', 'רק בעל התוכנה יכול למחוק חשבונות'); deleteDoc('accounts', params.id, { user }); return { ok: true }; });

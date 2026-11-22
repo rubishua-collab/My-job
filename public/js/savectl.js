@@ -5,7 +5,8 @@
 // מעבר מסך / תאריך / יום חדש כשיש שינויים — ״שמור והמשך״ / ״המשך בלי לשמור״ / ״הישאר במסך״.
 import { $, $$, esc, openSheet, toast } from './ui.js';
 
-const providers = new Map(); // key -> provider (רישום חוזר באותו מפתח מחליף, כך שציור מחדש של המסך לא מכפיל)
+const providers = new Map();
+const afterSave = new Set(); // נקראים אחרי כל שמירה מוצלחת (ידנית או אוטומטית) — לרענון ״עדכון אחרון / שמירה אחרונה״ // key -> provider (רישום חוזר באותו מפתח מחליף, כך שציור מחדש של המסך לא מכפיל)
 let state = 'idle', savedAt = 0, busy = null, skipGuard = false;
 const hhmm = (t) => new Date(t).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', hour12: false });
 
@@ -16,21 +17,30 @@ export const SaveCtl = {
   // הודעות מספקים ששומרים בעצמם (שמירה אוטומטית)
   dirty() { state = 'dirty'; paint(); },
   saving() { state = 'saving'; paint(); },
-  saved() { savedAt = Date.now(); state = 'saved'; paint(); },
+  saved() { savedAt = Date.now(); state = 'saved'; paint(); afterSave.forEach(f => { try { f(); } catch { /* */ } }); },
+  after(fn) { afterSave.add(fn); return () => afterSave.delete(fn); },
   failed() { state = 'failed'; paint(); },
-  reset() { providers.clear(); state = 'idle'; savedAt = 0; paint(); },
+  reset() { providers.clear(); afterSave.clear(); state = 'idle'; savedAt = 0; paint(); },
   async saveAll() {
     if (busy) return busy;
     const a = document.activeElement; if (a && a.matches && a.matches('input,textarea,select')) a.blur(); // הערך האחרון שהוקלד
     await new Promise(r => setTimeout(r, 0));
     busy = (async () => {
       const list = [...providers.values()].filter(p => { try { return p.isDirty(); } catch { return false; } });
-      if (!list.length) { state = savedAt ? 'saved' : 'clean'; paint(); return true; }
+      if (!list.length) {
+        // אין שינויים: ״שמור״ מעדכן רק את מועד השמירה (אם המסך תומך)
+        const touch = [...providers.values()].filter(p => p.touch);
+        if (!touch.length) { state = savedAt ? 'saved' : 'clean'; paint(); return true; }
+        state = 'saving'; paint();
+        let ok = true; for (const p of touch) { try { if (!(await p.touch())) ok = false; } catch { ok = false; } }
+        if (ok) SaveCtl.saved(); else { state = 'failed'; paint(); }
+        return ok;
+      }
       state = 'saving'; paint();
       let ok = true;
       for (const p of list) { try { if (!(await p.save())) ok = false; } catch { ok = false; } }
-      if (ok && !SaveCtl.isDirty()) { savedAt = Date.now(); state = 'saved'; } else state = 'failed';
-      paint(); return state === 'saved';
+      if (ok && !SaveCtl.isDirty()) SaveCtl.saved(); else { state = 'failed'; paint(); }
+      return state === 'saved';
     })();
     try { return await busy; } finally { busy = null; }
   },

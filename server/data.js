@@ -27,6 +27,15 @@ export function filterForUser(u, a) {
   return null;
 }
 
+// מועדי ״עדכון אחרון״ ו״שמירה אחרונה״. בחשבונות ישנים: מה שכבר תועד (updatedAt של התוכנה המקורית / זמן הכתיבה במאגר). חסר = null (״לא תועד״)
+export function accTimes(r, a) {
+  const imported = r.updated_by === 'ייבוא';
+  const changedAt = a.changedAt ?? a.updatedAt ?? (imported ? a.createdAt : null) ?? null;
+  const changedBy = a.changedBy !== undefined ? a.changedBy : (!imported && r.updated_by ? r.updated_by : null);
+  const savedAt = a.savedAt ?? (imported ? (a.updatedAt ?? a.createdAt ?? null) : (r.updated_at ?? null));
+  const savedBy = a.savedBy !== undefined ? a.savedBy : (!imported && r.updated_by ? r.updated_by : null);
+  return { changedAt, changedBy, savedAt, savedBy };
+}
 export function listAccounts(u, kind) {
   const out = [];
   for (const r of listDocs('accounts')) {
@@ -34,7 +43,7 @@ export function listAccounts(u, kind) {
     if (kind && a.kind !== kind) continue;
     const f = filterForUser(u, a); if (!f) continue;
     if (!can.finance(u) && !((f.entries || f.records || []).length)) continue;
-    out.push({ id: a.id, kind: a.kind, kindName: KIND_NAMES[a.kind], date: a.date, title: a.title, version: r.version, updatedAt: r.updated_at, updatedBy: r.updated_by, createdAt: a.createdAt, headline: can.finance(u) ? headline(a) : headline(f), rows: (f.rows || f.entries || f.records || []).length });
+    out.push({ id: a.id, kind: a.kind, kindName: KIND_NAMES[a.kind], date: a.date, title: a.title, version: r.version, updatedAt: r.updated_at, updatedBy: r.updated_by, createdAt: a.createdAt, times: accTimes(r, a), headline: can.finance(u) ? headline(a) : headline(f), rows: (f.rows || f.entries || f.records || []).length });
   }
   return out.sort((x, y) => String(y.date).localeCompare(String(x.date)) || (y.createdAt || 0) - (x.createdAt || 0));
 }

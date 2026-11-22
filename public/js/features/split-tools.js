@@ -162,13 +162,14 @@ function holder(a, onReload) {
   const H = {
     a, onReload, chain: Promise.resolve(true), t: null, pend: false,
     save(label) { clearTimeout(H.t); H.pend = false; H.chain = H.chain.then(() => doSave(H, label)); return H.chain; },
-    later(label) { clearTimeout(H.t); H.pend = true; SaveCtl.dirty(); H.t = setTimeout(() => H.save(label), 1200); },
+    later(label) { clearTimeout(H.t); H.pend = true; H.editedAt = Date.now(); SaveCtl.dirty(); H.t = setTimeout(() => H.save(label), 1200); },
     flush() { return H.pend ? H.save() : H.chain; },
   };
   return H;
 }
 async function doSave(H, label = 'שמירת הפיצול') {
-  const data = structuredClone(H.a); ['prev', '_version', '_updatedAt', '_updatedBy', 'id'].forEach(k => delete data[k]);
+  const data = structuredClone(H.a); ['prev', '_version', '_updatedAt', '_updatedBy', '_times', 'id'].forEach(k => delete data[k]);
+  data._editedAt = H.editedAt || Date.now(); H.editedAt = 0;
   SaveCtl.saving();
   try { const out = await save('PUT', '/api/accounts/' + H.a.id, { data, baseVersion: H.a._version }, { label }); H.a._version = out.version; H.failed = false; if (!H.pend) SaveCtl.saved(); return true; }
   catch (e) {

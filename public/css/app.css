@@ -201,3 +201,10 @@ tr.mgpart td{background:color-mix(in srgb,var(--accent-soft) 25%,transparent)}
 .saverow .in{flex:1 1 220px;min-width:0}
 .saverow .savebtn{flex:none;min-height:44px}
 .saverow .savest:empty{display:none}
+
+/* עדכון אחרון / שמירה אחרונה */
+.acctimes{flex-basis:100%;display:flex;flex-direction:column;gap:1px;font-size:12.5px;color:var(--muted)}
+.acctimes .nd{color:#b26b00;font-weight:700}
+.band .acctimes{color:var(--band-muted,#c3cfe2);margin-top:4px} .band .acctimes .nd{color:#ffd38a}
+.actionbar .acctimes{margin-top:2px}
+.acctimes .nw{white-space:nowrap}

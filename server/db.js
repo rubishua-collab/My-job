@@ -80,12 +80,43 @@ export function getDoc(col, id) {
 export function listDocs(col) {
   return qList.all(col).map(r => ({ ...r, data: JSON.parse(r.data) }));
 }
+// חשבונות: ״עדכון אחרון״ (changedAt/changedBy) משתנה רק כשהנתונים עצמם השתנו; ״שמירה אחרונה״ (savedAt/savedBy) בכל שמירה מוצלחת.
+// _editedAt = מתי המשתמש ערך בפועל (נשלח מהמסך), כדי ששינוי ב-10:31 ששמרו ב-10:35 יציג 10:31.
+const META = new Set(['updatedAt', 'edits', 'changedAt', 'changedBy', 'savedAt', 'savedBy', 'finalKeren', '_editedAt']);
+const canon = (v) => Array.isArray(v) ? '[' + v.map(canon).join(',') + ']' : (v && typeof v === 'object') ? '{' + Object.keys(v).filter(k => v[k] !== undefined).sort().map(k => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}' : JSON.stringify(v ?? null);
+const body = (d) => canon(Object.fromEntries(Object.entries(d || {}).filter(([k]) => !META.has(k))));
+function stampAccount(cur, data, user, t) {
+  const old = cur ? JSON.parse(cur.data) : null;
+  const hint = +data._editedAt; delete data._editedAt; delete data._times; // _times מוחזר למסך בלבד
+  if (!old || body(old) !== body(data)) {
+    data.changedAt = hint > 0 && hint <= t && (!old || !old.savedAt || hint >= old.savedAt - 864e5) ? hint : t;
+    data.changedBy = user?.name || null;
+  } else {
+    // אין שינוי בנתונים: רק מועד השמירה מתעדכן
+    data.changedAt = old.changedAt ?? old.updatedAt ?? old.createdAt ?? null;
+    data.changedBy = old.changedBy ?? (cur.updated_by && cur.updated_by !== 'ייבוא' ? cur.updated_by : null);
+    if (old.updatedAt !== undefined) data.updatedAt = old.updatedAt; else delete data.updatedAt;
+    if (old.edits !== undefined) data.edits = old.edits; else delete data.edits;
+  }
+  data.savedAt = t; data.savedBy = user?.name || null;
+}
+export function touchSaved(col, id, user) {
+  const cur = qGet.get(col, id); if (!cur || cur.deleted) return null;
+  const d = JSON.parse(cur.data); const t = now();
+  if (d.changedAt === undefined) { d.changedAt = d.updatedAt ?? d.createdAt ?? null; d.changedBy = cur.updated_by && cur.updated_by !== 'ייבוא' ? cur.updated_by : null; }
+  d.savedAt = t; d.savedBy = user?.name || null;
+  db.prepare('UPDATE docs SET data=? WHERE col=? AND id=?').run(JSON.stringify(d), col, id); // בלי גרסה חדשה: אין שינוי בנתונים
+  bus.emit('change', { col, id, version: cur.version, by: user?.name || '' });
+  return d;
+}
 export function putDoc(col, id, data, { user, baseVersion, action = 'עדכון', note, item } = {}) {
   const cur = qGet.get(col, id);
   if (cur && baseVersion != null && cur.version !== baseVersion) {
     const e = new Error('המסמך עודכן ממכשיר אחר. רענן ונסה שוב.'); e.status = 409; e.current = cur.version; throw e;
   }
-  const t = now(); const json = JSON.stringify(data);
+  const t = now();
+  if (col === 'accounts' && data && typeof data === 'object') stampAccount(cur, data, user, t);
+  const json = JSON.stringify(data);
   if (cur) {
     db.prepare('UPDATE docs SET data=?, version=version+1, updated_at=?, updated_by=?, deleted=0 WHERE col=? AND id=?')
       .run(json, t, user?.name || null, col, id);
