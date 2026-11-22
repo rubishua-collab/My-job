@@ -11,6 +11,7 @@ import { openDaySheet, clearPageSheet, stepDay } from './day-tools.js';
 import { openRemoveSheet } from './acc-remove.js';
 import { openPdfSheet } from './acc-pdf.js';
 import { mgGroups, mgTotal, customerCount, unmerge } from './split-merge.js';
+import { SaveCtl, watchHeader, paintSave } from './savectl.js';
 
 const KINDS = { morning: 'חשבון בוקר', split: 'פיצול', collectors: 'חשבון גובים', work: 'איסוף יום' };
 
@@ -84,7 +85,7 @@ export async function renderAccount(view, [id], q) {
 function header(ctx, extra = '') {
   const a = ctx.a;
   return `<div class="band"><div class="grow"><div class="eyebrow">${KINDS[a.kind]} · ${esc(weekday(a.date))}</div><h1>${esc(a.title || KINDS[a.kind])}</h1>${a._updatedBy ? `<div class="small" style="color:var(--band-muted)">עודכן ${when(a._updatedAt)} ע״י ${esc(a._updatedBy)}</div>` : ''}</div>
-  <div class="row no-print">${App.can.finance ? `<a class="btn sm" href="#/acc/${a.id}?edit=1">עריכה</a>` : ''}<button class="btn sm" data-act="print">הדפסה</button>${(R.accountActions[a.kind] || []).concat(R.accountActions['*'] || []).map((x, i) => (!x.can || x.can(App, a)) ? `<button class="btn sm" data-xact="${i}">${esc(x.label)}</button>` : '').join('')}${extra}</div></div>
+  <div class="row no-print">${App.can.finance ? `<a class="btn sm" href="#/acc/${a.id}?edit=1">עריכה</a>` : ''}${SaveCtl.button('id="hsave"')}<button class="btn sm" data-act="print">הדפסה</button>${(R.accountActions[a.kind] || []).concat(R.accountActions['*'] || []).map((x, i) => (!x.can || x.can(App, a)) ? `<button class="btn sm" data-xact="${i}">${esc(x.label)}</button>` : '').join('')}${extra}</div></div>
   <div class="daybar no-print"><button class="btn ghost sm" id="dprev">‹ יום קודם</button><button class="btn ghost sm" id="dnext">יום הבא ›</button>${App.can.finance ? `<span class="grow"></span><button class="btn sm" id="dnew">פתיחת יום חדש</button><button class="btn danger sm" id="dclear">ניקוי הדף הנוכחי</button>` : ''}</div>`;
 }
 
@@ -114,10 +115,11 @@ function draw(ctx) {
   else if (a.kind === 'split') body = splitView(ctx, vis);
   else if (a.kind === 'work') body = workView(ctx, vis);
   view.innerHTML = header(ctx) + `
-  <div class="search no-print"><input class="in" id="fq" type="search" placeholder="סינון: שם, טלפון, גובה, שליח או שעה…" value="${esc(ctx.filter)}" autocomplete="off">
+  <div class="search no-print"><div class="saverow"><input class="in" id="fq" type="search" placeholder="סינון: שם, טלפון, גובה, שליח או שעה…" value="${esc(ctx.filter)}" autocomplete="off">${SaveCtl.button('id="ssave"')}</div>
   ${colls.length > 1 ? `<div class="chips" style="margin-top:8px">${['', ...colls].map(c => `<button class="chip" data-c="${esc(c)}" aria-pressed="${ctx.coll === c}">${c ? esc(c) : 'כל הגובים'}</button>`).join('')}</div>` : ''}</div>
   ${body}${(R.accountPanels[a.kind] || []).concat(R.accountPanels['*'] || []).map(f => { try { return f(ctx) || ''; } catch (e) { console.error(e); return ''; } }).join('')}${App.can.send ? actionBar(ctx, vis) : ''}`;
   bind(ctx); if (App.can.send && ctx.sel.size) exactCount(ctx);
+  paintSave(); // ״שמור שינויים״ גם בפס החיפוש הדביק — נשאר בראש המסך בזמן גלילה
 }
 function persist(ctx) { viewState.set('acc:' + ctx.id, { sel: [...ctx.sel], filter: ctx.filter, coll: ctx.coll }); }
 const ck = (ctx, ref) => App.can.send ? `<input type="checkbox" class="ck" data-ref="${esc(ref)}" ${ctx.sel.has(ref) ? 'checked' : ''} aria-label="בחר">` : '';
@@ -314,7 +316,7 @@ async function rowSheet(ctx, key) {
     try {
       const r = await save('POST', `/api/accounts/${ctx.a.id}/mark`, { opId, key, s: $('#rs', s.el).value, by, ga: $('#rga', s.el).value.trim(), pmt: $('#rp', s.el).value, nt: $('#rn', s.el).value, reason: $('#rr', s.el).value }, { label: 'עדכון איסוף של ' + e.n });
       Object.keys(e).forEach(k => { if (!['_k', 'n', 'a', 't', 'p', 'c', 'h', 'pg', 'pp'].includes(k)) delete e[k]; }); Object.assign(e, r.entry); ctx.a._version = r.version;
-      s.close(); draw(ctx); toast('נשמר');
+      s.close(); draw(ctx); toast('נשמר'); SaveCtl.saved();
     } catch (err) { btn.disabled = false; $('#rerr', s.el).innerHTML = `<div class="note err">${esc(err.network ? 'לא נשמר בגלל בעיית קליטה. לחץ שוב ״שמור״ — הפעולה לא תירשם פעמיים.' : err.message)}</div>`; }
   };
 }
@@ -336,6 +338,23 @@ const LIST_NAMES = { rows: 'שורות גבייה (ריבית/קרן)', loans: '
 function renderEditor(ctx) {
   const a = structuredClone(ctx.a); const { view } = ctx; const spec = COLS[a.kind];
   const openMg = new Set();
+  // ״שמור שינויים״ בעריכה: שומר את כל השורות שנערכו בלחיצה אחת ונשאר באותו מקום. ״שמור וסיים״ חוזר לתצוגה
+  let dirty = false, opIdE = uid();
+  const touch = () => { dirty = true; SaveCtl.dirty(); };
+  const saveE = async () => {
+    if (a.kind === 'split') (a.records || []).forEach(r => { if (r.n && !r.fn) { const p = String(r.n).trim().split(' '); r.fn = p[0]; r.ln = p.slice(1).join(' '); } });
+    const data = { ...a }; ['prev', '_version', '_updatedAt', '_updatedBy', 'id'].forEach(k => delete data[k]);
+    const errEl = () => $('#ed-err', view);
+    try {
+      const out = await save('PUT', '/api/accounts/' + a.id, { data, baseVersion: ctx.a._version, opId: opIdE }, { label: 'שמירת ' + a.title, queue: false });
+      ctx.a._version = out.version; a._version = out.version; opIdE = uid(); dirty = false; if (errEl()) errEl().innerHTML = '';
+      return true;
+    } catch (e) {
+      if (errEl()) errEl().innerHTML = `<div class="note err">השמירה נכשלה — נסה שוב. ${esc(e.network ? 'אין קליטה. הערכים שהקלדת נשארו במסך.' : e.message)}${e.status === 409 ? ' <a href="#/acc/' + a.id + '">פתח את הגרסה העדכנית</a>' : ''}</div>`;
+      return false;
+    }
+  };
+  SaveCtl.register('editor', { isDirty: () => dirty, save: saveE, discard: () => { dirty = false; } });
   const opId = uid();
   const cell = (r, [k, , t], li, ri) => {
     const v = r[k] ?? '';
@@ -376,39 +395,40 @@ function renderEditor(ctx) {
     return out;
   };
   const drawE = () => {
-    view.innerHTML = `<div class="band"><div class="grow"><div class="eyebrow">עריכה</div><h1>${esc(a.title)}</h1></div></div>
+    view.innerHTML = `<div class="band"><div class="grow"><div class="eyebrow">עריכה</div><h1>${esc(a.title)}</h1></div><div class="row no-print">${SaveCtl.button('id="hsave"')}</div></div>
     <div class="card"><div class="grid"><label class="f">תאריך<input class="in" type="date" id="ed-date" value="${esc(a.date)}"></label><label class="f">כותרת<input class="in" id="ed-title" value="${esc(a.title)}"></label>
     ${a.kind === 'morning' ? `<label class="f">קרן קיימת<input class="in n" id="ed-keren" inputmode="decimal" value="${esc(a.keren ?? '')}"></label><label class="f">משלוחים<input class="in n" id="ed-courier" inputmode="decimal" value="${esc(a.courier ?? '')}"></label>` : ''}</div>
     <div id="ed-sum"></div></div>
     ${Object.entries(spec).map(([li, cols]) => `<div class="card"><div class="row sp"><h2 id="ed-h-${li}">${LIST_NAMES[li]} (${a.kind === 'split' && li === 'records' ? customerCount(a[li]) : (a[li] || []).length})</h2><div class="row"><button class="btn ghost sm" data-paste="${li}">הדבקה מאקסל</button><button class="btn sm" data-add="${li}">+ שורה</button></div></div>
       <div class="tbl-wrap"><table><thead><tr><th>#</th>${cols.map(c => `<th>${c[1]}</th>`).join('')}<th></th></tr></thead><tbody>${tbody(li, cols)}</tbody></table></div></div>`).join('')}
     ${(R.editorActions[a.kind] || []).length ? `<div class="card row">${R.editorActions[a.kind].map((x, i) => `<button class="btn ghost" data-eact="${i}">${esc(x.label)}</button>`).join('')}</div>` : ''}
-    <div class="actionbar"><div id="ed-err"></div><div class="row"><button class="btn xl" id="ed-save" style="flex:2">שמור</button><a class="btn ghost" href="#/acc/${a.id}" style="flex:1">ביטול</a></div></div>`;
+    <div class="actionbar"><div id="ed-err"></div><div class="row" style="align-items:center"><button class="btn xl" data-save id="ed-savestay" style="flex:2">שמור שינויים</button><button class="btn ghost" id="ed-save" style="flex:1">שמור וסיים</button><a class="btn plain" href="#/acc/${a.id}" style="flex:1">ביטול</a></div><span class="savest small" data-savest role="status" aria-live="polite"></span></div>`;
     summary();
-    $$('[data-l]', view).forEach(inp => inp.onchange = () => {
+    paintSave(); // בעריכה הכפתור נמצא גם בפס התחתון הדביק
+    $$('[data-l], #ed-date, #ed-title, #ed-keren, #ed-courier', view).forEach(i => i.addEventListener('input', touch));
+    $$('[data-l]', view).forEach(inp => inp.onchange = () => { touch();
       const r = a[inp.dataset.l][+inp.dataset.r]; const k = inp.dataset.k; const col = spec[inp.dataset.l].find(c => c[0] === k);
       let v = inp.type === 'checkbox' ? inp.checked : inp.value;
       if (col[2] === 'n') v = v === '' ? 0 : num(v);
       if (col[2] === 'b' && !v) delete r[k]; else r[k] = v;
       summary();
     });
-    ['date', 'title', 'keren', 'courier'].forEach(k => { const el = $('#ed-' + k, view); if (el) el.onchange = () => { a[k] = ['keren', 'courier'].includes(k) ? num(el.value) : el.value; summary(); }; });
-    $$('[data-add]', view).forEach(b => b.onclick = () => { const li = b.dataset.add; const r = {}; spec[li].forEach(([k, , t]) => { if (t === 'n') r[k] = 0; else if (t === 'k') r[k] = 'd'; else if (t !== 'b') r[k] = ''; }); if (a.kind === 'split') Object.assign(r, { fn: '', ln: '', cnt: 1, side: false }); if (a.kind === 'work' && li === 'entries') r.s = ''; (a[li] ||= []).push(r); drawE(); const ins = $$(`[data-l="${li}"][data-k="n"]`, view); ins[ins.length - 1]?.focus(); });
-    $$('[data-del]', view).forEach(b => b.onclick = () => { const [li, ri] = b.dataset.del.split('|'); const r = a[li][+ri]; if (confirm(`למחוק את השורה ״${r.n || ''}״?`)) { a[li].splice(+ri, 1); drawE(); } });
+    ['date', 'title', 'keren', 'courier'].forEach(k => { const el = $('#ed-' + k, view); if (el) el.onchange = () => { touch(); a[k] = ['keren', 'courier'].includes(k) ? num(el.value) : el.value; summary(); }; });
+    $$('[data-add]', view).forEach(b => b.onclick = () => { touch(); const li = b.dataset.add; const r = {}; spec[li].forEach(([k, , t]) => { if (t === 'n') r[k] = 0; else if (t === 'k') r[k] = 'd'; else if (t !== 'b') r[k] = ''; }); if (a.kind === 'split') Object.assign(r, { fn: '', ln: '', cnt: 1, side: false }); if (a.kind === 'work' && li === 'entries') r.s = ''; (a[li] ||= []).push(r); drawE(); const ins = $$(`[data-l="${li}"][data-k="n"]`, view); ins[ins.length - 1]?.focus(); });
+    $$('[data-del]', view).forEach(b => b.onclick = () => { const [li, ri] = b.dataset.del.split('|'); const r = a[li][+ri]; if (confirm(`למחוק את השורה ״${r.n || ''}״?`)) { a[li].splice(+ri, 1); touch(); drawE(); } });
     $$('[data-paste]', view).forEach(b => b.onclick = () => {
       const li = b.dataset.paste; const cols = spec[li];
       const s = openSheet(`<div class="hd"><h2>הדבקה מאקסל</h2><button class="x" data-close>×</button></div><p class="small muted">העתק מאקסל עמודות בסדר הזה: ${cols.map(c => c[1]).join(' · ')}. כל שורה תתווסף לסוף הרשימה.</p><textarea class="in" id="pt" style="min-height:200px"></textarea><button class="btn xl" id="pok" style="margin-top:10px">הוסף</button>`);
-      $('#pok', s.el).onclick = () => { const lines = $('#pt', s.el).value.split(/\r?\n/).filter(l => l.trim()); for (const l of lines) { const parts = l.split('\t'); const r = {}; cols.forEach(([k, , t], i) => { const v = (parts[i] || '').trim(); r[k] = t === 'n' ? num(v) : t === 'b' ? !!v : t === 'k' ? (/הוצ|^e$/.test(v) ? 'e' : 'd') : v; }); if (a.kind === 'work' && li === 'entries') r.s = ''; (a[li] ||= []).push(r); } s.close(); drawE(); toast(lines.length + ' שורות נוספו'); };
+      $('#pok', s.el).onclick = () => { const lines = $('#pt', s.el).value.split(/\r?\n/).filter(l => l.trim()); for (const l of lines) { const parts = l.split('\t'); const r = {}; cols.forEach(([k, , t], i) => { const v = (parts[i] || '').trim(); r[k] = t === 'n' ? num(v) : t === 'b' ? !!v : t === 'k' ? (/הוצ|^e$/.test(v) ? 'e' : 'd') : v; }); if (a.kind === 'work' && li === 'entries') r.s = ''; (a[li] ||= []).push(r); } s.close(); touch(); drawE(); toast(lines.length + ' שורות נוספו'); };
     });
-    $$('[data-eact]', view).forEach(b => b.onclick = () => R.editorActions[a.kind][+b.dataset.eact].run(a, drawE, ctx));
+    $$('[data-eact]', view).forEach(b => b.onclick = () => R.editorActions[a.kind][+b.dataset.eact].run(a, () => { touch(); drawE(); }, ctx));
     $$('[data-mgd]', view).forEach(b => b.onclick = () => { const k = b.dataset.mgd; openMg.has(k) ? openMg.delete(k) : openMg.add(k); drawE(); });
-    $$('[data-mgu]', view).forEach(b => b.onclick = () => { unmerge(a, b.dataset.mgu); openMg.delete(b.dataset.mgu); drawE(); toast('האיחוד בוטל — החובות חזרו להיות שורות נפרדות. לחץ ״שמור״ כדי לשמור.'); });
+    $$('[data-mgu]', view).forEach(b => b.onclick = () => { touch(); unmerge(a, b.dataset.mgu); openMg.delete(b.dataset.mgu); drawE(); toast('האיחוד בוטל — החובות חזרו להיות שורות נפרדות. לחץ ״שמור״ כדי לשמור.'); });
     $('#ed-save', view).onclick = async (ev) => {
       ev.target.disabled = true;
-      if (a.kind === 'split') (a.records || []).forEach(r => { if (r.n && !r.fn) { const p = String(r.n).trim().split(' '); r.fn = p[0]; r.ln = p.slice(1).join(' '); } });
-      const data = { ...a }; ['prev', '_version', '_updatedAt', '_updatedBy', 'id'].forEach(k => delete data[k]);
-      try { await save('PUT', '/api/accounts/' + a.id, { data, baseVersion: ctx.a._version, opId }, { label: 'שמירת ' + a.title }); toast('נשמר ✓'); location.hash = '#/acc/' + a.id; }
-      catch (e) { ev.target.disabled = false; $('#ed-err', view).innerHTML = `<div class="note err">${esc(e.network ? 'השמירה נכשלה בגלל בעיית קליטה. לחץ שוב ״שמור״ — השמירה לא תירשם פעמיים.' : e.message)}${e.status === 409 ? ' <a href="#/acc/' + a.id + '">פתח את הגרסה העדכנית</a>' : ''}</div>`; }
+      dirty = true; // ״שמור וסיים״ שומר תמיד, גם בלי שינוי
+      const ok = await SaveCtl.saveAll();
+      if (ok) { toast('נשמר ✓'); location.hash = '#/acc/' + a.id; } else ev.target.disabled = false;
     };
   };
   drawE();

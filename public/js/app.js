@@ -1,4 +1,5 @@
 // יומן חשבון בוקר — ממשק ראשי
+import { SaveCtl, unwatchHeader } from './savectl.js';
 import { get, save, onNet, retryPending, pendingOps, uid } from './api.js';
 import { $, $$, esc, fmt, money, dmy, weekday, todayISO, when, toast, openSheet, viewState, ICON } from './ui.js';
 import { fmtPhone } from './phone.js';
@@ -36,6 +37,8 @@ export async function go() {
   const [pathPart, qs] = h.slice(2).split('?');
   const [name, ...rest] = pathPart.split('/');
   const rname = name || 'today';
+  if (App.route && h !== App.route && !SaveCtl.guard(h, App.route)) return; // יש שינויים שטרם נשמרו — שואלים לפני מעבר
+  SaveCtl.reset(); unwatchHeader();
   if (leaving) { try { leaving(); } catch { /* */ } leaving = null; }
   // שמירת מיקום הגלילה של המסך הקודם
   if (App.route) viewState.set(App.route, { scroll: window.scrollY });

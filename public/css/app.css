@@ -186,3 +186,18 @@ tr.mghead td{background:var(--accent-soft);font-weight:600}
 tr.mgdet td{background:color-mix(in srgb,var(--accent-soft) 45%,transparent)}
 tr.mgpart td{background:color-mix(in srgb,var(--accent-soft) 25%,transparent)}
 .mglines{display:flex;flex-direction:column;gap:2px;margin-bottom:6px}
+
+/* ״שמור שינויים״ */
+.savebtn.dirtyb{background:var(--gold,#b8913f);border-color:var(--gold,#b8913f);color:#1b1200}
+.savest{font-weight:700;align-self:center}
+.band .savest{color:var(--band-muted,#c3cfe2)}
+.savest.warn-t{color:#b26b00} .band .savest.warn-t{color:#ffd38a}
+.savest.ok-t{color:var(--ok,#17603f)} .band .savest.ok-t{color:#9be3b8}
+.savest.neg{color:var(--neg)} .band .savest.neg{color:#ffb4ae}
+.savefloat{position:fixed;top:calc(8px + env(safe-area-inset-top));inset-inline-end:12px;z-index:70;display:flex;gap:8px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:6px 10px;box-shadow:0 6px 20px rgba(0,0,0,.18);max-width:calc(100vw - 24px)}
+.savefloat[hidden]{display:none}
+@media (min-width:900px){.savefloat{inset-inline-end:auto;inset-inline-start:calc(var(--side-w,240px) + 24px)}}
+.saverow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.saverow .in{flex:1 1 220px;min-width:0}
+.saverow .savebtn{flex:none;min-height:44px}
+.saverow .savest:empty{display:none}

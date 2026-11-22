@@ -1,5 +1,6 @@
 // ניתוחים, לוח בקרה, השוואות, PDF ושיתוף, חיפוש חשבונות, אחוזי חלוקה — הועתק מהתוכנה המקורית (app.html).
 // כל הנתונים הכספיים מחושבים מפונקציות החישוב המקוריות (calc.js) בלי שינוי.
+import { SaveCtl } from '../savectl.js';
 import { route, more, accountAction, accountPanel, todayPanel } from '../registry.js';
 import { get, save, uid, pendingOps } from '../api.js';
 import { $, $$, toast, viewState } from '../ui.js';
@@ -182,10 +183,13 @@ accountPanel('morning', (ctx) => {
     const data = { ...ctx.a }; ['prev', '_version', '_updatedAt', '_updatedBy', 'id'].forEach(k => delete data[k]);
     if (cur !== 25) data.rp = cur; else delete data.rp; // כמו במקור: rp נשמר רק כשהוא שונה מ-25
     opId = opId || uid(); $('#m-rp-st', box).textContent = 'שומר…';
-    try { await save('PUT', '/api/accounts/' + ctx.a.id, { data, baseVersion: ctx.a._version, opId }, { label: 'חלוקת הריבית ' + (ctx.a.title || '') }); opId = null; toast('החלוקה נשמרה: רובי ' + pctS(cur) + ' · קו ' + pctS(r2(100 - cur))); loadedAt = 0; await ctx.reload(); }
-    catch (e) { $('#m-rp-st', box).innerHTML = '<span class="neg">' + esc(e.network ? 'לא נשמר בגלל בעיית קליטה — יישלח שוב כשיחזור החיבור.' : e.message) + '</span>'; if (!e.network) opId = null; if (e.status === 409) ctx.reload(); }
+    SaveCtl.saving();
+    try { await save('PUT', '/api/accounts/' + ctx.a.id, { data, baseVersion: ctx.a._version, opId }, { label: 'חלוקת הריבית ' + (ctx.a.title || ''), queue: false }); opId = null; rpFail = false; SaveCtl.saved(); toast('החלוקה נשמרה: רובי ' + pctS(cur) + ' · קו ' + pctS(r2(100 - cur))); loadedAt = 0; await ctx.reload(); return true; }
+    catch (e) { rpFail = true; SaveCtl.failed(); $('#m-rp-st', box).innerHTML = '<span class="neg">השמירה נכשלה — נסה שוב. ' + esc(e.network ? 'אין קליטה.' : e.message) + '</span>'; if (!e.network) opId = null; if (e.status === 409) ctx.reload(); return false; }
   };
-  const later = () => { clearTimeout(timer); timer = setTimeout(persist, 700); };
+  const later = () => { clearTimeout(timer); SaveCtl.dirty(); timer = setTimeout(() => { timer = null; persist(); }, 700); };
+  let rpFail = false;
+  SaveCtl.register('morning-rp', { isDirty: () => !!timer || rpFail || cur !== mRp(ctx.a), save: async () => { clearTimeout(timer); timer = null; if (cur === mRp(ctx.a)) return true; return persist(); }, discard: () => { clearTimeout(timer); timer = null; } });
   const set = (v, skip) => { const rp = mRp({ rp: v }); cur = rp; renderR(skip); later(); };
   const typed = v => { v = String(v || '').trim().replace(',', '.'); if (!/^\d{1,3}(\.\d{0,2})?$/.test(v)) return null; const n = parseFloat(v); return isFinite(n) && n >= 0 && n <= 100 ? n : null; };
   $('#m-rp-range', box).oninput = (e) => { cur = mRp({ rp: +e.target.value }); renderR('range'); };

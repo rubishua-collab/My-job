@@ -5,6 +5,7 @@
 // (במקום טיוטה בדפדפן), היסטוריית האיזון בין ימים ב-settings/ar_hist, בחירת הגובים ב-settings/coll.sel,
 // וההעברה עצמה היא פעולה אחת אטומית בשרת (server/features/split-tools.js).
 import { route, accountAction, accountPanel } from '../registry.js';
+import { SaveCtl } from '../savectl.js';
 import { get, save, uid } from '../api.js';
 import { $, $$, esc, money, dmy, todayISO, toast } from '../ui.js';
 import { App, onLive } from '../app.js';
@@ -161,15 +162,17 @@ function holder(a, onReload) {
   const H = {
     a, onReload, chain: Promise.resolve(true), t: null, pend: false,
     save(label) { clearTimeout(H.t); H.pend = false; H.chain = H.chain.then(() => doSave(H, label)); return H.chain; },
-    later(label) { clearTimeout(H.t); H.pend = true; H.t = setTimeout(() => H.save(label), 1200); },
+    later(label) { clearTimeout(H.t); H.pend = true; SaveCtl.dirty(); H.t = setTimeout(() => H.save(label), 1200); },
     flush() { return H.pend ? H.save() : H.chain; },
   };
   return H;
 }
 async function doSave(H, label = 'שמירת הפיצול') {
   const data = structuredClone(H.a); ['prev', '_version', '_updatedAt', '_updatedBy', 'id'].forEach(k => delete data[k]);
-  try { const out = await save('PUT', '/api/accounts/' + H.a.id, { data, baseVersion: H.a._version }, { label }); H.a._version = out.version; return true; }
+  SaveCtl.saving();
+  try { const out = await save('PUT', '/api/accounts/' + H.a.id, { data, baseVersion: H.a._version }, { label }); H.a._version = out.version; H.failed = false; if (!H.pend) SaveCtl.saved(); return true; }
   catch (e) {
+    H.failed = true; SaveCtl.failed();
     if (e.status === 409) { toast('הפיצול עודכן ממכשיר אחר. נטען מחדש — בדוק ונסה שוב'); try { H.a = await get('/api/accounts/' + H.a.id); } catch { /* */ } H.onReload && H.onReload(); }
     else toast(e.network ? 'אין קליטה. השינוי יישמר כשהחיבור יחזור' : e.message);
     return false;
@@ -554,6 +557,8 @@ function panelHolder(ctx) {
   if (!H) { H = holder(ctx.a); PH.set(ctx.a.id, H); }
   if (H.a !== ctx.a && !H.pend && (ctx.a._version || 0) >= (H.a._version || 0)) H.a = ctx.a;
   H.onReload = () => { ctx.a = H.a; ctx.reload(); };
+  // ״שמור שינויים״: שומר מיד את מה שממתין לשמירה האוטומטית (או מה שנכשל), בלי לצייר מחדש — נשארים באותו מקום
+  SaveCtl.register('split-panel', { isDirty: () => !!(H.pend || H.failed), save: async () => { const ok = await H.save('שמירה ידנית'); if (ok) ctx.a = H.a; return ok; } });
   return H;
 }
 async function commit(ctx, H, label, msg) {
