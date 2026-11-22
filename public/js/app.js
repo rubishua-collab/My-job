@@ -296,4 +296,25 @@ async function renderAudit(view) {
 }
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+// עדכון אוטומטי: האפליקציה שמותקנת באייפון נשארת פתוחה ברקע ולא טוענת קוד חדש לבד.
+// בכל חזרה לאפליקציה (וכל 5 דקות) בודקים אם יש גרסה חדשה בשרת. אם כן — מרעננים מיד, אלא אם באמצע עריכה / חלון פתוח, ואז מציגים פס ״יש גרסה חדשה — רענן״.
+(() => {
+  let mine = null;
+  const busy = () => document.querySelector('#sheet:not([hidden])') || /[?&]edit=1/.test(location.hash) || document.activeElement?.matches?.('input,textarea,select');
+  const check = async () => {
+    try {
+      const r = await fetch('/api/health', { cache: 'no-store' }); const j = await r.json(); if (!j.build) return;
+      if (!mine) { mine = j.build; return; }
+      if (j.build === mine) return;
+      if (!busy()) { location.reload(); return; }
+      if (document.getElementById('newver')) return;
+      const b = document.createElement('button'); b.id = 'newver'; b.className = 'btn xl no-print'; b.textContent = 'יש גרסה חדשה של התוכנה — לחץ לרענון';
+      b.style.cssText = 'position:fixed;inset-inline:12px;top:calc(8px + env(safe-area-inset-top));z-index:90;box-shadow:0 6px 20px rgba(0,0,0,.25)';
+      b.onclick = () => location.reload(); document.body.appendChild(b);
+    } catch { /* אין קליטה — ננסה שוב */ }
+  };
+  check(); setInterval(check, 5 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+  addEventListener('focus', check); addEventListener('pageshow', check);
+})();
 go();

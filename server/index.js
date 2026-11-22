@@ -1,6 +1,7 @@
 // יומן חשבון בוקר — שרת האפליקציה
 import http from 'node:http';
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bus, db, getDoc, listDocs, putDoc, deleteDoc, once, newId, now, logAudit, kvGet, kvSet, DATA_DIR } from './db.js';
@@ -235,7 +236,9 @@ r.get('/api/events', (req, res, { user }) => {
   const ping = setInterval(() => res.write(': ping\n\n'), 25000);
   bus.on('change', on); req.on('close', () => { bus.off('change', on); clearInterval(ping); });
 });
-r.get('/api/health', () => ({ ok: true, at: new Date().toISOString() }));
+// מזהה גרסה: טביעה של קבצי האפליקציה. משתנה רק כשהקוד משתנה, והאפליקציה הפתוחה בטלפון מתרעננת לבד כשהוא משתנה
+const BUILD = (() => { const h = createHash('sha256'); const walk = (d) => { for (const f of fs.readdirSync(d, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) { const fp = path.join(d, f.name); if (f.isDirectory()) { if (f.name !== 'vendor') walk(fp); } else if (/\.(js|css|html)$/.test(f.name)) h.update(f.name).update(fs.readFileSync(fp)); } }; try { walk(ROOT); } catch { h.update(String(Date.now())); } return h.digest('hex').slice(0, 12); })();
+r.get('/api/health', () => ({ ok: true, at: new Date().toISOString(), build: BUILD }));
 
 // ---- אוספים כלליים: יכולות נוספות שומרות מסמכים דרך כאן, עם הרשאה לכל אוסף ----
 export const COLLECTIONS = {
