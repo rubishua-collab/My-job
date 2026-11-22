@@ -5,6 +5,7 @@ import { get, save } from '../api.js';
 import { $, $$, esc, fmt, money, toast, openSheet } from '../ui.js';
 import { App } from '../app.js';
 import { calcSplit, sum, num, r2 } from '../calc.js';
+import { mergeSplit, findGroups } from '../split-merge.js';
 import {
   readTables, readCsvText, cell, morningFromTables, morningStatus, extractRows, mCheckMsg, mRowsOf,
   findSplitHeader, extractSplit, mergeRecords, mergeDebts, compactRec, carrySpNotes, splitStatus, DEF_COLL,
@@ -207,15 +208,35 @@ editorAction('split', {
   },
 });
 
-// איחוד שורות (מקור 4634): אותו שם ואותו גובה, ואותו טלפון עם שמות דומים
+// ״איחוד שורות״: שורה אחת לכל לקוח עם פירוט החובות לפי גובה — public/js/split-merge.js (מחליף את האיחוד המקורי לפי שם+גובה)
 editorAction('split', {
   label: 'איחוד שורות',
-  run(state, redraw) {
-    const before = (state.records || []).length, m = mergeRecords(state.records || []);
-    state.records = m.recs.map(stripTmp); redraw();
-    toast(before === m.recs.length ? 'אין שורות לאיחוד' : 'אוחדו ' + (before - m.recs.length) + ' שורות');
+  async run(state, redraw) {
+    const res = await mergeSplit(state, askSame);
+    if (res.cancelled) return;
+    const skippedTxt = res.skipped.length ? ' · לא אוחדו (אנשים שונים): ' + res.skipped.map(g => g.name).join(', ') : '';
+    if (!res.done.length) { toast((findGroups(state.records).length ? 'כל השורות כבר מאוחדות — לא נוסף שום חוב' : 'אין שורות לאיחוד — כל לקוח מופיע פעם אחת') + skippedTxt); return; }
+    const msg = res.done.length === 1
+      ? `אוחדו ${res.done[0].n} שורות של ${res.done[0].name} לשורה אחת בסך ${fmt(res.done[0].total)} ₪`
+      : `אוחדו ${sum(res.done.map(d => d.n))} שורות של ${res.done.length} לקוחות: ` + res.done.slice(0, 4).map(d => `${d.name} (${d.n} שורות, ${fmt(d.total)} ₪)`).join(' · ') + (res.done.length > 4 ? ` ועוד ${res.done.length - 4}` : '');
+    redraw();
+    const card = document.querySelector('[data-paste="records"]')?.closest('.card');
+    if (card) card.insertAdjacentHTML('beforebegin', `<div class="note ok" id="mgmsg">${esc(msg + skippedTxt)}. הסכום של כל גובה וסך הפיצול לא השתנו. לחץ ״שמור״ כדי לשמור את האיחוד.</div>`);
+    toast(msg);
   },
 });
+// שם זהה אבל מזהים שונים / שני טלפונים תקינים ושונים — מציגים את השורות זו לצד זו ושואלים
+function askSame(groups) {
+  return new Promise((resolve) => {
+    const ok = new Set(); let done = false;
+    const s = openSheet(`<div class="hd"><h2>אותו אדם?</h2><button class="x" data-close>×</button></div>
+      <p>לשמות האלה יש ${groups.some(g => g.ids.length > 1) ? 'מזהי לקוח שונים או ' : ''}מספרי טלפון שונים. סמן מי מהם הוא אותו אדם ויאוחד:</p>
+      ${groups.map((g, i) => `<div class="card" style="padding:10px"><b>${esc(g.name)}</b><div class="tbl-wrap"><table><thead><tr><th>גובה</th><th>טלפון</th><th>סכום</th><th>שעה</th><th>הערה</th></tr></thead><tbody>${g.rows.map(r => `<tr><td>${esc(r.c || '')}</td><td>${esc(r.ph || '')}</td><td>${money(num(r.a))}</td><td>${esc(r.t || '')}</td><td>${esc(r.note || '')}</td></tr>`).join('')}</tbody></table></div>
+        <div class="row" style="margin-top:6px"><label class="row"><input type="radio" name="mgq${i}" value="1"> כן, אותו אדם — לאחד</label><label class="row"><input type="radio" name="mgq${i}" value="0" checked> לא, אנשים שונים</label></div></div>`).join('')}
+      <button class="btn xl" id="mgok" style="width:100%">המשך</button>`, { onClose: () => { if (!done) resolve(null); } });
+    $('#mgok', s.el).onclick = () => { groups.forEach((g, i) => { if ($(`input[name="mgq${i}"]:checked`, s.el)?.value === '1') ok.add(g.key); }); done = true; s.close(); resolve(ok); };
+  });
+}
 // איחוד חובות כפולים של אותו לווה (מקור 4627)
 editorAction('split', {
   label: 'איחוד חובות כפולים',

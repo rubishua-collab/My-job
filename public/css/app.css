@@ -180,3 +180,9 @@ details>summary{cursor:pointer;font-weight:700;padding:6px 0}
 .accpdf{min-width:64px;min-height:48px;padding:6px 10px;border:1px solid var(--accent);border-radius:10px;background:var(--surface);color:var(--accent);font:inherit;font-size:13px;font-weight:700;line-height:1.2;cursor:pointer}
 .accpdf:active{background:var(--accent-soft)}
 @media (max-width:520px){.accbtns{flex-direction:column;gap:6px}.accbtns button{min-height:44px}}
+
+/* איחוד שורות בפיצול */
+tr.mghead td{background:var(--accent-soft);font-weight:600}
+tr.mgdet td{background:color-mix(in srgb,var(--accent-soft) 45%,transparent)}
+tr.mgpart td{background:color-mix(in srgb,var(--accent-soft) 25%,transparent)}
+.mglines{display:flex;flex-direction:column;gap:2px;margin-bottom:6px}

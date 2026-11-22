@@ -10,6 +10,7 @@ import { R } from './registry.js';
 import { openDaySheet, clearPageSheet, stepDay } from './day-tools.js';
 import { openRemoveSheet } from './acc-remove.js';
 import { openPdfSheet } from './acc-pdf.js';
+import { mgGroups, mgTotal, customerCount, unmerge } from './split-merge.js';
 
 const KINDS = { morning: 'חשבון בוקר', split: 'פיצול', collectors: 'חשבון גובים', work: 'איסוף יום' };
 
@@ -228,16 +229,17 @@ function collectorsView(ctx, vis) {
 // ---------- פיצול ----------
 function splitView(ctx, vis) {
   const a = ctx.a; const visSet = new Set(vis.map(v => v.ref));
-  const c = calcSplit(a.records || []);
-  const rec = (r) => `<div class="li ${ctx.sel.has(r._k) ? 'sel' : ''}" data-key="${esc(r._k)}">${ck(ctx, r._k)}<div class="t">${esc(r.n)} ${r.pp ? `<span class="pill acc">חלק ${esc(r.pp)}</span>` : ''}${r.h === 'קשה' ? ' <span class="pill err">קשה</span>' : ''}${r.na ? ' <span class="pill acc">לא ענו</span>' : ''}</div><div class="a">${money(num(r.a))}</div>
+  const c = calcSplit(a.records || []); const MG = mgGroups(a.records || []);
+  const rec = (r) => `<div class="li ${ctx.sel.has(r._k) ? 'sel' : ''}" data-key="${esc(r._k)}">${ck(ctx, r._k)}<div class="t">${esc(r.n)} ${r.pp ? `<span class="pill acc">חלק ${esc(r.pp)}</span>` : ''}${r.mg && MG.get(r.mg) ? ` <span class="pill acc">חוב מאוחד · סה״כ ${money(mgTotal(MG.get(r.mg)))}</span>` : ''}${r.h === 'קשה' ? ' <span class="pill err">קשה</span>' : ''}${r.na ? ' <span class="pill acc">לא ענו</span>' : ''}</div><div class="a">${money(num(r.a))}</div>
     <div class="m">${r.t ? `<span class="num">${esc(r.t)}</span>` : ''}${r.ph ? `<span>${esc(fmtPhone(r.ph))}</span>` : '<span class="neg">אין טלפון</span>'}${r.note ? `<span>${esc(r.note)}</span>` : ''}</div></div>`;
   const blocks = c.blocks.map(b => { const rows = b.sections.flatMap(s => s.rows.map(r => ({ r, s: s.t }))).filter(x => visSet.has(x.r._k)); if (!rows.length && (ctx.filter || ctx.coll)) return '';
     return `<div class="card"><div class="row sp"><h2>${esc(b.c === CHANGE ? 'לשנות במערכת' : b.c === NOC_SP ? 'ללא גובה (להשלים)' : b.c)}</h2><b>${money(b.total)}</b></div><div class="muted small">${b.count} לקוחות</div>
     <div class="list" style="margin-top:8px">${b.sections.map(s => { const rs = s.rows.filter(r => visSet.has(r._k)); return (s.t ? `<div class="grp"><span>${esc(s.t)}</span><span class="s">${money(s.total)}</span></div>` : '') + rs.map(rec).join(''); }).join('')}</div></div>`; }).join('');
   const sides = c.sides.filter(r => visSet.has(r._k));
   return `${blocks}${sides.length ? `<div class="card"><div class="row sp"><h2>לא נגבה היום</h2><b>${money(c.sideTotal)}</b></div><div class="list">${sides.map(rec).join('')}</div></div>` : ''}
-  <div class="card"><h2>סיכום</h2><dl class="kv"><dt>סה״כ גובים</dt><dd>${money(c.grand)}</dd>${c.specialTotal ? `<dt>לשנות / ללא גובה</dt><dd>${money(c.specialTotal)}</dd>` : ''}${c.sideTotal ? `<dt>לא נגבה היום</dt><dd>${money(c.sideTotal)}</dd>` : ''}<dt>סה״כ הכול</dt><dd>${money(c.all)}</dd></dl>
-  ${c.dups.length ? `<div class="note warn">אותו שם אצל כמה גובים: ${c.dups.map(d => esc(d.n) + ' (' + d.cs.map(esc).join(', ') + ')').join(' · ')}</div>` : ''}</div>`;
+  <div class="card"><h2>סיכום</h2><dl class="kv"><dt>לקוחות</dt><dd>${customerCount(a.records)}</dd><dt>סה״כ גובים</dt><dd>${money(c.grand)}</dd>${c.specialTotal ? `<dt>לשנות / ללא גובה</dt><dd>${money(c.specialTotal)}</dd>` : ''}${c.sideTotal ? `<dt>לא נגבה היום</dt><dd>${money(c.sideTotal)}</dd>` : ''}<dt>סה״כ הכול</dt><dd>${money(c.all)}</dd></dl>
+  ${MG.size ? `<details class="mgview" style="margin-top:8px"><summary>לקוחות עם כמה חובות (${MG.size})</summary><div class="list">${[...MG.values()].map(g => `<div class="li noc"><div class="t">${esc(String(g[0].n || '').trim())}</div><div class="a">${money(mgTotal(g))}</div><div class="m">${g.map(x => `<span>${esc(String(x.c || '').trim() || 'ללא גובה')} — ${money(num(x.a))}</span>`).join('')}</div></div>`).join('')}</div></details>` : ''}
+  ${c.dups.filter(d => !MG.size || !(a.records || []).some(r => r.mg && normName(r.n) === normName(d.n))).length ? `<div class="note warn">אותו שם אצל כמה גובים: ${c.dups.filter(d => !(a.records || []).some(r => r.mg && normName(r.n) === normName(d.n))).map(d => esc(d.n) + ' (' + d.cs.map(esc).join(', ') + ')').join(' · ')}</div>` : ''}</div>`;
 }
 
 // ---------- איסוף יום ----------
@@ -333,6 +335,7 @@ const COLS = {
 const LIST_NAMES = { rows: 'שורות גבייה (ריבית/קרן)', loans: 'הלוואות שיצאו', entries: 'שורות', records: 'לקוחות', expenses: 'הוצאות' };
 function renderEditor(ctx) {
   const a = structuredClone(ctx.a); const { view } = ctx; const spec = COLS[a.kind];
+  const openMg = new Set();
   const opId = uid();
   const cell = (r, [k, , t], li, ri) => {
     const v = r[k] ?? '';
@@ -350,16 +353,35 @@ function renderEditor(ctx) {
         + `<div class="note info">קרן סופית לפי הנתונים: <b>${money(c.final)}</b> (ריבית ${fmt(c.interest)}, קרן ${fmt(c.principal)}, משלוחים ${fmt(c.courier)}, הלוואות ${fmt(c.loansTotal)})</div>`;
       const cy = $('#ed-carry', view); if (cy) cy.onclick = () => { a.keren = pv.final; $('#ed-keren', view).value = pv.final; summary(); };
     } else if (a.kind === 'work') { const c = calcWork((a.entries || []).filter(e => e && (e.n || e.a))); el.innerHTML = `<div class="note info">צפוי ${money(c.total)} · נגבה ${money(c.gotTotal)} · הוצאות ${money(sum(wExpList(a).map(x => x.a)))}</div>`; }
-    else if (a.kind === 'split') { const c = calcSplit(a.records || []); el.innerHTML = `<div class="note info">סה״כ גובים ${money(c.grand)} · סה״כ הכול ${money(c.all)}</div>`; }
+    else if (a.kind === 'split') { const c = calcSplit(a.records || []); el.innerHTML = `<div class="note info">${customerCount(a.records)} לקוחות · סה״כ גובים ${money(c.grand)} · סה״כ הכול ${money(c.all)}</div>`; const h = $('#ed-h-records', view); if (h) h.textContent = `${LIST_NAMES.records} (${customerCount(a.records)})`; $$('tr.mghead', view).forEach(tr => { const g = mgGroups(a.records).get(tr.dataset.mg); const s = tr.querySelector('.mgsum'); if (g && s) s.innerHTML = money(mgTotal(g)); }); }
     else if (a.kind === 'collectors') { const c = calcCollectors(a.entries || []); el.innerHTML = `<div class="note info">חובות ${money(c.totalDebts)} · הוצאות ${money(c.totalExp)} · נטו ${money(c.totalNet)}</div>`; }
+  };
+  // פיצול: חובות מאוחדים (mg) מוצגים כשורה אחת של הלקוח עם ״פירוט חובות״; כל חוב נשאר שורה עם הגובה שלו
+  const rowTr = (r, ri, li, cols, cls = '') => `<tr class="${cls}"><td>${ri + 1}</td>${cols.map(c => `<td>${cell(r, c, li, ri)}</td>`).join('')}<td><button class="x" data-del="${li}|${ri}" aria-label="מחק">×</button></td></tr>`;
+  const tbody = (li, cols) => {
+    const list = a[li] || [];
+    if (!(a.kind === 'split' && li === 'records')) return list.map((r, ri) => rowTr(r, ri, li, cols)).join('');
+    const G = mgGroups(list), shown = new Set(); let out = '';
+    list.forEach((r, ri) => {
+      const g = r && r.mg && G.get(r.mg);
+      if (!g) { out += rowTr(r, ri, li, cols); return; }
+      if (shown.has(r.mg)) return; shown.add(r.mg);
+      const open = openMg.has(r.mg);
+      out += `<tr class="mghead" data-mg="${esc(r.mg)}"><td>${ri + 1}</td><td colspan="${cols.length}"><div class="row" style="flex-wrap:wrap;gap:6px 14px;justify-content:flex-start;max-width:min(78vw,640px)"><span><b>${esc(String(r.n || '').trim())}</b> <span class="pill acc">${g.length} חובות</span></span><span>יתרה <b class="mgsum">${money(mgTotal(g))}</b></span><button class="btn ghost sm" data-mgd="${esc(r.mg)}" aria-expanded="${open}">${open ? 'סגור פירוט' : 'פירוט חובות'}</button></div></td><td></td></tr>`;
+      if (open) {
+        out += `<tr class="mgdet"><td></td><td colspan="${cols.length}"><div class="mglines">${g.map(x => `<div>${esc(String(x.c || '').trim() || 'ללא גובה')} — ${money(num(x.a))}${x.t ? ' · ' + esc(x.t) : ''}${x.note ? ' · ' + esc(x.note) : ''}</div>`).join('')}</div><button class="btn plain sm" data-mgu="${esc(r.mg)}">ביטול האיחוד של ${esc(String(r.n || '').trim())}</button></td><td></td></tr>`;
+        g.forEach(x => { out += rowTr(x, list.indexOf(x), li, cols, 'mgpart'); });
+      }
+    });
+    return out;
   };
   const drawE = () => {
     view.innerHTML = `<div class="band"><div class="grow"><div class="eyebrow">עריכה</div><h1>${esc(a.title)}</h1></div></div>
     <div class="card"><div class="grid"><label class="f">תאריך<input class="in" type="date" id="ed-date" value="${esc(a.date)}"></label><label class="f">כותרת<input class="in" id="ed-title" value="${esc(a.title)}"></label>
     ${a.kind === 'morning' ? `<label class="f">קרן קיימת<input class="in n" id="ed-keren" inputmode="decimal" value="${esc(a.keren ?? '')}"></label><label class="f">משלוחים<input class="in n" id="ed-courier" inputmode="decimal" value="${esc(a.courier ?? '')}"></label>` : ''}</div>
     <div id="ed-sum"></div></div>
-    ${Object.entries(spec).map(([li, cols]) => `<div class="card"><div class="row sp"><h2>${LIST_NAMES[li]} (${(a[li] || []).length})</h2><div class="row"><button class="btn ghost sm" data-paste="${li}">הדבקה מאקסל</button><button class="btn sm" data-add="${li}">+ שורה</button></div></div>
-      <div class="tbl-wrap"><table><thead><tr><th>#</th>${cols.map(c => `<th>${c[1]}</th>`).join('')}<th></th></tr></thead><tbody>${(a[li] || []).map((r, ri) => `<tr><td>${ri + 1}</td>${cols.map(c => `<td>${cell(r, c, li, ri)}</td>`).join('')}<td><button class="x" data-del="${li}|${ri}" aria-label="מחק">×</button></td></tr>`).join('')}</tbody></table></div></div>`).join('')}
+    ${Object.entries(spec).map(([li, cols]) => `<div class="card"><div class="row sp"><h2 id="ed-h-${li}">${LIST_NAMES[li]} (${a.kind === 'split' && li === 'records' ? customerCount(a[li]) : (a[li] || []).length})</h2><div class="row"><button class="btn ghost sm" data-paste="${li}">הדבקה מאקסל</button><button class="btn sm" data-add="${li}">+ שורה</button></div></div>
+      <div class="tbl-wrap"><table><thead><tr><th>#</th>${cols.map(c => `<th>${c[1]}</th>`).join('')}<th></th></tr></thead><tbody>${tbody(li, cols)}</tbody></table></div></div>`).join('')}
     ${(R.editorActions[a.kind] || []).length ? `<div class="card row">${R.editorActions[a.kind].map((x, i) => `<button class="btn ghost" data-eact="${i}">${esc(x.label)}</button>`).join('')}</div>` : ''}
     <div class="actionbar"><div id="ed-err"></div><div class="row"><button class="btn xl" id="ed-save" style="flex:2">שמור</button><a class="btn ghost" href="#/acc/${a.id}" style="flex:1">ביטול</a></div></div>`;
     summary();
@@ -379,6 +401,8 @@ function renderEditor(ctx) {
       $('#pok', s.el).onclick = () => { const lines = $('#pt', s.el).value.split(/\r?\n/).filter(l => l.trim()); for (const l of lines) { const parts = l.split('\t'); const r = {}; cols.forEach(([k, , t], i) => { const v = (parts[i] || '').trim(); r[k] = t === 'n' ? num(v) : t === 'b' ? !!v : t === 'k' ? (/הוצ|^e$/.test(v) ? 'e' : 'd') : v; }); if (a.kind === 'work' && li === 'entries') r.s = ''; (a[li] ||= []).push(r); } s.close(); drawE(); toast(lines.length + ' שורות נוספו'); };
     });
     $$('[data-eact]', view).forEach(b => b.onclick = () => R.editorActions[a.kind][+b.dataset.eact].run(a, drawE, ctx));
+    $$('[data-mgd]', view).forEach(b => b.onclick = () => { const k = b.dataset.mgd; openMg.has(k) ? openMg.delete(k) : openMg.add(k); drawE(); });
+    $$('[data-mgu]', view).forEach(b => b.onclick = () => { unmerge(a, b.dataset.mgu); openMg.delete(b.dataset.mgu); drawE(); toast('האיחוד בוטל — החובות חזרו להיות שורות נפרדות. לחץ ״שמור״ כדי לשמור.'); });
     $('#ed-save', view).onclick = async (ev) => {
       ev.target.disabled = true;
       if (a.kind === 'split') (a.records || []).forEach(r => { if (r.n && !r.fn) { const p = String(r.n).trim().split(' '); r.fn = p[0]; r.ln = p.slice(1).join(' '); } });
