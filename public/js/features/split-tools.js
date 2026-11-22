@@ -7,7 +7,8 @@
 import { route, accountAction, accountPanel } from '../registry.js';
 import { SaveCtl } from '../savectl.js';
 import { get, save, uid } from '../api.js';
-import { $, $$, esc, money, dmy, todayISO, toast } from '../ui.js';
+import { $, $$, esc, money, dmy, todayISO, toast, openSheet } from '../ui.js';
+import { borrowerCandidates, applyMerge, unmerge, partStatus } from '../split-merge.js';
 import { App, onLive } from '../app.js';
 import { calcSplit, num, r2, sum, normName, normTime, timeMin, normStatus, ST_NA, ST_GOT, ST_NOT, cleanPh, phShow, normHard, cleanColl, isSagi, cmpRec, CHANGE, NOC_SP } from '../calc.js';
 
@@ -719,6 +720,29 @@ function panelBind(ctx) {
     }
   });
   const sb = $('#spt-lists [data-spx]', root); if (sb) updateSpxRem(A(), X, sb);
+  // ״איחוד חובות לפי לווה״: מציג את הלווים שנמצאו ומאחד רק באישור. כל חוב נשאר שורה עם הגובה שלו (מזהה קבוצה mg),
+  // כך שסכומי הגובים וסך החשבון לא משתנים, ולא נוצרת הלוואה או חיוב חדש.
+  const mb = $('#mgbtn', ctx.view);
+  if (mb) mb.onclick = () => {
+    const groups = borrowerCandidates(A().records || []);
+    if (!groups.length) return toast('אין לווים עם כמה שורות לאיחוד — כל לווה כבר מופיע בשורה אחת');
+    const LV = { id: 'לפי מזהה לקוח', name: 'לפי שם בלבד — בדוק לפני איחוד', doubt: 'ספק: מספרי טלפון שונים' };
+    const s = openSheet(`<div class="hd"><h2>איחוד חובות לפי לווה</h2><button class="x" data-close>×</button></div>
+      <p class="small muted">נמצאו ${groups.length} לווים עם כמה שורות בפיצול של ${dmy(A().date)}. החשבון של כל גובה נשאר כמו שהוא; רק התצוגה ב״כל הגובים״ תהיה שורה אחת ללווה.</p>
+      ${groups.map((g, i) => `<div class="card mgc" data-gi="${i}" style="padding:10px"><div class="row sp"><b>${esc(g.name)}</b><span>יתקבל: <b>${money(g.total)}</b></span></div><div class="small ${g.level === 'id' ? 'muted' : 'warn-t'}">${LV[g.level]}</div>
+        <div class="tbl-wrap"><table><thead><tr><th>גובה</th><th class="a">סכום</th><th>שעה</th><th>סטטוס</th><th>טלפון</th></tr></thead><tbody>${g.rows.map(r => `<tr><td>${esc(String(r.c || '').trim() || 'ללא גובה')}</td><td class="a">${money(num(r.a))}</td><td>${esc(r.t || '')}</td><td>${esc(partStatus(r))}</td><td>${esc(r.ph || '')}</td></tr>`).join('')}</tbody></table></div>
+        <label class="row" style="margin:6px 0;font-weight:700"><input type="checkbox" class="ck" data-same="${i}" ${g.level === 'id' ? 'checked' : ''}> זה אותו לווה — אחד שורות</label>
+        <button class="btn sm" data-one="${i}" ${g.level === 'id' ? '' : 'disabled'}>אחד את ${esc(g.name)}</button></div>`).join('')}
+      <div class="row" style="margin-top:8px"><button class="btn xl" id="mgall" style="flex:2">אחד את כל המסומנים</button><button class="btn ghost" id="mgmark" style="flex:1">סמן את כולם</button></div>`);
+    const sync = () => { groups.forEach((g, i) => { $(`[data-one="${i}"]`, s.el).disabled = !$(`[data-same="${i}"]`, s.el).checked; }); const n = $$('[data-same]:checked', s.el).length; $('#mgall', s.el).disabled = !n; $('#mgall', s.el).textContent = `אחד את כל המסומנים (${n})`; };
+    $$('[data-same]', s.el).forEach(c => c.onchange = sync);
+    $('#mgmark', s.el).onclick = () => { $$('[data-same]', s.el).forEach(c => { c.checked = true; }); sync(); };
+    const run = (list) => { const done = applyMerge(list); s.close(); X.rowsOpen = X.rowsOpen; commit(ctx, H, 'איחוד חובות לפי לווה', done.length === 1 ? `אוחדו ${done[0].n} שורות של ${done[0].name} לשורה אחת: ${money(done[0].total).replace(/<[^>]+>/g, '')}` : `אוחדו חובות של ${done.length} לווים`); };
+    $$('[data-one]', s.el).forEach(b => b.onclick = () => run([groups[+b.dataset.one]]));
+    $('#mgall', s.el).onclick = () => run(groups.filter((g, i) => $(`[data-same="${i}"]`, s.el).checked));
+    sync();
+  };
+  ctx.view.querySelectorAll('[data-mgun]').forEach(b => b.onclick = () => { const a = A(); const g = (a.records || []).find(r => r.mg === b.dataset.mgun); unmerge(a, b.dataset.mgun); commit(ctx, H, 'ביטול איחוד', 'האיחוד בוטל' + (g ? ' — ' + g.n + ' מוצג שוב בשורות נפרדות' : '')); });
   const sm = $('#spt-smerge', root);
   if (sm) sm.onclick = () => doMergeDebts([...(ctx.visible || [])]);
   // טבלת עריכת שורות

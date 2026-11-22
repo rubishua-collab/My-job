@@ -208,3 +208,9 @@ tr.mgpart td{background:color-mix(in srgb,var(--accent-soft) 25%,transparent)}
 .band .acctimes{color:var(--band-muted,#c3cfe2);margin-top:4px} .band .acctimes .nd{color:#ffd38a}
 .actionbar .acctimes{margin-top:2px}
 .acctimes .nw{white-space:nowrap}
+/* איחוד חובות לפי לווה */
+.mgbtn{background:var(--gold,#b8913f);border-color:var(--gold,#b8913f);color:#1b1200;font-weight:800;flex:none;min-height:44px}
+.mgcard{border:2px solid var(--accent-soft)}
+.mgrow .m details summary{cursor:pointer;font-weight:700;color:var(--accent)}
+.warn-t{color:#b26b00}
+.saverow .mgbtn{min-height:44px}

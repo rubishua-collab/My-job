@@ -10,7 +10,7 @@ import { R } from './registry.js';
 import { openDaySheet, clearPageSheet, stepDay } from './day-tools.js';
 import { openRemoveSheet } from './acc-remove.js';
 import { openPdfSheet } from './acc-pdf.js';
-import { mgGroups, mgTotal, customerCount, unmerge } from './split-merge.js';
+import { mgGroups, mgTotal, customerCount, unmerge, partStatus } from './split-merge.js';
 import { SaveCtl, watchHeader, paintSave } from './savectl.js';
 import { timesHTML } from './acc-times.js';
 
@@ -93,7 +93,21 @@ function header(ctx, extra = '') {
 // items לשליחה: {ref,name,phone,amount,time,collector,date}
 function itemsOf(ctx) {
   const a = ctx.a;
-  if (a.kind === 'split') return (a.records || []).filter(r => r.n || r.a).map(r => ({ ref: r._k, name: r.n, first: r.fn, phone: r.ph, amount: num(r.a), time: r.t || '', collector: r.c || '', date: dmy(a.date), side: !!r.side, h: r.h, note: r.note }));
+  if (a.kind === 'split') {
+    const one = r => ({ ref: r._k, name: r.n, first: r.fn, phone: r.ph, amount: num(r.a), time: r.t || '', collector: r.c || '', date: dmy(a.date), side: !!r.side, h: r.h, note: r.note });
+    const recs = (a.records || []).filter(r => r.n || r.a);
+    if (ctx.coll) return recs.map(one);
+    const G = mgGroups(recs), seen = new Set(), out = [];
+    for (const r of recs) {
+      const g = r.mg && G.get(r.mg);
+      if (!g) { out.push(one(r)); continue; }
+      if (seen.has(r.mg)) continue; seen.add(r.mg);
+      const ph = (g.find(x => normPhone(x.ph)) || {}).ph || '';
+      const times = g.map(x => x.t).filter(Boolean).sort();
+      out.push({ ref: 'mg:' + r.mg, mg: r.mg, parts: g, name: String(r.n || '').trim(), first: r.fn, phone: ph, amount: mgTotal(g), time: times[0] || '', collector: '', date: dmy(a.date), side: g.every(x => x.side), note: '' });
+    }
+    return out;
+  }
   if (a.kind === 'work') return (a.entries || []).filter(e => e.n || e.a).map(e => ({ ref: e._k, name: e.n, phone: e.p, amount: num(e.a), time: normStatus(e.s) ? '' : (e.t || ''), collector: cleanColl(e.c), date: dmy(a.date), s: normStatus(e.s), by: e.by }));
   if (a.kind === 'collectors') return (a.entries || []).filter(e => e.k !== 'e').map(e => ({ ref: e._k, name: e.n, phone: '', amount: num(e.a), time: e.t || '', collector: (e.c || '').trim(), date: dmy(a.date), by: e.by }));
   if (a.kind === 'morning') return (a.rows || []).map(r => ({ ref: r._k, name: r.n, phone: '', amount: r2((+r.i || 0) + (+r.p || 0)), time: '', collector: '', date: dmy(a.date), i: r.i, p: r.p }));
@@ -109,14 +123,14 @@ function draw(ctx) {
   const all = itemsOf(ctx); ctx.items = all;
   const vis = all.filter(it => matches(it, ctx.filter) && (!ctx.coll || collKey(it.collector) === collKey(ctx.coll)));
   ctx.visible = new Set(vis.map(v => v.ref));
-  const colls = [...new Set(all.map(i => i.collector).filter(Boolean))].sort((x, y) => x.localeCompare(y, 'he'));
+  const colls = [...new Set((a.kind === 'split' ? (a.records || []).map(r => String(r.c || '').trim()) : all.map(i => i.collector)).filter(Boolean))].sort((x, y) => x.localeCompare(y, 'he'));
   let body = '';
   if (a.kind === 'morning') body = morningView(ctx, vis);
   else if (a.kind === 'collectors') body = collectorsView(ctx, vis);
   else if (a.kind === 'split') body = splitView(ctx, vis);
   else if (a.kind === 'work') body = workView(ctx, vis);
   view.innerHTML = header(ctx) + `
-  <div class="search no-print"><div class="saverow"><input class="in" id="fq" type="search" placeholder="סינון: שם, טלפון, גובה, שליח או שעה…" value="${esc(ctx.filter)}" autocomplete="off">${SaveCtl.button('id="ssave"')}</div>
+  <div class="search no-print"><div class="saverow"><input class="in" id="fq" type="search" placeholder="סינון: שם, טלפון, גובה, שליח או שעה…" value="${esc(ctx.filter)}" autocomplete="off">${SaveCtl.button('id="ssave"')}${a.kind === 'split' && App.can.finance ? '<button class="btn sm mgbtn" id="mgbtn">איחוד חובות לפי לווה</button>' : ''}</div>
   ${colls.length > 1 ? `<div class="chips" style="margin-top:8px">${['', ...colls].map(c => `<button class="chip" data-c="${esc(c)}" aria-pressed="${ctx.coll === c}">${c ? esc(c) : 'כל הגובים'}</button>`).join('')}</div>` : ''}</div>
   ${body}${(R.accountPanels[a.kind] || []).concat(R.accountPanels['*'] || []).map(f => { try { return f(ctx) || ''; } catch (e) { console.error(e); return ''; } }).join('')}${App.can.send ? actionBar(ctx, vis) : ''}`;
   bind(ctx); if (App.can.send && ctx.sel.size) exactCount(ctx);
@@ -241,15 +255,21 @@ function collectorsView(ctx, vis) {
 function splitView(ctx, vis) {
   const a = ctx.a; const visSet = new Set(vis.map(v => v.ref));
   const c = calcSplit(a.records || []); const MG = mgGroups(a.records || []);
+  const merged = ctx.coll ? [] : vis.filter(v => v.mg);
+  const hiddenIn = (b) => ctx.coll ? 0 : r2(sum(b.sections.flatMap(s => s.rows).filter(r => r.mg && MG.get(r.mg)).map(r => num(r.a))));
+  const mrow = (it) => `<div class="li mgrow ${ctx.sel.has(it.ref) ? 'sel' : ''}" data-key="${esc(it.ref)}">${ck(ctx, it.ref)}<div class="t">${esc(it.name)} — ${money(it.amount)} <span class="pill acc">${it.parts.length} חובות</span></div><div class="a">${money(it.amount)}</div>
+    <div class="m" style="flex-basis:100%"><details class="mgdet2"><summary>פירוט</summary><div class="tbl-wrap"><table><thead><tr><th>גובה</th><th class="a">סכום</th><th>שעה</th><th>סטטוס</th></tr></thead><tbody>${it.parts.map(x => `<tr><td>${esc(String(x.c || '').trim() || 'ללא גובה')}</td><td class="a">${money(num(x.a))}</td><td>${esc(x.t || '')}</td><td>${esc(partStatus(x))}</td></tr>`).join('')}</tbody><tfoot><tr><td><b>סה״כ</b></td><td class="a"><b>${money(it.amount)}</b></td><td></td><td></td></tr></tfoot></table></div>${App.can.finance ? `<button class="btn plain sm" data-mgun="${esc(it.mg)}">בטל איחוד</button>` : ''}</details></div></div>`;
   const rec = (r) => `<div class="li ${ctx.sel.has(r._k) ? 'sel' : ''}" data-key="${esc(r._k)}">${ck(ctx, r._k)}<div class="t">${esc(r.n)} ${r.pp ? `<span class="pill acc">חלק ${esc(r.pp)}</span>` : ''}${r.mg && MG.get(r.mg) ? ` <span class="pill acc">חוב מאוחד · סה״כ ${money(mgTotal(MG.get(r.mg)))}</span>` : ''}${r.h === 'קשה' ? ' <span class="pill err">קשה</span>' : ''}${r.na ? ' <span class="pill acc">לא ענו</span>' : ''}</div><div class="a">${money(num(r.a))}</div>
     <div class="m">${r.t ? `<span class="num">${esc(r.t)}</span>` : ''}${r.ph ? `<span>${esc(fmtPhone(r.ph))}</span>` : '<span class="neg">אין טלפון</span>'}${r.note ? `<span>${esc(r.note)}</span>` : ''}</div></div>`;
   const blocks = c.blocks.map(b => { const rows = b.sections.flatMap(s => s.rows.map(r => ({ r, s: s.t }))).filter(x => visSet.has(x.r._k)); if (!rows.length && (ctx.filter || ctx.coll)) return '';
-    return `<div class="card"><div class="row sp"><h2>${esc(b.c === CHANGE ? 'לשנות במערכת' : b.c === NOC_SP ? 'ללא גובה (להשלים)' : b.c)}</h2><b>${money(b.total)}</b></div><div class="muted small">${b.count} לקוחות</div>
+    const hid = hiddenIn(b);
+    return `<div class="card"><div class="row sp"><h2>${esc(b.c === CHANGE ? 'לשנות במערכת' : b.c === NOC_SP ? 'ללא גובה (להשלים)' : b.c)}</h2><b>${money(b.total)}</b></div><div class="muted small">${b.count} לקוחות${hid ? ` · כולל ${money(hid)} של לווים מאוחדים (מוצגים למעלה ב״לווים מאוחדים״)` : ''}</div>
     <div class="list" style="margin-top:8px">${b.sections.map(s => { const rs = s.rows.filter(r => visSet.has(r._k)); return (s.t ? `<div class="grp"><span>${esc(s.t)}</span><span class="s">${money(s.total)}</span></div>` : '') + rs.map(rec).join(''); }).join('')}</div></div>`; }).join('');
   const sides = c.sides.filter(r => visSet.has(r._k));
-  return `${blocks}${sides.length ? `<div class="card"><div class="row sp"><h2>לא נגבה היום</h2><b>${money(c.sideTotal)}</b></div><div class="list">${sides.map(rec).join('')}</div></div>` : ''}
+  const mcard = merged.length ? `<div class="card mgcard"><div class="row sp"><h2>לווים מאוחדים</h2><b>${money(r2(sum(merged.map(m => m.amount))))}</b></div><div class="muted small">שורה אחת לכל לווה, עם הסכום הכולל לתשלום היום. החשבון של כל גובה נשאר בכרטיס שלו (בחר את הגובה למעלה).</div><div class="list" style="margin-top:8px">${merged.map(mrow).join('')}</div></div>` : '';
+  return `${mcard}${blocks}${sides.length ? `<div class="card"><div class="row sp"><h2>לא נגבה היום</h2><b>${money(c.sideTotal)}</b></div><div class="list">${sides.map(rec).join('')}</div></div>` : ''}
   <div class="card"><h2>סיכום</h2><dl class="kv"><dt>לקוחות</dt><dd>${customerCount(a.records)}</dd><dt>סה״כ גובים</dt><dd>${money(c.grand)}</dd>${c.specialTotal ? `<dt>לשנות / ללא גובה</dt><dd>${money(c.specialTotal)}</dd>` : ''}${c.sideTotal ? `<dt>לא נגבה היום</dt><dd>${money(c.sideTotal)}</dd>` : ''}<dt>סה״כ הכול</dt><dd>${money(c.all)}</dd></dl>
-  ${MG.size ? `<details class="mgview" style="margin-top:8px"><summary>לקוחות עם כמה חובות (${MG.size})</summary><div class="list">${[...MG.values()].map(g => `<div class="li noc"><div class="t">${esc(String(g[0].n || '').trim())}</div><div class="a">${money(mgTotal(g))}</div><div class="m">${g.map(x => `<span>${esc(String(x.c || '').trim() || 'ללא גובה')} — ${money(num(x.a))}</span>`).join('')}</div></div>`).join('')}</div></details>` : ''}
+  ${MG.size && ctx.coll ? `<details class="mgview" style="margin-top:8px"><summary>לקוחות עם כמה חובות (${MG.size})</summary><div class="list">${[...MG.values()].map(g => `<div class="li noc"><div class="t">${esc(String(g[0].n || '').trim())}</div><div class="a">${money(mgTotal(g))}</div><div class="m">${g.map(x => `<span>${esc(String(x.c || '').trim() || 'ללא גובה')} — ${money(num(x.a))}</span>`).join('')}</div></div>`).join('')}</div></details>` : ''}
   ${c.dups.filter(d => !MG.size || !(a.records || []).some(r => r.mg && normName(r.n) === normName(d.n))).length ? `<div class="note warn">אותו שם אצל כמה גובים: ${c.dups.filter(d => !(a.records || []).some(r => r.mg && normName(r.n) === normName(d.n))).map(d => esc(d.n) + ' (' + d.cs.map(esc).join(', ') + ')').join(' · ')}</div>` : ''}</div>`;
 }
 

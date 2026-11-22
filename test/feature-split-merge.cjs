@@ -48,9 +48,12 @@ const results = []; const step = async (n, f) => { try { await f(); results.push
     assert.ok((await card('טל').innerText()).includes('7,900')); assert.ok(!(await card('טל').innerText()).includes('725'));
     assert.ok((await card('רובי').innerText()).includes('725')); assert.ok(!(await card('רובי').innerText()).includes('7,900'));
     const sumTxt = await p.locator('.card', { hasText: 'סיכום' }).last().innerText(); assert.ok(/לקוחות\s*3/.test(sumTxt), sumTxt);
-    await p.click('details.mgview summary'); const t = await p.locator('details.mgview').innerText();
-    assert.ok(t.includes('עידן חגג') && t.includes('8,625') && t.includes('טל — 7,900') && t.includes('רובי — 725'), t);
-    assert.strictEqual(await p.locator('.pill', { hasText: 'חוב מאוחד · סה״כ 8,625' }).count(), 2);
+    // ״כל הגובים״: שורה אחת עם פירוט; בסינון גובה — החלק שלו בלבד עם תגית ״חוב מאוחד״
+    await p.locator('.mgcard summary').click(); const t = await p.locator('.mgcard').innerText();
+    assert.ok(t.includes('עידן חגג — 8,625') && /טל\s+7,900/.test(t) && /רובי\s+725/.test(t), t);
+    await p.click('.chip[data-c="טל"]'); await p.waitForTimeout(150);
+    assert.strictEqual(await p.locator('.pill', { hasText: 'חוב מאוחד · סה״כ 8,625' }).count(), 1);
+    await p.click('.chip[data-c=""]');
   });
   await step('פתיחה מחדש של העריכה ולחיצה נוספת — לא מתווסף שום חוב, הסכומים לא משתנים', async () => {
     await p.goto(URL + '/#/acc/' + SP + '?edit=1'); await p.waitForSelector('tr.mghead');

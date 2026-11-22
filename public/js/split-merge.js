@@ -67,3 +67,19 @@ export function mgGroups(records) {
   return m;
 }
 export const mgTotal = (rows) => r2(sum(rows.map(r => num(r.a))));
+
+// ---- ״איחוד חובות לפי לווה״ (מסך הפיצול) ----
+// מזהה לווה: מזהה לקוח (cid) אם יש לכל השורות. שם בלבד = ״לפי שם״ — מוצג לאישור, לא מאוחד לבד.
+// ספק (טלפונים תקינים שונים / מזהים שונים) — דורש סימון ידני ״זה אותו לווה — אחד שורות״.
+export function borrowerCandidates(records) {
+  return findGroups(records).filter(g => g.changed).map(g => {
+    const allIds = g.rows.every(r => r.cid) && g.ids.length === 1;
+    return { ...g, level: g.conflict ? 'doubt' : (allIds ? 'id' : 'name'), total: mgTotal(g.rows) };
+  });
+}
+export function applyMerge(groups) {
+  const done = [];
+  for (const g of groups) { const mg = (g.rows.find(r => r.mg) || {}).mg || newMg(); g.rows.forEach(r => { r.mg = mg; }); done.push({ name: g.name, n: g.rows.length, total: g.total }); }
+  return done;
+}
+export const partStatus = (r) => r.xd ? 'הועבר לאיסוף' : r.side ? 'לא נגבה היום' : r.na ? 'לא ענו' : (r.t ? 'לאסוף' : 'ממתין');
