@@ -188,6 +188,7 @@ function bind(ctx) {
   bindBar(ctx);
   $$('[data-row]', view).forEach(el => el.onclick = (e) => { if (e.target.closest('input,button,a')) return; rowSheet(ctx, el.dataset.row); });
   $$('[data-mark]', view).forEach(b => b.onclick = () => quickMark(ctx, b));
+  $$('[data-delent]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); delEntrySheet(ctx, b.dataset.delent); });
 }
 function refreshBar(ctx) {
   const vis = ctx.items.filter(i => ctx.visible.has(i.ref));
@@ -303,7 +304,33 @@ function workRow(ctx, e, gname) {
     <div class="t">${!s && e.t ? `<span class="num">${esc(e.t)}</span> · ` : ''}${esc(e.n)} ${s ? `<span class="pill ${s === 'נאסף' ? 'ok' : s === 'לא נאסף' ? 'err' : s === 'לא ענו' ? 'acc' : 'warn'}">${esc(s)}</span>` : ''}${e.h === 'קשה' ? ' <span class="pill err">קשה</span>' : ''}${e.pp ? ` <span class="pill acc">חלק ${esc(e.pp)}</span>` : ''}</div>
     <div class="a">${money(num(e.a))}${s === 'נאסף' && e.ga != null && e.ga !== '' ? `<div class="small muted">נגבה ${money(e.ga)}</div>` : ''}</div>
     <div class="m">${courier}${e.p ? `<a href="tel:${esc(e.p)}">${esc(fmtPhone(e.p))}</a>` : '<span class="neg">אין טלפון</span>'}${e.pmt ? `<span>${esc(e.pmt)}</span>` : ''}${e.mk ? `<span>סומן ע״י ${esc(e.mk.u)} ${when(e.mk.at)}</span>` : ''}</div>
-    <div class="st no-print">${['נאסף', 'לא נאסף', 'לעבור', 'לא ענו'].map(x => `<button data-s="${x}" aria-pressed="${s === x}" data-mark="${esc(e._k)}|${s === x ? '' : x}">${x}</button>`).join('')}</div></div>`;
+    <div class="st no-print">${['נאסף', 'לא נאסף', 'לעבור', 'לא ענו'].map(x => `<button data-s="${x}" aria-pressed="${s === x}" data-mark="${esc(e._k)}|${s === x ? '' : x}">${x}</button>`).join('')}</div>
+    ${App.can.finance ? `<div class="delent no-print"><button class="btn danger sm" data-delent="${esc(e._k)}" aria-label="מחק גבייה של ${esc(e.n)}">🗑 מחק גבייה</button></div>` : ''}</div>`;
+}
+// ״מחק גבייה״: מוחק רק את השורה שנבחרה (לפי המזהה שלה), בשרת. השורה יורדת מהמסך רק אחרי שהמחיקה נשמרה.
+function delEntrySheet(ctx, key) {
+  const e = (ctx.a.entries || []).find(x => x._k === key); if (!e) return;
+  const g = cleanColl(e.c) || 'ללא גובה', t = normStatus(e.s) ? '' : (e.t || '');
+  const s = openSheet(`<div class="hd"><h2>מחיקת גבייה</h2><button class="x" data-close>×</button></div>
+    <p style="font-size:17px;font-weight:700">למחוק מרשימת הגביות של ${esc(g)} את הגבייה של ${esc(e.n)} בסך ${fmt(num(e.a))} ₪${t ? ' לשעה ' + esc(t) : ''}?</p>
+    <dl class="kv"><dt>לקוח</dt><dd>${esc(e.n)}</dd><dt>סכום</dt><dd>${money(num(e.a))}</dd><dt>גובה</dt><dd>${esc(g)}</dd><dt>תאריך</dt><dd>${esc(weekday(ctx.a.date))} ${dmy(ctx.a.date)}</dd><dt>שעה</dt><dd>${t ? esc(t) : 'ללא שעה'}</dd>${normStatus(e.s) ? `<dt>סטטוס</dt><dd>${esc(normStatus(e.s))}</dd>` : ''}</dl>
+    <p class="small muted">תימחק רק הגבייה הזו מרשימת האיסוף של היום. כרטיס הלקוח, החוב המקורי, תשלומים שנרשמו וגביות אחרות של ${esc(e.n)} לא משתנים.</p>
+    <div id="delerr"></div>
+    <div class="row"><button class="btn ghost xl" id="delno" style="flex:1">ביטול</button><button class="btn danger xl" id="delok" style="flex:1">מחק גבייה</button></div>`);
+  $('#delno', s.el).onclick = () => s.close();
+  const opId = uid();
+  $('#delok', s.el).onclick = async (ev) => {
+    const b = ev.target; b.disabled = true; b.textContent = 'מוחק…'; SaveCtl.saving();
+    try {
+      const r = await save('POST', `/api/accounts/${ctx.a.id}/del-entry`, { key, opId }, { queue: false, label: 'מחיקת גבייה' });
+      ctx.a.entries = (ctx.a.entries || []).filter(x => x._k !== key); if (r.version) ctx.a._version = r.version;
+      ctx.sel.delete(key); persist(ctx); s.close(); draw(ctx); SaveCtl.saved();
+      toast(`הגבייה של ${e.n} (${fmt(num(e.a))} ₪) נמחקה מהרשימה של ${g}`);
+    } catch (err) {
+      SaveCtl.failed(); b.disabled = false; b.textContent = 'מחק גבייה';
+      $('#delerr', s.el).innerHTML = `<div class="note err">המחיקה לא נשמרה — השורה נשארה ברשימה. ${esc(err.network ? 'אין קליטה.' : err.message)} לחץ שוב ״מחק גבייה״ כדי לנסות שוב (המחיקה לא תתבצע פעמיים).</div>`;
+    }
+  };
 }
 async function quickMark(ctx, b) {
   const [key, s] = b.dataset.mark.split('|');

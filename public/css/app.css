@@ -226,3 +226,7 @@ tr.mgpart td{background:color-mix(in srgb,var(--accent-soft) 25%,transparent)}
 /* מחיקה מכרטיס לווה */
 .mgdel{white-space:nowrap;min-height:40px}
 .mgp-h .btn{min-height:40px}
+
+/* מחק גבייה — בתוך השורה, בנפרד מכפתורי הסטטוס */
+.delent{grid-column:1/-1;display:flex;justify-content:flex-end;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
+.delent .btn{min-height:40px}

@@ -12,6 +12,7 @@
 import { calcMorning, r2 } from '../../public/js/calc.js';
 
 export async function register(ctx) {
+  await registerEntryDelete(ctx);
   const { r, err, need, db, getDoc, listDocs, putDoc, deleteDoc, once, logAudit } = ctx;
   const tx = (fn) => { db.exec('BEGIN IMMEDIATE'); try { const out = fn(); db.exec('COMMIT'); return out; } catch (e) { try { db.exec('ROLLBACK'); } catch { /* */ } throw e; } };
   const KN = { morning: 'חשבון בוקר', split: 'פיצול', collectors: 'חשבון גובים', work: 'איסוף יום' };
@@ -64,6 +65,25 @@ export async function register(ctx) {
       deleteDoc('accounts', params.id, { user, note: 'מחיקת רישום' + (p.delta ? ` · בוטלה השפעה של ${p.delta} על הקרן ב-${p.adjust.length} חשבונות בוקר` : '') });
       logAudit({ user, action: 'מחיקת רישום', col: 'accounts', doc_id: params.id, item: p.title, after: { delta: p.delta, adjusted: p.adjust.map(x => ({ id: x.id, from: x.from, to: x.to })) } });
       return { ok: true, id: params.id, delta: p.delta, adjusted: p.adjust.map(({ id, title, date, from, to }) => ({ id, title, date, from, to })) };
+    }));
+  });
+}
+
+// ״מחק גבייה״: מחיקת שורת גבייה אחת מרשימת איסוף יום, לפי המזהה הייחודי שלה (_k). רק השורה הזו — שאר השורות,
+// כרטיס הלקוח, הפיצול וההלוואות לא נוגעים. opId: ניסיון חוזר לא מוחק פעמיים; שורה שכבר נמחקה — מדווח ולא נכשל.
+export async function registerEntryDelete(ctx) {
+  const { r, err, need, can, db, getDoc, putDoc, once, logAudit } = ctx;
+  const tx = (fn) => { db.exec('BEGIN IMMEDIATE'); try { const out = fn(); db.exec('COMMIT'); return out; } catch (e) { try { db.exec('ROLLBACK'); } catch { /* */ } throw e; } };
+  r.post('/api/accounts/:id/del-entry', (req, res, { user, params, body }) => {
+    need(can.finance(user), 'רק בעלים או מנהל יכולים למחוק גבייה');
+    return tx(() => once(body.opId, user, () => {
+      const d = getDoc('accounts', params.id); if (!d || d.deleted || d.data.kind !== 'work') throw err(404, 'רשימת הגביות לא נמצאה');
+      const list = d.data.entries || []; const i = list.findIndex(x => x && x._k === body.key);
+      if (i < 0) return { ok: true, already: true, version: d.version };
+      const [gone] = list.splice(i, 1);
+      const out = putDoc('accounts', params.id, { ...d.data, entries: list }, { user, action: 'מחיקת גבייה', item: gone.n + ' (' + gone._k + ')', note: (gone.c || '') + ' · ' + (gone.a || 0) + ' ₪' + (gone.t ? ' · ' + gone.t : '') });
+      logAudit({ user, action: 'מחיקת גבייה', col: 'accounts', doc_id: params.id, item: body.key, before: gone, note: gone.n });
+      return { ok: true, version: out.version };
     }));
   });
 }
