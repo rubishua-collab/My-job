@@ -173,10 +173,13 @@ async function exactCount(ctx) {
 }
 function actionBar(ctx, vis) {
   const allVisSel = vis.length && vis.every(v => ctx.sel.has(v.ref));
-  return `<div class="actionbar sendbar no-print"><div class="row sp"><label class="row" style="font-weight:700;cursor:pointer"><input type="checkbox" id="selall" class="ck" style="width:24px;height:24px" ${allVisSel ? 'checked' : ''}> בחר את כל תוצאות הסינון (${vis.length})</label>
+  const min = waMin();
+  return `<div class="actionbar sendbar no-print${min ? ' is-min' : ''}" id="sendbar">
+    <button type="button" class="wa-tab" id="watab" aria-expanded="false" aria-controls="wabody">וואטסאפ פרטי <span aria-hidden="true">⌃</span>${ctx.sel.size ? ` <span class="pill">${ctx.sel.size} נבחרו</span>` : ''}</button>
+    <div class="wa-body" id="wabody"><div class="wa-top"><b>וואטסאפ פרטי</b><button type="button" class="btn plain sm wa-minbtn" id="wamin" aria-expanded="true" aria-controls="wabody">מזער <span aria-hidden="true">⌄</span></button></div><div class="row sp"><label class="row" style="font-weight:700;cursor:pointer"><input type="checkbox" id="selall" class="ck" style="width:24px;height:24px" ${allVisSel ? 'checked' : ''}> בחר את כל תוצאות הסינון (${vis.length})</label>
     ${ctx.sel.size ? `<button class="btn plain sm" id="selnone">נקה בחירה (${ctx.sel.size} שורות)</button>` : ''}</div>
     <button class="btn wa ${ctx.sel.size ? 'xl' : ''}" id="sendpriv" ${ctx.sel.size ? '' : 'disabled'}>וואטסאפ פרטי · הכן הודעה אישית ל־${ctx.sel.size} שורות</button>
-    <button class="btn ghost" id="sendwa" disabled>שלח בוואטסאפ ל־0 לקוחות</button><div id="sendinfo" class="small muted">הכפתור התחתון שולח דרך החשבון העסקי (יעבוד אחרי אישור Meta)</div></div>`;
+    <button class="btn ghost" id="sendwa" disabled>שלח בוואטסאפ ל־0 לקוחות</button><div id="sendinfo" class="small muted">הכפתור התחתון שולח דרך החשבון העסקי (יעבוד אחרי אישור Meta)</div></div></div>`;
 }
 
 function bind(ctx) {
@@ -204,8 +207,22 @@ function refreshBar(ctx) {
   bar.outerHTML = actionBar(ctx, vis); bindBar(ctx); clearTimeout(ctx.ct); ctx.ct = setTimeout(() => exactCount(ctx), 250);
   $$('[data-ref]', ctx.view).forEach(c => { c.checked = ctx.sel.has(c.dataset.ref); c.closest('.li')?.classList.toggle('sel', c.checked); });
 }
+// מזעור חלון ״וואטסאפ פרטי״: נשמר במכשיר (גם בין מסכים). רק מחליף מחלקה — הבחירה, הסינון והגלילה לא משתנים
+const WAMIN = 'yh:wamin';
+function waMin() { try { return localStorage.getItem(WAMIN) === '1'; } catch { return false; } }
+function setWaMin(on) {
+  try { localStorage.setItem(WAMIN, on ? '1' : '0'); } catch { /* */ }
+  const bar = document.getElementById('sendbar'); if (!bar) return;
+  const y = window.scrollY;
+  bar.classList.toggle('is-min', on); bar.classList.add(on ? 'wa-closing' : 'wa-opening');
+  setTimeout(() => bar.classList.remove('wa-closing', 'wa-opening'), 220);
+  window.scrollTo(0, y);
+  const f = document.getElementById(on ? 'watab' : 'wamin'); if (f) f.focus({ preventScroll: true });
+}
 function bindBar(ctx) {
   const v = ctx.view;
+  const mn = $('#wamin', v); if (mn) mn.onclick = (e) => { e.stopPropagation(); setWaMin(true); };
+  const tb = $('#watab', v); if (tb) tb.onclick = (e) => { e.stopPropagation(); setWaMin(false); };
   const sa = $('#selall', v); if (sa) sa.onchange = () => { for (const r of ctx.visible) sa.checked ? ctx.sel.add(r) : ctx.sel.delete(r); persist(ctx); refreshBar(ctx); };
   const sn = $('#selnone', v); if (sn) sn.onclick = () => { ctx.sel.clear(); persist(ctx); refreshBar(ctx); };
   const sp = $('#sendpriv', v); if (sp) sp.onclick = () => openPrivate(ctx.items.filter(i => ctx.sel.has(i.ref)), { col: 'accounts', id: ctx.a.id, title: ctx.a.title, kind: ctx.a.kind });

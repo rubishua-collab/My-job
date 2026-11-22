@@ -247,3 +247,18 @@ body.typing .actionbar.sendbar{display:none}
 .edq-x{position:absolute;inset-inline-end:6px;top:50%;transform:translateY(-50%);min-height:36px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--accent);font:inherit;font-size:14px;font-weight:700;padding:0 10px;cursor:pointer}
 .edq-x[hidden]{display:none}
 tr[hidden]{display:none}
+
+/* מזעור חלון ״וואטסאפ פרטי״ */
+.sendbar .wa-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:-2px 0 2px}
+.sendbar .wa-minbtn{min-height:40px;font-weight:800}
+.sendbar .wa-tab{display:none}
+.sendbar.is-min{padding:0;gap:0;background:transparent;border:0;box-shadow:none;align-items:center}
+.sendbar.is-min .wa-body{display:none}
+.sendbar.is-min .wa-tab{display:flex;align-items:center;justify-content:center;gap:6px;align-self:center;min-height:44px;padding:0 22px;border-radius:14px 14px 0 0;border:1px solid var(--line);border-bottom:0;background:var(--wa,#1f8a4c);color:#fff;font:inherit;font-weight:800;font-size:15px;cursor:pointer;box-shadow:0 -4px 14px rgba(0,0,0,.15)}
+.sendbar.is-min .wa-tab .pill{background:rgba(255,255,255,.2);color:#fff}
+.sendbar .wa-body{display:flex;flex-direction:column;gap:8px}
+@keyframes waUp{from{transform:translateY(40px);opacity:.3}to{transform:none;opacity:1}}
+@keyframes waTab{from{transform:translateY(20px)}to{transform:none}}
+.sendbar.wa-opening .wa-body{animation:waUp .2s ease-out}
+.sendbar.wa-closing .wa-tab{animation:waTab .2s ease-out}
+@media (prefers-reduced-motion:reduce){.sendbar.wa-opening .wa-body,.sendbar.wa-closing .wa-tab{animation:none}}
