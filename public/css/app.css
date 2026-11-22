@@ -173,3 +173,10 @@ details>summary{cursor:pointer;font-weight:700;padding:6px 0}
 .accrow>.li{border-top:0}
 .accdel{min-width:64px;min-height:48px;margin:8px;padding:6px 10px;border:1px solid var(--neg);border-radius:10px;background:var(--surface);color:var(--neg);font:inherit;font-size:13px;font-weight:700;line-height:1.2;cursor:pointer;align-self:center}
 .accdel:active{background:color-mix(in srgb,var(--neg) 12%,var(--surface))}
+
+/* שליחת PDF ממסך חשבונות */
+.accbtns{display:flex;gap:6px;align-items:center;padding:8px 8px 8px 8px}
+.accbtns .accdel{margin:0}
+.accpdf{min-width:64px;min-height:48px;padding:6px 10px;border:1px solid var(--accent);border-radius:10px;background:var(--surface);color:var(--accent);font:inherit;font-size:13px;font-weight:700;line-height:1.2;cursor:pointer}
+.accpdf:active{background:var(--accent-soft)}
+@media (max-width:520px){.accbtns{flex-direction:column;gap:6px}.accbtns button{min-height:44px}}
