@@ -234,3 +234,9 @@ tr.mgpart td{background:color-mix(in srgb,var(--accent-soft) 25%,transparent)}
 /* הוצאות גובה */
 .wg-netbox b{color:var(--ok,#17603f);font-size:1.1em}
 .dayx{border-top:1px dashed var(--line);margin-top:8px}
+/* הסטטוס ״יש שינויים / שומר… / נשמר בשעה״ תופס מקום קבוע — כשהוא מופיע הרשימה לא זזה והנגיעה לא נוחתת על שורה אחרת */
+.saverow .savest,.saverow .savest:empty{display:block;flex-basis:100%;min-height:1.35em;line-height:1.35em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.band .savest{display:inline-block;min-width:13.5em;white-space:nowrap}
+.actionbar .savest{display:block;min-height:1.35em}
+/* בזמן הקלדה בשדה (מקלדת פתוחה באייפון) פס הוואטסאפ התחתון מוסתר — כך הוא לא מסתיר את השורה ולא גורם לגלילה */
+body.typing .actionbar.sendbar{display:none}

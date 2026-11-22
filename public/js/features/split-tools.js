@@ -19,6 +19,14 @@ function fmt(n) {
   const s = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
   return (neg ? '−' : '') + s;
 }
+// הקלדת שעה בספרות בלבד: מוסיפים נקודתיים לפני שתי הספרות האחרונות (1830 → 18:30). אם כבר יש נקודתיים — משאירים
+function fmtTyped(v) {
+  // תמיד מהספרות בלבד: 18 → 18, 184 → 18:4, 1845 → 18:45, 930 → 9:30 (93 אינה שעה), 1900 → 19:00
+  const d = String(v || '').replace(/\D/g, '').slice(0, 4);
+  if (d.length <= 2) return d;
+  if (d.length === 3) return +d.slice(0, 2) <= 23 ? d.slice(0, 2) + ':' + d[2] : d[0] + ':' + d.slice(1);
+  return d.slice(0, 2) + ':' + d.slice(2);
+}
 const kid = () => 'r' + String(uid()).replace(/-/g, '').slice(0, 14);
 const isRealColl = c => !!c && c !== CHANGE && c !== NOC_SP;
 const DEF_COLL = ['רובי', 'סמיילי', 'גובאני', 'שילו', 'טל', 'גלעד', 'אושר', 'עידן', 'טאייה'];
@@ -172,7 +180,7 @@ async function doSave(H, label = 'שמירת הפיצול') {
   const data = structuredClone(H.a); ['prev', '_version', '_updatedAt', '_updatedBy', '_times', 'id'].forEach(k => delete data[k]);
   data._editedAt = H.editedAt || Date.now(); H.editedAt = 0;
   SaveCtl.saving();
-  try { const out = await save('PUT', '/api/accounts/' + H.a.id, { data, baseVersion: H.a._version }, { label }); H.a._version = out.version; H.failed = false; if (!H.pend) SaveCtl.saved(); return true; }
+  try { const out = await save('PUT', '/api/accounts/' + H.a.id, { data, baseVersion: H.a._version }, { label }); H.a._version = out.version; H.failed = false; if (H.ctx && H.ctx.a && H.ctx.a.id === H.a.id) { H.ctx.a._version = out.version; } if (!H.pend) SaveCtl.saved(); return true; }
   catch (e) {
     H.failed = true; SaveCtl.failed();
     if (e.status === 409) { toast('הפיצול עודכן ממכשיר אחר. נטען מחדש — בדוק ונסה שוב'); try { H.a = await get('/api/accounts/' + H.a.id); } catch { /* */ } H.onReload && H.onReload(); }
@@ -560,6 +568,7 @@ function panelHolder(ctx) {
   if (H.a !== ctx.a && !H.pend && (ctx.a._version || 0) >= (H.a._version || 0)) H.a = ctx.a;
   H.onReload = () => { ctx.a = H.a; ctx.reload(); };
   // ״שמור שינויים״: שומר מיד את מה שממתין לשמירה האוטומטית (או מה שנכשל), בלי לצייר מחדש — נשארים באותו מקום
+  H.ctx = ctx;
   SaveCtl.register('split-panel', { isDirty: () => !!(H.pend || H.failed), save: async () => { const ok = await H.save('שמירה ידנית'); if (ok) ctx.a = H.a; return ok; } });
   return H;
 }
@@ -588,9 +597,9 @@ function listsHTML(ctx, A, X) {
   if (!withK.length) return '<div class="empty"><b>אין שורות</b></div>';
   const c = calcSplit(withK), phones = A.phones || [], known = knownCollectors(A.records);
   const show = r => !filtered || !vis || vis.has(r._k);
-  const tmIn = r => '<input class="in num tm" data-spt="' + esc(r._k) + '" data-fk="t|' + esc(r._k) + '" inputmode="numeric" placeholder="' + (r.na ? ST_NA : 'שעה') + '" value="' + esc(r.na ? '' : (normTime(r.t) || '')) + '" aria-label="שעת איסוף של ' + esc(r.n) + '">' +
+  const tmIn = r => '<input class="in num tm" enterkeyhint="next" autocomplete="off" pattern="[0-9:]*" data-spt="' + esc(r._k) + '" data-fk="t|' + esc(r._k) + '" inputmode="numeric" placeholder="' + (r.na ? ST_NA : 'שעה') + '" value="' + esc(r.na ? '' : (normTime(r.t) || '')) + '" aria-label="שעת איסוף של ' + esc(r.n) + '">' +
     '<button type="button" class="stb na" data-spna="' + esc(r._k) + '" aria-pressed="' + (r.na ? 'true' : 'false') + '" title="לא ענו: יעבור לבלוק נפרד בראש האיסוף היומי" aria-label="לא ענו – ' + esc(r.n) + '">' + ST_NA + '</button>';
-  const mvSel = r => '<select class="mv in" data-mv="' + esc(r._k) + '" title="בחר איזה גובה אוסף" aria-label="גובה שאוסף את הכסף של ' + esc(r.n) + '">' + collOptions(r.c, A.records) + '</select>';
+  const mvSel = r => '<select class="mv in" tabindex="-1" data-mv="' + esc(r._k) + '" title="בחר איזה גובה אוסף" aria-label="גובה שאוסף את הכסף של ' + esc(r.n) + '">' + collOptions(r.c, A.records) + '</select>';
   const penBtn = r => '<button class="x" type="button" data-spx-open="' + esc(r._k) + '" title="עריכה ופיצול סכום" aria-label="עריכה ופיצול סכום של ' + esc(r.n) + '">✎</button>';
   const hardB = r => '<button type="button" class="stb" data-hard="' + esc(r._k) + '" aria-pressed="' + (r.h === 'קשה' ? 'true' : 'false') + '" title="סימון קשה / לא קשה (לחיצה מחליפה)">' + (r.h === 'קשה' ? 'קשה' : r.h === 'לא קשה' ? 'לא קשה' : 'קשה?') + '</button>';
   // לווים מאוחדים (mg): ב״כל הגובים״ — פעם אחת תחת ״משויכים לכמה גובים״ עם הסכום הכולל והערות לפי גובה;
@@ -748,9 +757,12 @@ function panelBind(ctx) {
     const ti = e.target.closest('[data-spt]');
     if (ti) {
       const r = rec(ti.dataset.spt); if (!r) return;
-      const v = ti.value.trim(), nt = v ? normTime(v) : '';
-      if (v && !nt) { ti.value = normTime(r.t) || ''; return toast('שעה לא תקינה. כתוב למשל 09:30'); }
-      r.t = nt; ti.value = nt; if (nt && r.na) r.na = false; commit(ctx, H, 'שעת איסוף'); return;
+      const v = ti.value.trim(), nt = v ? normTime(fmtTyped(v)) : '';
+      if (v && !nt) { ti.value = normTime(r.t) || ''; return toast('שעה לא תקינה. כתוב למשל 1830 או 18:30'); }
+      if (nt === (normTime(r.t) || '') && !(nt && r.na)) { ti.value = nt; return; }
+      r.t = nt; ti.value = nt; if (nt && r.na) r.na = false;
+      // שומרים ברקע (בלי לצייר את הרשימה מחדש) — כך אפשר להמשיך מיד ללווה הבא
+      H.later('שעת איסוף'); timeSeq.touched = true; return;
     }
     const one = e.target.closest('[data-mv]'), all = e.target.closest('[data-mvall]');
     if (one) { const r = rec(one.dataset.mv); if (!r) return; r.c = one.value === '__none' ? '' : one.value; commit(ctx, H, 'שינוי גובה'); return; }
@@ -759,6 +771,41 @@ function panelBind(ctx) {
     const xf = e.target.dataset.xf;
     if (xf === 'side') { const r = rec(box.dataset.spx); if (r) { r.side = e.target.checked; commit(ctx, H, 'לא נגבה היום'); } return; }
     if (xf) { commit(ctx, H, 'עריכת שורה'); return; }
+  });
+  // ---- הזנת שעות ברצף (אייפון): בלי ציור מחדש בזמן ההזנה, ״הבא״ עובר לשדה השעה של הלווה הבא ----
+  const timeSeq = X.timeSeq || (X.timeSeq = { touched: false, t: null });
+  L.addEventListener('input', (e) => {
+    const ti = e.target.closest('[data-spt]'); if (!ti) return;
+    const raw = ti.value, pos = ti.selectionStart ?? raw.length;
+    const digitsBefore = raw.slice(0, pos).replace(/\D/g, '').length;
+    const out = fmtTyped(raw);
+    if (out !== raw) { ti.value = out; let i = 0, d = 0; while (i < out.length && d < digitsBefore) { if (/\d/.test(out[i])) d++; i++; } try { ti.setSelectionRange(i, i); } catch { /* */ } }
+    SaveCtl.dirty();
+  }, true);
+  L.addEventListener('keydown', (e) => {
+    const ti = e.target.closest('[data-spt]'); if (!ti || e.key !== 'Enter') return;
+    e.preventDefault(); const all = [...L.querySelectorAll('[data-spt]')]; const nx = all[all.indexOf(ti) + 1];
+    if (nx) { nx.focus({ preventScroll: true }); showAboveKeyboard(nx); } else ti.blur();
+  });
+  // גלילה רק במידה הדרושה כדי לראות את השדה מעל המקלדת (visualViewport = האזור שנשאר גלוי כשהמקלדת פתוחה)
+  const showAboveKeyboard = (el) => {
+    const vv = window.visualViewport, h = vv ? vv.height + (vv.offsetTop || 0) : innerHeight;
+    const sb = document.querySelector('.search'), topLimit = sb ? Math.max(0, sb.getBoundingClientRect().bottom) + 8 : 8;
+    const r = el.getBoundingClientRect();
+    if (r.bottom > h - 12) window.scrollBy(0, r.bottom - (h - 12)); else if (r.top < topLimit) window.scrollBy(0, r.top - topLimit);
+  };
+  L.addEventListener('focusin', (e) => { if (e.target.closest('[data-spt]')) clearTimeout(timeSeq.t); });
+  L.addEventListener('focusout', (e) => {
+    if (!e.target.closest('[data-spt]')) return;
+    clearTimeout(timeSeq.t);
+    // סוף הרצף (״סיום״ / נגיעה מחוץ לשדות השעה): שומרים, ואז מסדרים מחדש לפי שעה — רק כשאף שדה שעה לא פעיל
+    timeSeq.t = setTimeout(async () => {
+      if (document.activeElement && document.activeElement.closest && document.activeElement.closest('[data-spt]')) return;
+      if (!timeSeq.touched) return; timeSeq.touched = false;
+      const ok = await H.flush(); if (ok) ctx.a = H.a;
+      if (document.activeElement && document.activeElement.closest && document.activeElement.closest('[data-spt]')) return;
+      const y = window.scrollY; await ctx.reload(); window.scrollTo(0, y);
+    }, 700);
   });
   L.addEventListener('input', (e) => {
     const ma = e.target.closest('[data-mga]');

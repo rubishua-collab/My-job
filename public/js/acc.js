@@ -83,6 +83,7 @@ export async function renderAccount(view, [id], q) {
   return onLive(async (e) => {
     if (e.col !== 'accounts' || e.id !== id || e.version === ctx.a._version) return;
     if (document.querySelector('#sheet:not([hidden])')) return;
+    const ae = document.activeElement; if (ae && view.contains(ae) && ae.matches('input,textarea,select')) return; // באמצע הקלדה — לא מציירים מחדש
     ctx.a = await get('/api/accounts/' + id); const y = window.scrollY; draw(ctx); window.scrollTo(0, y);
     toast('עודכן ממכשיר אחר' + (e.by ? ' (' + e.by + ')' : ''));
   });
@@ -172,7 +173,7 @@ async function exactCount(ctx) {
 }
 function actionBar(ctx, vis) {
   const allVisSel = vis.length && vis.every(v => ctx.sel.has(v.ref));
-  return `<div class="actionbar no-print"><div class="row sp"><label class="row" style="font-weight:700;cursor:pointer"><input type="checkbox" id="selall" class="ck" style="width:24px;height:24px" ${allVisSel ? 'checked' : ''}> בחר את כל תוצאות הסינון (${vis.length})</label>
+  return `<div class="actionbar sendbar no-print"><div class="row sp"><label class="row" style="font-weight:700;cursor:pointer"><input type="checkbox" id="selall" class="ck" style="width:24px;height:24px" ${allVisSel ? 'checked' : ''}> בחר את כל תוצאות הסינון (${vis.length})</label>
     ${ctx.sel.size ? `<button class="btn plain sm" id="selnone">נקה בחירה (${ctx.sel.size} שורות)</button>` : ''}</div>
     <button class="btn wa ${ctx.sel.size ? 'xl' : ''}" id="sendpriv" ${ctx.sel.size ? '' : 'disabled'}>וואטסאפ פרטי · הכן הודעה אישית ל־${ctx.sel.size} שורות</button>
     <button class="btn ghost" id="sendwa" disabled>שלח בוואטסאפ ל־0 לקוחות</button><div id="sendinfo" class="small muted">הכפתור התחתון שולח דרך החשבון העסקי (יעבוד אחרי אישור Meta)</div></div>`;

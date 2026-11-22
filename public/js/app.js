@@ -59,6 +59,11 @@ export async function go() {
   }
 }
 window.addEventListener('hashchange', go);
+// מצב ״הקלדה״ — רק בטלפון/טאבלט (מסך מגע) ורק בשדות השעה ברשימת הפיצול, שם מקלידים ברצף והפס מסתיר שורות:
+const TYPING = (el) => !!(el && el.matches && matchMedia('(pointer: coarse)').matches && el.matches('#spt-lists input[data-spt], #spt-lists input[data-mga]'));
+// בזמן שהמקלדת פתוחה בשדה טקסט/מספר — מסתירים את הפס התחתון (ראה app.css body.typing)
+document.addEventListener('focusin', (e) => { if (TYPING(e.target)) document.body.classList.add('typing'); });
+document.addEventListener('focusout', () => { setTimeout(() => { const a = document.activeElement; if (!TYPING(a)) document.body.classList.remove('typing'); }, 400); }); // השהיה: במעבר בין שדות הפס לא מהבהב ולא מזיז את הרשימה
 document.addEventListener('click', async (e) => {
   const act = e.target.closest('[data-act]');
   if (act) { const a = act.dataset.act; if (a === 'back') history.back(); else if (a === 'print') print(); else if (a === 'reload') location.reload(); else if (a === 'hidep') act.parentNode.hidden = true; return; }
