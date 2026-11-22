@@ -8,7 +8,7 @@ import { route, accountAction, accountPanel } from '../registry.js';
 import { SaveCtl } from '../savectl.js';
 import { get, save, uid } from '../api.js';
 import { $, $$, esc, money, dmy, todayISO, toast, openSheet } from '../ui.js';
-import { borrowerCandidates, applyMerge, unmerge, partStatus, mgGroups, mgTotal, collNotes, collShare } from '../split-merge.js';
+import { borrowerCandidates, applyMerge, unmerge, partStatus, mgGroups, mgTotal, collNotes, collShare, byCollector as byColl } from '../split-merge.js';
 import { App, onLive } from '../app.js';
 import { calcSplit, num, r2, sum, normName, normTime, timeMin, normStatus, ST_NA, ST_GOT, ST_NOT, cleanPh, phShow, normHard, cleanColl, isSagi, cmpRec, CHANGE, NOC_SP } from '../calc.js';
 
@@ -606,9 +606,9 @@ function listsHTML(ctx, A, X) {
       h += '<div class="ph mgph"><span>משויכים לכמה גובים · ' + gs.length + '</span></div>';
       h += gs.map(([mg, rows]) => {
         const nm = String(rows[0].n || '').trim(), open = X.mgOpen === mg;
-        const full = open ? '<div class="tbl-wrap mgfull"><table><thead><tr><th>גובה</th><th>סכום</th><th>שעת איסוף</th><th>סטטוס</th><th>הערה</th></tr></thead><tbody>' + rows.map(r =>
-          '<tr><td>' + mvSel(r) + '</td><td><input class="in num" data-mga="' + esc(r._k) + '" inputmode="decimal" value="' + esc(r.a ?? '') + '" aria-label="סכום של ' + esc(nm) + ' אצל ' + esc(r.c || '') + '"></td><td class="tmcell">' + tmIn(r) + '</td><td>' + esc(partStatus(r)) + '</td><td><input class="in" data-mgn="' + esc(r._k) + '" value="' + esc(r.note || '') + '" placeholder="הערה" aria-label="הערה"></td></tr>').join('') + '</tbody></table></div>' : '';
-        return '<div class="mgp" data-mgp="' + esc(mg) + '"><div class="mgp-h"><span><b>' + esc(nm) + '</b> — סה״כ <b class="mgp-tot">' + fmt(mgTotal(rows)) + ' ₪</b></span><button type="button" class="btn ghost sm" data-mgfull="' + esc(mg) + '" aria-expanded="' + open + '">' + (open ? 'סגור פירוט' : 'פירוט מלא') + '</button></div>' +
+        const full = open ? '<div class="tbl-wrap mgfull"><table><thead><tr><th></th><th>גובה</th><th>סכום</th><th>שעת איסוף</th><th>סטטוס</th><th>הערה</th></tr></thead><tbody>' + rows.map(r =>
+          '<tr><td><button type="button" class="btn danger sm mgdel" data-mgdel="' + esc(r._k) + '" aria-label="מחק שורה של ' + esc(nm) + ' אצל ' + esc(r.c || '') + '">🗑 מחק שורה</button></td><td>' + mvSel(r) + '</td><td><input class="in num" data-mga="' + esc(r._k) + '" inputmode="decimal" value="' + esc(r.a ?? '') + '" aria-label="סכום של ' + esc(nm) + ' אצל ' + esc(r.c || '') + '"></td><td class="tmcell">' + tmIn(r) + '</td><td>' + esc(partStatus(r)) + '</td><td><input class="in" data-mgn="' + esc(r._k) + '" value="' + esc(r.note || '') + '" placeholder="הערה" aria-label="הערה"></td></tr>').join('') + '</tbody></table></div>' : '';
+        return '<div class="mgp" data-mgp="' + esc(mg) + '"><div class="mgp-h"><span><b>' + esc(nm) + '</b> — סה״כ <b class="mgp-tot">' + fmt(mgTotal(rows)) + ' ₪</b></span><span class="row" style="gap:6px"><button type="button" class="btn ghost sm" data-mgfull="' + esc(mg) + '" aria-expanded="' + open + '">' + (open ? 'סגור פירוט' : 'פירוט מלא') + '</button><button type="button" class="btn danger sm" data-mgdelall="' + esc(mg) + '">מחק את כל החוב מהרשימה</button></span></div>' +
           '<div class="mgp-nl">הערות:</div><div class="mgp-notes" role="textbox" aria-readonly="true" aria-label="הערות ' + esc(nm) + '">' + esc(collNotes(rows)) + '</div>' + full + '</div>';
       }).join('');
     }
@@ -690,8 +690,40 @@ function panelBind(ctx) {
   if (ph) ph.onchange = (e) => { const c = e.target.dataset.ph; if (!c) return; const a = A(); a.phones = a.phones || []; const i = a.phones.indexOf(c); if (e.target.checked && i < 0) a.phones.push(c); if (!e.target.checked && i >= 0) a.phones.splice(i, 1); commit(ctx, H, 'טלפון ברשימה'); };
   // רשימות: שעה, לא ענו, גובה, קשה, ✎
   const L = $('#spt-lists', root);
+  // מחיקת חוב מהרשימה הפתוחה בלבד (הפיצול של התאריך הזה) — לפי מזהה השורה / מזהה הקבוצה. כרטיס הלקוח, ההלוואות והתשלומים לא נוגעים.
+  const settle = (a, mg) => { const left = (a.records || []).filter(r => r.mg === mg); if (left.length === 1) delete left[0].mg; if (X.mgOpen === mg && left.length < 2) X.mgOpen = null; return left; };
+  const delRow = (k) => {
+    const a = A(), r = (a.records || []).find(x => x._k === k); if (!r) return;
+    const nm = String(r.n || '').trim(), cl = String(r.c || '').trim() || 'ללא גובה';
+    const s = openSheet(`<div class="hd"><h2>מחיקת שורת חוב</h2><button class="x" data-close>×</button></div>
+      <div class="note warn"><b>${esc(nm)}</b><br>גובה: <b>${esc(cl)}</b> · סכום: <b>${fmt(num(r.a))} ₪</b>${r.t ? ' · שעה ' + esc(r.t) : ''}${r.note ? '<br>הערה: ' + esc(r.note) : ''}</div>
+      <p class="small muted">תימחק רק השורה הזו מהפיצול של ${dmy(a.date)}. שאר החובות של ${esc(nm)}, כרטיס הלקוח וההלוואות לא משתנים.</p>
+      <div class="row"><button class="btn danger xl" id="dlok" style="flex:1">מחק שורה</button><button class="btn ghost xl" id="dlno" style="flex:1">ביטול</button></div>`);
+    $('#dlno', s.el).onclick = () => s.close();
+    $('#dlok', s.el).onclick = () => {
+      s.close(); const mg = r.mg; const i = a.records.indexOf(r); if (i < 0) return; a.records.splice(i, 1);
+      const left = mg ? settle(a, mg) : [];
+      const msg = left.length >= 2 ? `נמחקה השורה של ${cl} (${fmt(num(r.a))} ₪). ${nm}: סה״כ ${fmt(sum(left.map(x => num(x.a))))} ₪` : left.length === 1 ? `נמחקה השורה של ${cl}. ${nm} עבר לרשימה של ${String(left[0].c || '').trim() || 'ללא גובה'} (${fmt(num(left[0].a))} ₪)` : `נמחקה השורה האחרונה של ${nm}`;
+      commit(ctx, H, 'מחיקת שורת חוב', msg);
+    };
+  };
+  const delAll = (mg) => {
+    const a = A(), rows = (a.records || []).filter(r => r.mg === mg); if (!rows.length) return; // כולל שורות שמוסתרות בסינון
+    const nm = String(rows[0].n || '').trim(), tot = sum(rows.map(r => num(r.a)));
+    const s = openSheet(`<div class="hd"><h2>מחיקת כל החוב מהרשימה</h2><button class="x" data-close>×</button></div>
+      <div class="note warn"><b>${esc(nm)}</b> · ${rows.length} שורות</div>
+      <div class="tbl-wrap"><table><thead><tr><th>גובה</th><th class="a">סכום</th></tr></thead><tbody>${byColl(rows).map(x => `<tr><td>${esc(x.c)}</td><td class="a">${fmt(x.a)} ₪</td></tr>`).join('')}</tbody><tfoot><tr><td><b>סה״כ שיימחק</b></td><td class="a"><b>${fmt(tot)} ₪</b></td></tr></tfoot></table></div>
+      <p class="small muted">יימחקו רק השורות של ${esc(nm)} בפיצול של ${dmy(a.date)}. כרטיס הלקוח, ההלוואה המקורית והיסטוריית התשלומים לא משתנים.</p>
+      <div class="row"><button class="btn danger xl" id="daok" style="flex:1">אשר מחיקת כל החוב</button><button class="btn ghost xl" id="dano" style="flex:1">ביטול</button></div>`);
+    $('#dano', s.el).onclick = () => s.close();
+    $('#daok', s.el).onclick = () => { s.close(); a.records = a.records.filter(r => r.mg !== mg); if (X.mgOpen === mg) X.mgOpen = null; commit(ctx, H, 'מחיקת כל החוב של לווה', `נמחק כל החוב של ${nm} מהרשימה (${rows.length} שורות, ${fmt(tot)} ₪)`); };
+  };
   const mgLive = (mg) => { const box = L.querySelector(`[data-mgp="${CSS.escape(mg)}"]`); const g = mgGroups(A().records || []).get(mg); if (!box || !g) return; box.querySelector('.mgp-tot').textContent = fmt(mgTotal(g)) + ' ₪'; box.querySelector('.mgp-notes').textContent = collNotes(g); };
   L.addEventListener('click', (e) => {
+    const md = e.target.closest('[data-mgdel]');
+    if (md) { delRow(md.dataset.mgdel); return; }
+    const mda = e.target.closest('[data-mgdelall]');
+    if (mda) { delAll(mda.dataset.mgdelall); return; }
     const mf = e.target.closest('[data-mgfull]');
     if (mf) { X.mgOpen = X.mgOpen === mf.dataset.mgfull ? null : mf.dataset.mgfull; ctx.reload(); return; }
     const nb = e.target.closest('[data-spna]');

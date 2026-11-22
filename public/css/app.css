@@ -222,3 +222,7 @@ tr.mgpart td{background:color-mix(in srgb,var(--accent-soft) 25%,transparent)}
 .mgp-nl{font-size:13px;color:var(--muted);margin-top:6px}
 .mgp-notes{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--bg);font-size:15px;line-height:1.5;white-space:normal;overflow-wrap:anywhere}
 .mgfull{margin-top:8px} .mgfull td{vertical-align:middle} .mgfull .in{min-width:80px} .mgfull .tmcell{white-space:nowrap}
+
+/* מחיקה מכרטיס לווה */
+.mgdel{white-space:nowrap;min-height:40px}
+.mgp-h .btn{min-height:40px}

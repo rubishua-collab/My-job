@@ -42,7 +42,7 @@ const results = []; const step = async (n, f) => { try { await f(); results.push
   await step('״פירוט מלא״: כל שורות המקור עם גובה, סכום, שעת איסוף, סטטוס והערה מקורית', async () => {
     await mgp('אדיר לביא').locator('[data-mgfull]').click(); await p.waitForSelector('#spt-lists .mgfull');
     const rows = mgp('אדיר לביא').locator('.mgfull tbody tr'); assert.strictEqual(await rows.count(), 3);
-    const vals = []; for (let i = 0; i < 3; i++) { const r = rows.nth(i); vals.push([await r.locator('select[data-mv]').inputValue(), await r.locator('[data-mga]').inputValue(), await r.locator('[data-spt]').inputValue(), (await r.locator('td').nth(3).innerText()).trim(), await r.locator('[data-mgn]').inputValue()]); }
+    const vals = []; for (let i = 0; i < 3; i++) { const r = rows.nth(i); vals.push([await r.locator('select[data-mv]').inputValue(), await r.locator('[data-mga]').inputValue(), await r.locator('[data-spt]').inputValue(), (await r.locator('td').nth(4).innerText()).trim(), await r.locator('[data-mgn]').inputValue()]); }
     assert.deepStrictEqual(vals, [['אושר', '3200', '10:00', 'לאסוף', 'מזומן'], ['רובי', '1200', '12:30', 'לאסוף', ''], ['רובי', '1000', '13:00', 'לאסוף', 'יתרה ישנה']]);
   });
   await step('עריכת סכום בשורת מקור מעדכנת מיד את הסה״כ ואת ההערות, ונשמרת', async () => {
