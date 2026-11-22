@@ -83,3 +83,13 @@ export function applyMerge(groups) {
   return done;
 }
 export const partStatus = (r) => r.xd ? 'הועבר לאיסוף' : r.side ? 'לא נגבה היום' : r.na ? 'לא ענו' : (r.t ? 'לאסוף' : 'ממתין');
+
+// הערות אוטומטיות ללווה מאוחד: סכום לכל גובה (שם הגובה בדיוק כפי שנכתב — ״אושר״ ו״אושר 2״ נשארים נפרדים)
+export function byCollector(rows) {
+  const m = new Map();
+  for (const r of rows || []) { const c = String(r.c || '').trim() || 'ללא גובה'; m.set(c, r2((m.get(c) || 0) + num(r.a))); }
+  return [...m.entries()].map(([c, a]) => ({ c, a }));
+}
+const fmtN = (n) => (Math.round((+n || 0) * 100) / 100).toLocaleString('he-IL', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+export const collNotes = (rows) => byCollector(rows).map(x => `${x.c} ${fmtN(x.a)} ₪`).join(' | ');
+export const collShare = (rows, c) => r2(sum((rows || []).filter(r => String(r.c || '').trim() === String(c || '').trim()).map(r => num(r.a))));

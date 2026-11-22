@@ -8,7 +8,7 @@ import { route, accountAction, accountPanel } from '../registry.js';
 import { SaveCtl } from '../savectl.js';
 import { get, save, uid } from '../api.js';
 import { $, $$, esc, money, dmy, todayISO, toast, openSheet } from '../ui.js';
-import { borrowerCandidates, applyMerge, unmerge, partStatus } from '../split-merge.js';
+import { borrowerCandidates, applyMerge, unmerge, partStatus, mgGroups, mgTotal, collNotes, collShare } from '../split-merge.js';
 import { App, onLive } from '../app.js';
 import { calcSplit, num, r2, sum, normName, normTime, timeMin, normStatus, ST_NA, ST_GOT, ST_NOT, cleanPh, phShow, normHard, cleanColl, isSagi, cmpRec, CHANGE, NOC_SP } from '../calc.js';
 
@@ -593,15 +593,36 @@ function listsHTML(ctx, A, X) {
   const mvSel = r => '<select class="mv in" data-mv="' + esc(r._k) + '" title="בחר איזה גובה אוסף" aria-label="גובה שאוסף את הכסף של ' + esc(r.n) + '">' + collOptions(r.c, A.records) + '</select>';
   const penBtn = r => '<button class="x" type="button" data-spx-open="' + esc(r._k) + '" title="עריכה ופיצול סכום" aria-label="עריכה ופיצול סכום של ' + esc(r.n) + '">✎</button>';
   const hardB = r => '<button type="button" class="stb" data-hard="' + esc(r._k) + '" aria-pressed="' + (r.h === 'קשה' ? 'true' : 'false') + '" title="סימון קשה / לא קשה (לחיצה מחליפה)">' + (r.h === 'קשה' ? 'קשה' : r.h === 'לא קשה' ? 'לא קשה' : 'קשה?') + '</button>';
+  // לווים מאוחדים (mg): ב״כל הגובים״ — פעם אחת תחת ״משויכים לכמה גובים״ עם הסכום הכולל והערות לפי גובה;
+  // החלקים שלהם לא חוזרים ברשימות הגובים (אבל נספרים בסה״כ של כל גובה, משורות המקור).
+  const byK = new Map((A.records || []).map(r => [r._k, r])), G = mgGroups(A.records || []);
+  const mgOf = r => { const s = byK.get(r._k); return s && s.mg && G.get(s.mg) ? s.mg : null; };
+  const allMode = !ctx.coll;
+  const show0 = show; const showR = r => show0(r) && !(allMode && mgOf(r));
   let h = '';
+  if (allMode && G.size) {
+    const gs = [...G.entries()].filter(([mg]) => !filtered || !vis || vis.has('mg:' + mg));
+    if (gs.length) {
+      h += '<div class="ph mgph"><span>משויכים לכמה גובים · ' + gs.length + '</span></div>';
+      h += gs.map(([mg, rows]) => {
+        const nm = String(rows[0].n || '').trim(), open = X.mgOpen === mg;
+        const full = open ? '<div class="tbl-wrap mgfull"><table><thead><tr><th>גובה</th><th>סכום</th><th>שעת איסוף</th><th>סטטוס</th><th>הערה</th></tr></thead><tbody>' + rows.map(r =>
+          '<tr><td>' + mvSel(r) + '</td><td><input class="in num" data-mga="' + esc(r._k) + '" inputmode="decimal" value="' + esc(r.a ?? '') + '" aria-label="סכום של ' + esc(nm) + ' אצל ' + esc(r.c || '') + '"></td><td class="tmcell">' + tmIn(r) + '</td><td>' + esc(partStatus(r)) + '</td><td><input class="in" data-mgn="' + esc(r._k) + '" value="' + esc(r.note || '') + '" placeholder="הערה" aria-label="הערה"></td></tr>').join('') + '</tbody></table></div>' : '';
+        return '<div class="mgp" data-mgp="' + esc(mg) + '"><div class="mgp-h"><span><b>' + esc(nm) + '</b> — סה״כ <b class="mgp-tot">' + fmt(mgTotal(rows)) + ' ₪</b></span><button type="button" class="btn ghost sm" data-mgfull="' + esc(mg) + '" aria-expanded="' + open + '">' + (open ? 'סגור פירוט' : 'פירוט מלא') + '</button></div>' +
+          '<div class="mgp-nl">הערות:</div><div class="mgp-notes" role="textbox" aria-readonly="true" aria-label="הערות ' + esc(nm) + '">' + esc(collNotes(rows)) + '</div>' + full + '</div>';
+      }).join('');
+    }
+  }
+  const shareTag = r => { const mg = !allMode && mgOf(r); if (!mg) return ''; const g = G.get(mg); return ' <span class="pill acc mgshare">חלקו של ' + esc(String(r.c || '').trim()) + ' ' + fmt(collShare(g, r.c)) + ' ₪ · חוב כולל ' + fmt(mgTotal(g)) + ' ₪</span>'; };
   c.blocks.forEach(b => {
+    const show = showR;
     const wp = phones.indexOf(b.c) >= 0;
     const rowsAll = b.sections.flatMap(x => x.rows); if (filtered && !rowsAll.some(show)) return;
     const allSel = b.c === NOC_SP ? '<select class="mv all in" data-mvall="1" aria-label="שייך את כל השורות בלי גובה"><option value="">שייך הכל ל…</option>' + known.map(x => '<option value="' + esc(x) + '">' + esc(x) + '</option>').join('') + '</select>' : '';
     h += '<div class="ph"><span>' + esc(blockTitle(b)) + ' · ' + b.count + (b.special ? ' <span class="pill">לא כלול בסה״כ</span>' : '') + '</span>' + allSel + '</div>';
     for (const x of b.sections) {
       if (x.t) h += '<div class="grp-h ' + x.cls + '">' + esc(x.t) + '</div>';
-      h += x.rows.map((r, i) => show(r) ? '<div class="pl">' + tmIn(r) + '<span class="pl-t">' + (i + 1) + '. ' + lineParts(r, wp) + '</span>' + hardB(r) + mvSel(r) + penBtn(r) + '</div>' + (X.spx.open === r._k ? spxHTML(A, X, r._k) : '') : '').join('');
+      h += x.rows.map((r, i) => show(r) ? '<div class="pl">' + tmIn(r) + '<span class="pl-t">' + (i + 1) + '. ' + lineParts(r, wp) + shareTag(r) + '</span>' + hardB(r) + mvSel(r) + penBtn(r) + '</div>' + (X.spx.open === r._k ? spxHTML(A, X, r._k) : '') : '').join('');
       if (b.sections.length > 1) h += '<div class="sub">סה״כ ' + esc(x.t) + ': ' + money(x.total) + '</div>';
     }
     h += '<div class="sub">סה״כ ' + esc(blockTitle(b)) + ': ' + money(b.total) + '</div>';
@@ -669,7 +690,10 @@ function panelBind(ctx) {
   if (ph) ph.onchange = (e) => { const c = e.target.dataset.ph; if (!c) return; const a = A(); a.phones = a.phones || []; const i = a.phones.indexOf(c); if (e.target.checked && i < 0) a.phones.push(c); if (!e.target.checked && i >= 0) a.phones.splice(i, 1); commit(ctx, H, 'טלפון ברשימה'); };
   // רשימות: שעה, לא ענו, גובה, קשה, ✎
   const L = $('#spt-lists', root);
+  const mgLive = (mg) => { const box = L.querySelector(`[data-mgp="${CSS.escape(mg)}"]`); const g = mgGroups(A().records || []).get(mg); if (!box || !g) return; box.querySelector('.mgp-tot').textContent = fmt(mgTotal(g)) + ' ₪'; box.querySelector('.mgp-notes').textContent = collNotes(g); };
   L.addEventListener('click', (e) => {
+    const mf = e.target.closest('[data-mgfull]');
+    if (mf) { X.mgOpen = X.mgOpen === mf.dataset.mgfull ? null : mf.dataset.mgfull; ctx.reload(); return; }
     const nb = e.target.closest('[data-spna]');
     if (nb) { const r = rec(nb.dataset.spna); if (!r) return; r.na = !r.na; if (r.na) r.t = ''; commit(ctx, H, 'לא ענו'); return; }
     const hb = e.target.closest('[data-hard]');
@@ -686,6 +710,9 @@ function panelBind(ctx) {
     if (dl) { if (!armed(dl, 'לחץ שוב למחיקה', 'מחק שורה')) return; const a = A(); const i = a.records.findIndex(x => x._k === box.dataset.spx); if (i >= 0) a.records.splice(i, 1); X.spx.open = null; X.spx.draft = null; commit(ctx, H, 'מחיקת שורה', 'השורה נמחקה'); }
   });
   L.addEventListener('change', (e) => {
+    const ma = e.target.closest('[data-mga]'), mn = e.target.closest('[data-mgn]');
+    if (ma) { const r = rec(ma.dataset.mga); if (!r) return; r.a = num(ma.value); commit(ctx, H, 'סכום בשורת מקור'); return; }
+    if (mn) { const r = rec(mn.dataset.mgn); if (!r) return; r.note = mn.value.trim(); commit(ctx, H, 'הערה בשורת מקור'); return; }
     const ti = e.target.closest('[data-spt]');
     if (ti) {
       const r = rec(ti.dataset.spt); if (!r) return;
@@ -702,6 +729,9 @@ function panelBind(ctx) {
     if (xf) { commit(ctx, H, 'עריכת שורה'); return; }
   });
   L.addEventListener('input', (e) => {
+    const ma = e.target.closest('[data-mga]');
+    if (ma) { const r = rec(ma.dataset.mga); if (r) { r.a = num(ma.value); H.later('סכום בשורת מקור'); mgLive(r.mg); } return; }
+    if (e.target.closest('[data-mgn]')) { const r = rec(e.target.dataset.mgn); if (r) { r.note = e.target.value; H.later('הערה בשורת מקור'); } return; }
     const box = e.target.closest('[data-spx]'); if (!box) return;
     const r = rec(box.dataset.spx); if (!r) return;
     const xf = e.target.dataset.xf, xs = e.target.dataset.xs;
