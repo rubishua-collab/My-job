@@ -1112,5 +1112,6 @@ async function xferView(view, args) {
 }
 
 route('xfer', xferView);
+accountAction('split', { label: 'הוסף הוצאה', can: (App) => App.can.finance, run: async (ctx) => { const { openExpenseForm } = await import('../expense-form.js'); openExpenseForm({ date: ctx.a.date, onSaved: () => ctx.reload() }); } });
 accountAction('split', { label: 'העברה לאיסוף יומי', can: (App) => App.can.finance, run: (ctx) => { location.hash = '#/xfer/' + ctx.a.id; } });
 accountPanel('split', panelRender, panelBind);

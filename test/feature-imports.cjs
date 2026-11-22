@@ -102,7 +102,7 @@ const COLL_TEXT = 'חובות\n1. ישראל ישראלי – 1,500 ₪ – רו
     await p.waitForSelector('.kpis');
     // מעבר מסך מעריכה שלא נשמרה פותח ״יש שינויים שטרם נשמרו״ — בבדיקה הזו בוחרים ״המשך בלי לשמור״
     const og = p.goto.bind(p);
-    p.goto = async (u, o) => { const r = await og(u, o); const lv = await p.waitForSelector('#lvgo', { timeout: 300 }).catch(() => null); if (lv) { await lv.click(); await p.waitForTimeout(150); } return r; };
+    p.goto = async (u, o) => { const r = await og(u, o); const lv = await p.waitForSelector('#lvgo', { timeout: 1000 }).catch(() => null); if (lv) { await lv.click(); await p.waitForTimeout(150); } return r; };
   });
 
   await step('המרת קישורי Google Sheets (שרת)', async () => {

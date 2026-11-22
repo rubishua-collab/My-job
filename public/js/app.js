@@ -45,7 +45,7 @@ export async function go() {
   if (rname !== 'login' && !App.me) {
     try { const m = await get('/api/me'); App.me = m.user; App.can = m.can; startLive(); } catch { return; }
   }
-  App.route = h;
+  App.route = h; App.nav = (App.nav || 0) + 1; // מזהה מעבר: טעינה איטית של מסך קודם לא תצייר מעל המסך הנוכחי
   if (App.me) drawNav();
   const fn = routes[rname] || R.routes[rname] || renderToday;
   const view = $('#view');

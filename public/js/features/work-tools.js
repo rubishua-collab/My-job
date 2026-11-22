@@ -78,14 +78,12 @@ accountAction('work', {
       $('#xlist', s.el).innerHTML = xs.length ? `<div class="small muted">${xs.length} הוצאות · סה״כ ${fmt(sum(xs.map(x => num(x.a))))} ₪</div><div class="list">${xs.map(x => `<div class="li noc"><div class="t">${esc(x.n)}${x.lk ? ' <span class="pill acc">מקושרת לאיסוף</span>' : ''}${x.nf ? ' <span class="pill">לא מכספי האיסוף</span>' : ''}</div><div class="a">${fmt(num(x.a))} ₪</div><div class="m"><span>${esc(cleanColl(x.c) || 'ללא גובה')}</span>${x.by && x.by !== '@' ? `<span>של: ${esc(x.by)}</span>` : ''}</div><div style="grid-column:1/-1"><button class="btn plain sm" data-xdel="${esc(x._k)}">הסר הוצאה</button></div></div>`).join('')}</div>` : '<div class="empty">אין עדיין הוצאות ברשימה הזו</div>';
     };
     const s = openSheet(`<div class="hd"><h2>הוצאות של גובה</h2><button class="x" data-close>×</button></div>
-      <p class="small muted" style="margin:0">בחר גובה, כתוב את ההוצאה והסכום והוסף. ההוצאה מופיעה ברשימה של אותו גובה, יורדת מהסיכום שלו (נטו), נכנסת להעתקה ול-PDF ונשמרת יחד עם הרשימה.</p>
-      <div class="grid" style="margin-top:8px"><label class="f">גובה<select class="in" id="w-x-c">${xCollOptions(ctx.a.entries || [], '')}</select></label>
-      <label class="f">הוצאה<input class="in" id="w-x-n" placeholder="למשל דלק"></label>
-      <label class="f">סכום<input class="in n" id="w-x-a" inputmode="decimal" placeholder="300"></label></div>
-      <div class="row" style="margin-top:8px"><button class="btn" id="w-x-add">הוסף הוצאה</button></div><div id="xlist" style="margin-top:12px"></div>`);
+      <p class="small muted" style="margin:0">ההוצאה מופיעה ברשימה של אותו גובה (גם ב״פיצול״ של אותו תאריך), יורדת מ״נטו למסירה״ שלו, נכנסת להעתקה ול-PDF ונשמרת יחד עם הרשימה.</p>
+      <div class="row" style="margin-top:8px"><button class="btn xl" id="w-x-new" style="width:100%">הוסף הוצאה</button></div><div id="xlist" style="margin-top:12px"></div>`);
     draw(s);
+    $('#w-x-new', s.el).onclick = async () => { const { openExpenseForm } = await import('../expense-form.js'); openExpenseForm({ date: ctx.a.date, workId: ctx.a.id, onSaved: () => ctx.reload() }); };
     let opId = uid();
-    $('#w-x-add', s.el).onclick = async (ev) => {
+    if ($('#w-x-add', s.el)) $('#w-x-add', s.el).onclick = async (ev) => {
       const c = $('#w-x-c', s.el).value, n = $('#w-x-n', s.el).value.trim(), a = num($('#w-x-a', s.el).value);
       if (!c) return toast('בחר לאיזה גובה ההוצאה');
       if (!n && !a) return toast('כתוב שם הוצאה וסכום');
@@ -97,8 +95,7 @@ accountAction('work', {
         $('#w-x-n', s.el).value = ''; $('#w-x-a', s.el).value = ''; toast('ההוצאה נוספה' + (c === NOX ? '' : ' ל' + cleanColl(c))); $('#w-x-n', s.el).focus();
       } catch (e) { toast(errMsg(e)); } finally { ev.target.disabled = false; }
     };
-    $('#w-x-a', s.el).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#w-x-add', s.el).click(); } });
-    $('#w-x-n', s.el).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#w-x-a', s.el).focus(); } });
+
     $('#xlist', s.el).addEventListener('click', async (e) => {
       const d = e.target.closest('[data-xdel]'); if (!d) return;
       const x = (ctx.a.expenses || []).find(v => v._k === d.dataset.xdel); if (!x || !confirm('להסיר את ההוצאה ' + (x.n || '') + '?')) return;

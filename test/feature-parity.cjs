@@ -57,7 +57,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     assert.strictEqual(r.status, 200);
     await p.goto(URL + '/#/acc/' + WORK19); await p.waitForSelector('.card h2');
     const txt = await p.textContent('#view');
-    for (const w of ['גבייה ברוטו (צפוי)', 'הוצאות הגובה', 'נטו אחרי הוצאות', 'סנטה', 'אסף בפועל', 'שליח בדיקה']) assert.ok(txt.includes(w), 'חסר: ' + w);
+    for (const w of ['גבייה ברוטו (צפוי)', 'סה״כ הוצאות', 'נטו למסירה', 'צפוי פחות הוצאות', 'סנטה', 'אסף בפועל', 'שליח בדיקה']) assert.ok(txt.includes(w), 'חסר: ' + w);
     // כרטיס הלקוח מראה את אותה שורה: גובה אחראי, מי אסף, סכום שנגבה בפועל
     await p.goto(URL + '/#/client/' + encodeURIComponent(e.n.trim().toLowerCase().replace(/\s+/g, ' ')));
     await p.waitForSelector('.card h2');

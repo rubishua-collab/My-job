@@ -13,6 +13,7 @@ import { reconcile, metrics, dbCols, dbFiles } from './reconcile.js';
 import * as wa from './wa.js';
 import { calcMorning, prevMorning, normStatus, collKey, cleanColl, ST_GOT, r2, normName } from '../public/js/calc.js';
 import { normPhone } from '../public/js/phone.js';
+import { dayInfo } from './features/day-expense.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const PORT = +process.env.PORT || 8080;
@@ -42,6 +43,7 @@ r.get('/api/accounts/:id', (req, res, { user, params }) => {
   const a = filterForUser(user, { id: d.id, ...d.data }); if (!a) throw err(403, 'אין לך הרשאה לחשבון הזה');
   const extra = {};
   if (a.kind === 'morning') { const p = prevMorning(listDocs('accounts').map(x => ({ id: x.id, ...x.data })), a.date, a.id); extra.prev = p; }
+  if (a.kind === 'split' && can.finance(user)) extra._day = dayInfo(listDocs, a.date); // הוצאות הגובים ו״נגבה בפועל״ מאיסוף היום של אותו תאריך
   return { ...a, _version: d.version, _updatedAt: d.updated_at, _updatedBy: d.updated_by, _times: accTimes(d, d.data), ...extra };
 });
 // ״שמור״ בלי שינוי: מעדכן רק את מועד השמירה (בלי גרסה חדשה, בלי לגעת בנתונים)

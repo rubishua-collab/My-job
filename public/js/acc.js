@@ -13,12 +13,15 @@ import { openPdfSheet } from './acc-pdf.js';
 import { mgGroups, mgTotal, customerCount, unmerge, partStatus, collNotes, collShare } from './split-merge.js';
 import { SaveCtl, watchHeader, paintSave } from './savectl.js';
 import { timesHTML } from './acc-times.js';
+import { openExpenseForm } from './expense-form.js';
 
 const KINDS = { morning: 'חשבון בוקר', split: 'פיצול', collectors: 'חשבון גובים', work: 'איסוף יום' };
 
 export async function renderAccounts(view) {
   const vs = viewState.get('accounts');
+  const my = App.nav;
   const L = await get('/api/accounts');
+  if (App.nav !== my) return;
   const kind = vs.kind || '';
   view.innerHTML = `<div class="band"><div class="grow"><div class="eyebrow" id="acount">${L.length} חשבונות שמורים</div><h1>חשבונות</h1></div>
     ${App.can.finance ? `<button class="btn sm" id="newday">פתיחת יום חדש</button> <button class="btn sm" id="newacc">+ חשבון חדש</button>` : ''}</div>
@@ -69,9 +72,11 @@ export async function renderNew(view, [kind], q) {
 
 // ---------- מסך חשבון ----------
 export async function renderAccount(view, [id], q) {
+  const my = App.nav;
   const a = await get('/api/accounts/' + id);
+  if (App.nav !== my) return; // בינתיים עברו למסך אחר (למשל לעריכה) — לא מציירים מעליו
   const st = viewState.get('acc:' + id);
-  const ctx = { a, id, view, q, sel: new Set(st.sel || []), filter: st.filter || '', coll: st.coll || '' };
+  const ctx = { a, id, view, q, sel: new Set(st.sel || []), filter: st.filter || '', coll: st.coll || '', nav: my };
   if (q.get('edit') === '1' && App.can.finance) return renderEditor(ctx);
   draw(ctx);
   const hl = q.get('hl'); if (hl) { const el = view.querySelector(`[data-key="${CSS.escape(hl)}"]`); if (el) { el.scrollIntoView({ block: 'center' }); el.style.outline = '3px solid var(--gold)'; } }
@@ -119,11 +124,13 @@ const matches = (it, f) => {
 };
 
 function draw(ctx) {
+  if (ctx.nav !== undefined && ctx.nav !== App.nav) return; // רענון מאוחר של מסך שכבר עזבנו (למשל אחרי מעבר לעריכה) — לא מציירים מעל המסך הנוכחי
   const { a, view } = ctx;
   const all = itemsOf(ctx); ctx.items = all;
   const vis = all.filter(it => matches(it, ctx.filter) && (!ctx.coll || collKey(it.collector) === collKey(ctx.coll)));
   ctx.visible = new Set(vis.map(v => v.ref));
-  const colls = [...new Set((a.kind === 'split' ? (a.records || []).map(r => String(r.c || '').trim()) : all.map(i => i.collector)).filter(Boolean))].sort((x, y) => x.localeCompare(y, 'he'));
+  const xc = a.kind === 'work' ? (a.expenses || []).map(x => cleanColl(x.c)) : a.kind === 'split' && a._day ? a._day.exp.map(x => cleanColl(x.c)) : [];
+  const colls = [...new Set((a.kind === 'split' ? (a.records || []).map(r => String(r.c || '').trim()) : all.map(i => i.collector)).concat(xc).filter(Boolean))].sort((x, y) => x.localeCompare(y, 'he'));
   let body = '';
   if (a.kind === 'morning') body = morningView(ctx, vis);
   else if (a.kind === 'collectors') body = collectorsView(ctx, vis);
@@ -173,7 +180,7 @@ function actionBar(ctx, vis) {
 
 function bind(ctx) {
   const { view } = ctx;
-  ctx.reload = async () => { ctx.a = await get('/api/accounts/' + ctx.id); const y = window.scrollY; draw(ctx); window.scrollTo(0, y); };
+  ctx.reload = async () => { ctx.a = await get('/api/accounts/' + ctx.id); if (ctx.nav !== undefined && ctx.nav !== App.nav) return; const y = window.scrollY; draw(ctx); window.scrollTo(0, y); };
   const acts = (R.accountActions[ctx.a.kind] || []).concat(R.accountActions['*'] || []);
   $$('[data-xact]', view).forEach(b => b.onclick = () => acts[+b.dataset.xact].run(ctx));
   $('#dprev', view).onclick = () => stepDay(ctx.a.kind, ctx.a.date, -1);
@@ -263,10 +270,17 @@ function splitView(ctx, vis) {
     <div class="m" style="flex-basis:100%"><details class="mgdet2"><summary>פירוט</summary><div class="tbl-wrap"><table><thead><tr><th>גובה</th><th class="a">סכום</th><th>שעה</th><th>סטטוס</th></tr></thead><tbody>${it.parts.map(x => `<tr><td>${esc(String(x.c || '').trim() || 'ללא גובה')}</td><td class="a">${money(num(x.a))}</td><td>${esc(x.t || '')}</td><td>${esc(partStatus(x))}</td></tr>`).join('')}</tbody><tfoot><tr><td><b>סה״כ</b></td><td class="a"><b>${money(it.amount)}</b></td><td></td><td></td></tr></tfoot></table></div>${App.can.finance ? `<button class="btn plain sm" data-mgun="${esc(it.mg)}">בטל איחוד</button>` : ''}</details></div></div>`;
   const rec = (r) => `<div class="li ${ctx.sel.has(r._k) ? 'sel' : ''}" data-key="${esc(r._k)}">${ck(ctx, r._k)}<div class="t">${esc(r.n)} ${r.pp ? `<span class="pill acc">חלק ${esc(r.pp)}</span>` : ''}${r.mg && MG.get(r.mg) ? ` <span class="pill acc">חוב מאוחד · סה״כ ${money(mgTotal(MG.get(r.mg)))}</span>${ctx.coll ? ` <span class="pill acc">חלקו של ${esc(String(r.c || '').trim())} ${money(collShare(MG.get(r.mg), r.c))}</span>` : ''}` : ''}${r.h === 'קשה' ? ' <span class="pill err">קשה</span>' : ''}${r.na ? ' <span class="pill acc">לא ענו</span>' : ''}</div><div class="a">${money(num(r.a))}</div>
     <div class="m">${r.t ? `<span class="num">${esc(r.t)}</span>` : ''}${r.ph ? `<span>${esc(fmtPhone(r.ph))}</span>` : '<span class="neg">אין טלפון</span>'}${r.note ? `<span>${esc(r.note)}</span>` : ''}</div></div>`;
-  const blocks = c.blocks.map(b => { const rows = b.sections.flatMap(s => s.rows.map(r => ({ r, s: s.t }))).filter(x => visSet.has(x.r._k)); if (!rows.length && (ctx.filter || ctx.coll)) return '';
+  const D = a._day; const dxOf = (cn) => D ? D.exp.filter(x => collKey(cleanColl(x.c)) === collKey(cn)) : [];
+  const dayBox = (cn) => { if (!D) return ''; const xs = dxOf(cn), et = r2(sum(xs.map(x => num(x.a)))), got = D.got[collKey(cn)] || 0; if (!xs.length && !got) return '';
+    return `<div class="dayx">${xs.length ? `<h3 style="margin:10px 0 4px">הוצאות</h3><div class="list">${xs.map(x => `<div class="li noc"><div class="t">${x.t ? `<span class="num">${esc(x.t)}</span> · ` : ''}${esc(String(x.n || '').trim() || 'הוצאה')}</div><div class="a">${money(num(x.a))}</div></div>`).join('')}</div>` : ''}
+      <dl class="kv" style="margin-top:6px"><dt>נגבה בפועל (איסוף יום)</dt><dd>${money(got)}</dd><dt>סה״כ הוצאות</dt><dd>${money(et)}</dd><dt>נטו למסירה</dt><dd><b>${money(r2(got - et))}</b></dd></dl></div>`; };
+  const blockNames = new Set(c.blocks.map(b => collKey(b.c)));
+  const xOnlyCards = D ? [...new Map(D.exp.filter(x => collKey(cleanColl(x.c)) && !blockNames.has(collKey(cleanColl(x.c)))).map(x => [collKey(cleanColl(x.c)), cleanColl(x.c)])).values()]
+    .filter(cn => !ctx.filter && (!ctx.coll || collKey(ctx.coll) === collKey(cn))).map(cn => `<div class="card"><div class="row sp"><h2>${esc(cn)}</h2><b>${money(0)}</b></div><div class="muted small">אין גביות בפיצול היום</div>${dayBox(cn)}</div>`).join('') : '';
+  const blocks = c.blocks.map(b => { const rows = b.sections.flatMap(s => s.rows.map(r => ({ r, s: s.t }))).filter(x => visSet.has(x.r._k)); if (!rows.length && (ctx.filter || ctx.coll) && !(dxOf(b.c).length && !ctx.filter && collKey(ctx.coll) === collKey(b.c))) return '';
     const hid = hiddenIn(b);
     return `<div class="card"><div class="row sp"><h2>${esc(b.c === CHANGE ? 'לשנות במערכת' : b.c === NOC_SP ? 'ללא גובה (להשלים)' : b.c)}</h2><b>${money(b.total)}</b></div><div class="muted small">${b.count} לקוחות${hid ? ` · כולל ${money(hid)} של לווים מאוחדים (מוצגים למעלה ב״לווים מאוחדים״)` : ''}</div>
-    <div class="list" style="margin-top:8px">${b.sections.map(s => { const rs = s.rows.filter(r => visSet.has(r._k)); return (s.t ? `<div class="grp"><span>${esc(s.t)}</span><span class="s">${money(s.total)}</span></div>` : '') + rs.map(rec).join(''); }).join('')}</div></div>`; }).join('');
+    <div class="list" style="margin-top:8px">${b.sections.map(s => { const rs = s.rows.filter(r => visSet.has(r._k)); return (s.t ? `<div class="grp"><span>${esc(s.t)}</span><span class="s">${money(s.total)}</span></div>` : '') + rs.map(rec).join(''); }).join('')}</div>${dayBox(b.c)}</div>`; }).join('') + xOnlyCards;
   const sides = c.sides.filter(r => visSet.has(r._k));
   const mcard = merged.length ? `<div class="card mgcard"><div class="row sp"><h2>לווים מאוחדים</h2><b>${money(r2(sum(merged.map(m => m.amount))))}</b></div><div class="muted small">שורה אחת לכל לווה, עם הסכום הכולל לתשלום היום. החשבון של כל גובה נשאר בכרטיס שלו (בחר את הגובה למעלה).</div><div class="list" style="margin-top:8px">${merged.map(mrow).join('')}</div></div>` : '';
   return `${mcard}${blocks}${sides.length ? `<div class="card"><div class="row sp"><h2>לא נגבה היום</h2><b>${money(c.sideTotal)}</b></div><div class="list">${sides.map(rec).join('')}</div></div>` : ''}
@@ -279,22 +293,30 @@ function splitView(ctx, vis) {
 function workView(ctx, vis) {
   const a = ctx.a; const visSet = new Set(vis.map(v => v.ref));
   const es = (a.entries || []).filter(e => e && (e.n || e.a));
-  const groups = workGroups(es, wExpList(a)) || [{ name: '', calc: calcWork(es), exp: wExpList(a), expTotal: sum(wExpList(a).map(x => x.a)), net: r2(calcWork(es).total - sum(wExpList(a).map(x => x.a))) }];
+  const rawExp = (a.expenses || []).filter(x => x && (x.n || x.a));
+  const expOf = (name) => rawExp.filter(x => !name ? true : name === NOC_SP ? !collKey(cleanColl(x.c)) : collKey(cleanColl(x.c)) === collKey(name));
+  // גובה שיש לו רק הוצאה (עוד בלי גביות היום) מקבל כרטיס משלו
+  const xOnly = () => { const names = [...new Map(rawExp.filter(x => collKey(cleanColl(x.c))).map(x => [collKey(cleanColl(x.c)), cleanColl(x.c)])).values()]; return names.map(n => { const xl = wExpList({ expenses: expOf(n) }); const et = sum(xl.map(x => x.a)); return { name: n, calc: calcWork([]), exp: xl, expTotal: et, net: r2(0 - et) }; }); };
+  const groups = workGroups(es, wExpList(a)) || (!es.length && rawExp.some(x => collKey(cleanColl(x.c))) ? xOnly() : [{ name: '', calc: calcWork(es), exp: wExpList(a), expTotal: sum(wExpList(a).map(x => x.a)), net: r2(calcWork(es).total - sum(wExpList(a).map(x => x.a))) }]);
   const byIdx = es; // calcWork מחזיר i = אינדקס בתוך הרשימה של הקבוצה
   const html = groups.map(g => {
     const list = g.name ? es.filter(e => (g.name === NOC_SP ? !collKey(cleanColl(e.c)) : collKey(cleanColl(e.c)) === collKey(g.name))) : es;
     const rows = g.calc.rows.map(r => list[r.i]).filter(e => e && visSet.has(e._k));
-    if (!rows.length && (ctx.filter || ctx.coll)) return '';
+    const gx = expOf(g.name);
+    const keepForExp = gx.length && !ctx.filter && (!ctx.coll || collKey(ctx.coll) === collKey(g.name));
+    if (!rows.length && (ctx.filter || ctx.coll) && !keepForExp) return '';
+    // נטו למסירה = נגבה בפועל פחות ההוצאות של הגובה באותו יום. הצפוי והנשאר — חובות הלקוחות בלבד
     const netGot = r2(g.calc.gotTotal - g.expTotal);
-    return `<div class="card"><div class="row sp"><h2>${esc(g.name || 'איסוף')}</h2><span class="muted small">${g.calc.count} לקוחות</span></div>
-    <div class="grid" style="margin-bottom:8px"><div><div class="muted small">גבייה ברוטו (צפוי)</div><b>${money(g.calc.total)}</b></div><div><div class="muted small">נגבה בפועל</div><b>${money(g.calc.gotTotal)}</b></div><div><div class="muted small">נשאר</div><b>${money(g.calc.left)}</b></div>
-    ${App.can.finance ? `<div><div class="muted small">הוצאות הגובה</div><b>${money(g.expTotal)}</b></div><div><div class="muted small">נטו אחרי הוצאות</div><b>${money(g.net)}</b></div><div title="תצוגה בלבד — לא משנה נוסחה"><div class="muted small">נגבה בפועל פחות הוצאות</div><b>${money(netGot)}</b></div>` : ''}</div>
+    return `<div class="card wgcard" data-wg="${esc(g.name)}"><div class="row sp"><h2>${esc(g.name || 'איסוף')}</h2><span class="muted small">${g.calc.count} לקוחות</span></div>
+    <div class="grid" style="margin-bottom:8px"><div><div class="muted small">גבייה ברוטו (צפוי)</div><b>${money(g.calc.total)}</b></div><div><div class="muted small">נגבה בפועל</div><b class="wg-got">${money(g.calc.gotTotal)}</b></div><div><div class="muted small">נשאר</div><b>${money(g.calc.left)}</b></div>
+    ${App.can.finance ? `<div><div class="muted small">סה״כ הוצאות</div><b class="wg-exp">${money(g.expTotal)}</b></div><div class="wg-netbox"><div class="muted small">נטו למסירה</div><b class="wg-net">${money(netGot)}</b></div>` : ''}</div>
     <div class="list">${rows.map(e => workRow(ctx, e, g.name)).join('')}</div>
-    ${g.exp.length && App.can.finance ? `<details style="margin-top:8px"><summary>הוצאות (${g.exp.length}) · ${money(g.expTotal)}</summary><div class="list">${g.exp.map(x => `<div class="li noc"><div class="t">${esc(x.n)}</div><div class="a">${money(x.a)}</div></div>`).join('')}</div></details>` : ''}</div>`;
+    ${gx.length && App.can.finance ? `<div class="wg-x"><h3 style="margin:10px 0 4px">הוצאות</h3><div class="list">${gx.map(x => `<div class="li noc"><div class="t">${x.t ? `<span class="num">${esc(x.t)}</span> · ` : ''}${esc(String(x.n || '').trim() || 'הוצאה')}</div><div class="a">${money(num(x.a))}</div></div>`).join('')}</div></div>` : ''}
+    ${App.can.finance && g.name ? `<div class="small muted" style="margin-top:6px">צפוי פחות הוצאות (החישוב של התוכנה הקודמת): ${money(g.net)}</div>` : ''}</div>`;
   }).join('');
   const all = calcWork(es); const ex = sum(wExpList(a).map(x => x.a));
   return `<div class="kpis"><div class="kpi"><div class="l">צפוי</div><div class="v">${money(all.total)}</div></div><div class="kpi good"><div class="l">נגבה</div><div class="v">${money(all.gotTotal)}</div></div><div class="kpi bad"><div class="l">נשאר</div><div class="v">${money(all.left)}</div></div>${App.can.finance ? `<div class="kpi"><div class="l">הוצאות</div><div class="v">${money(ex)}</div></div>` : ''}</div>
-  ${html}${App.can.finance ? '<p class="small muted">״נטו אחרי הוצאות״ = גבייה ברוטו (צפוי) פחות הוצאות — הנוסחה של התוכנה המקורית. ״נגבה בפועל פחות הוצאות״ מוצג לידו לעיון בלבד; שינוי הנוסחה הראשית דורש את אישורך.</p>' : ''}
+  ${html}${App.can.finance ? '<p class="small muted">״נטו למסירה״ = נגבה בפועל פחות ההוצאות של הגובה באותו יום. ״גבייה ברוטו (צפוי)״ ו״נשאר״ — חובות הלקוחות בלבד.</p>' : ''}
   <button class="btn ghost no-print" id="hist">היסטוריית סימונים ותיקונים</button>`;
 }
 function workRow(ctx, e, gname) {

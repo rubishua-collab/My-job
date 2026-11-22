@@ -230,3 +230,7 @@ tr.mgpart td{background:color-mix(in srgb,var(--accent-soft) 25%,transparent)}
 /* מחק גבייה — בתוך השורה, בנפרד מכפתורי הסטטוס */
 .delent{grid-column:1/-1;display:flex;justify-content:flex-end;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
 .delent .btn{min-height:40px}
+
+/* הוצאות גובה */
+.wg-netbox b{color:var(--ok,#17603f);font-size:1.1em}
+.dayx{border-top:1px dashed var(--line);margin-top:8px}
