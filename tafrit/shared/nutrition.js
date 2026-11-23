@@ -21,7 +21,7 @@ export const MET = {
   cardio: { light: 4.0, moderate: 6.0, vigorous: 8.0 },
 };
 export const LOSS_RATES = { slow: 0.5, moderate: 0.75, fast: 1.0 }; // % ממשקל הגוף בשבוע
-export const GAIN_SURPLUS = { slow: 0.05, standard: 0.1 }; // שיעור מעל ההוצאה היומית
+export const GAIN_RATES = { slow: 0.25, standard: 0.5 }; // % ממשקל הגוף בשבוע (Iraki 2019: ‏0.25–0.5%)
 export const GOALS = { lose: 'חיטוב וירידה בשומן', gain: 'עלייה במסת שריר', maintain: 'שמירת משקל', recomp: 'שיפור הרכב הגוף' };
 export const GOAL_HINT = { lose: 'גירעון מתון + חלבון גבוה', gain: 'עודף קטן + אימוני כוח', maintain: 'אכילה לפי ההוצאה, בטווח משקל שתבחר', recomp: 'גירעון קטן (כ-10%) + חלבון גבוה + אימוני כוח' };
 export const RECOMP_DEFICIT = 0.1;
@@ -171,9 +171,11 @@ export function computeTargets(p, weightKg) {
     if (kcal < floor) { kcal = floor; capped.push(`היעד הועלה לרף המינימום (${Math.round(floor)} קק״ל).`); }
     goalLine = `קצב ירידה של ${pct}% ממשקל הגוף בשבוע ≈ ${Math.abs(weekly).toFixed(2)} ק״ג. גירעון יומי ≈ ${Math.round(t.total - kcal)} קק״ל (${Math.abs(weekly).toFixed(2)} × ${KCAL_PER_KG} ÷ 7).`;
   } else if (goal === 'gain') {
-    const s = GAIN_SURPLUS[p.rate] ?? GAIN_SURPLUS.slow;
-    kcal = t.total * (1 + s); weekly = (t.total * s * 7) / KCAL_PER_KG;
-    goalLine = `עודף מתון של ${Math.round(s * 100)}% מעל ההוצאה היומית (≈ ${Math.round(t.total * s)} קק״ל).`;
+    const pct = GAIN_RATES[p.rate] ?? GAIN_RATES.slow;
+    weekly = (pct / 100) * weightKg;
+    const surplus = weekly * KCAL_PER_KG / 7;
+    kcal = t.total + surplus;
+    goalLine = `קצב עלייה של ${pct}% ממשקל הגוף בשבוע ≈ ${weekly.toFixed(2)} ק״ג. עודף יומי ≈ ${Math.round(surplus)} קק״ל (${weekly.toFixed(2)} × ${KCAL_PER_KG} ÷ 7).`;
   } else if (goal === 'recomp') {
     kcal = t.total * (1 - RECOMP_DEFICIT); weekly = -(t.total * RECOMP_DEFICIT * 7) / KCAL_PER_KG;
     if (kcal < floor) { kcal = floor; capped.push(`היעד הועלה לרף המינימום (${Math.round(floor)} קק״ל).`); }
@@ -232,11 +234,10 @@ export function waterGoalMl(profile, kg) {
 }
 
 // ---- כמות שבועית לכרטיסי הקצב בשאלון ----
-/** כמה ק״ג בשבוע מייצג קצב: בירידה — אחוז ממשקל הגוף; בעלייה — העודף הקלורי מעל ההוצאה היומית ÷ 7,700 */
+/** כמה ק״ג בשבוע מייצג קצב: אחוז ממשקל הגוף (בירידה ובעלייה) */
 export function weeklyKg(goal, rate, p, weightKg) {
   if (!(weightKg >= 30 && weightKg <= 350)) return null;
-  if (goal === 'gain') { const s = GAIN_SURPLUS[rate]; if (s == null || !(+p?.heightCm > 0) || !(+p?.age > 0)) return null; return tdee(p, weightKg).total * s * 7 / KCAL_PER_KG; }
-  const pct = LOSS_RATES[rate]; return pct == null ? null : weightKg * pct / 100;
+  const pct = (goal === 'gain' ? GAIN_RATES : LOSS_RATES)[rate]; return pct == null ? null : weightKg * pct / 100;
 }
 /** "600 גרם" מתחת לקילו, "1.2 ק״ג" מקילו ומעלה */
 export function fmtWeekly(kg) {

@@ -77,7 +77,7 @@ export const SOURCES = {
     title: 'Nutrition Recommendations for Bodybuilders in the Off-Season: A Narrative Review',
     authors: 'Iraki J, Fitschen P, Espinar S, Helms E', journal: 'Sports 7(7):154',
     url: 'https://doi.org/10.3390/sports7070154',
-    supports: 'לעלייה במסת שריר מומלץ עודף קלורי מתון וקצב עלייה איטי, כדי לצמצם הצטברות שומן.',
+    supports: 'לעלייה במסת שריר מומלץ קצב עלייה איטי של כ-0.25%–0.5% ממשקל הגוף בשבוע (עודף קלורי מתון), כדי לצמצם הצטברות שומן.',
   },
   reynolds2019: {
     kind: 'research', year: 2019,

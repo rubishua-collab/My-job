@@ -195,3 +195,18 @@ test('הצפנה, סיסמאות ו-TOTP', async () => {
   assert.ok(C.verifyTotp(secret, C.totp(secret)) !== null);
   assert.equal(C.verifyTotp(secret, '000000', 59000) === null || C.totp(secret, 59000) === '000000', true);
 });
+
+test('עלייה במסה: קצב לפי אחוז ממשקל הגוף (0.25% / 0.5% בשבוע), עקבי בין היעד, השאלון והבדיקה השבועית', async () => {
+  const { computeTargets, weeklyKg, fmtWeekly, tdee } = await import('../../shared/nutrition.js');
+  const { expectedWeekly } = await import('../../shared/adjust.js');
+  const p = { sex: 'male', age: 30, heightCm: 178, goal: 'gain', job: 'sitting' };
+  for (const [rate, pct] of [['slow', 0.25], ['standard', 0.5]]) {
+    const t = computeTargets({ ...p, rate }, 80);
+    assert.equal(+t.expectedWeekly.toFixed(3), +(80 * pct / 100).toFixed(3));
+    assert.ok(Math.abs(t.kcalExact - (tdee({ ...p, rate }, 80).total + 80 * pct / 100 * 7700 / 7)) < 1);
+    assert.equal(weeklyKg('gain', rate, {}, 80), 80 * pct / 100);
+    assert.equal(+expectedWeekly({ ...p, rate }, 80).toFixed(3), +(80 * pct / 100).toFixed(3));
+  }
+  assert.equal(fmtWeekly(weeklyKg('gain', 'slow', {}, 80)), '200 גרם');
+  assert.equal(fmtWeekly(weeklyKg('lose', 'fast', {}, 120)), '1.2 ק״ג');
+});

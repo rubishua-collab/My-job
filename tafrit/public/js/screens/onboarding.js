@@ -23,7 +23,7 @@ function paceCards(p) {
   const w = +p._weight; const okW = w >= 30 && w <= 350;
   const gain = p.goal === 'gain';
   const list = gain
-    ? [['slow', 'איטי', 'עודף של כ-5% מעל ההוצאה היומית'], ['standard', 'רגיל', 'עודף של כ-10% מעל ההוצאה היומית']]
+    ? [['slow', 'איטי', '0.25% ממשקל הגוף בשבוע'], ['standard', 'רגיל', '0.5% ממשקל הגוף בשבוע']]
     : [['slow', 'עדין', '0.5% ממשקל הגוף בשבוע'], ['moderate', 'מתון', '0.75% ממשקל הגוף בשבוע'], ['fast', 'מהיר', '1% ממשקל הגוף בשבוע']];
   const val = p.rate && list.some(x => x[0] === p.rate) ? p.rate : gain ? 'slow' : 'moderate';
   const cards = list.map(([v, l, pct]) => {
@@ -31,8 +31,7 @@ function paceCards(p) {
     const amount = kg ? ` <span class="wk">· ${gain ? 'עלייה' : 'ירידה'} של כ־${esc(fmtWeekly(kg))} בשבוע</span>` : '';
     return `<button type="button" class="opt ${val === v ? 'on' : ''}" data-v="${v}"><b>${l}</b><small>${esc(pct)}${amount}</small></button>`;
   }).join('');
-  const note = !okW ? 'לאחר הזנת המשקל הנוכחי תופיע גם הכמות השבועית'
-    : gain && !p.job && p.activityMode !== 'general' ? 'בעלייה במשקל הכמות מחושבת מההוצאה היומית המשוערת, ותתעדכן אחרי שאלות הפעילות.' : '';
+  const note = !okW ? 'לאחר הזנת המשקל הנוכחי תופיע גם הכמות השבועית' : '';
   return `<div class="opts" data-opts="rate">${cards}</div>${note ? `<p class="small muted" style="margin-top:8px">${note}</p>` : ''}`;
 }
 

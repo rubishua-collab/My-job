@@ -2,7 +2,7 @@
 import { weekStart, addDays, weekDates } from './dates.js';
 import { recentWeeks, compareWeeks } from './weights.js';
 import { nutrients } from './foods.js';
-import { targetFor, computeTargets, KCAL_PER_KG, LOSS_RATES, GAIN_SURPLUS, round } from './nutrition.js';
+import { targetFor, computeTargets, KCAL_PER_KG, LOSS_RATES, GAIN_RATES, round } from './nutrition.js';
 import { COMPONENTS } from './catalog.js';
 import { makeItem } from './planner.js';
 
@@ -30,11 +30,11 @@ export function weekIntake(start, days, entries, foods) {
   };
 }
 
-function expectedWeekly(profile, avgKg, tgt) {
+export function expectedWeekly(profile, avgKg, tgt) {
   if (tgt?.expectedWeekly != null && profile.goal !== 'maintain') return tgt.expectedWeekly;
   if (profile.goal === 'lose') return -((LOSS_RATES[profile.rate] ?? 0.75) / 100) * avgKg;
   if (profile.goal === 'recomp') return -0.0025 * avgKg;
-  if (profile.goal === 'gain') { const s = GAIN_SURPLUS[profile.rate] ?? 0.05; return s === 0.1 ? 0.005 * avgKg : 0.0025 * avgKg; }
+  if (profile.goal === 'gain') return (GAIN_RATES[profile.rate] ?? GAIN_RATES.slow) / 100 * avgKg;
   return 0;
 }
 
