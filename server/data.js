@@ -125,7 +125,9 @@ export function clientCard(u, key) {
       contracts.push({ id: r.id, title: d.o || '', amount: +d.a || 0, date: d.t || '', status: st, statusName: st === 'signed' ? 'נחתם' : st === 'sent' ? 'נשלח' : 'ממתין', signedAt: r.data.signedAt || (sg.when || ''), sentAt: r.data.sentAt || '', files: st === 'signed' || r.data.signer ? files.filter(f => f.owner_id === r.id).map(f => ({ id: f.id, name: f.name, field: f.field, mime: f.mime })) : [] });
     }
   }
-  return { key, name: c.name, phones: [...c.phones], collectors: [...c.colls], rows, samePhone, msgs, consent, loans, contracts, totals: can.finance(u) ? totals : null, balance: lastSplit ? { date: lastSplit.date, amount: sum(rows.filter(r => r.kind === 'split' && r.acc === lastSplit.acc).map(r => r.amount)) } : null };
+  const nk = normName(c.name);
+  const docs = can.finance(u) ? listDocs('clients').filter(x => normName(x.data.name) === nk).map(x => { const d = x.data; return { id: x.id, extId: d.extId || '', tz: d.tz || '', address: d.address || '', city: d.city || '', email: d.email || '', fax: d.fax || '', srcNote: d.srcNote || '', note: d.note || '', phones: Array.isArray(d.phones) ? d.phones : [], phone: d.phone || '', extra: d.extra || {}, imp: d.imp || null }; }) : [];
+  return { key, name: c.name, phones: [...c.phones], collectors: [...c.colls], rows, samePhone, msgs, consent, loans, contracts, docs, totals: can.finance(u) ? totals : null, balance: lastSplit ? { date: lastSplit.date, amount: sum(rows.filter(r => r.kind === 'split' && r.acc === lastSplit.acc).map(r => r.amount)) } : null };
 }
 
 // ---- מסך ״היום״ ----

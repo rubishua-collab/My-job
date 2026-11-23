@@ -266,3 +266,12 @@ tr[hidden]{display:none}
 /* פצל חוב */
 .rowacts{white-space:nowrap}
 .rowacts .btn{margin-inline-end:6px}
+
+/* ייבוא לקוחות */
+.cimp-pick{cursor:pointer}
+.cimp-bar{padding:10px 12px}
+.ci-g summary{cursor:pointer;padding:4px 0}
+.ci-diff{padding:4px 0;border-bottom:1px dashed var(--line)} .ci-diff .old{color:var(--muted);text-decoration:line-through} .ci-diff .neu{font-weight:700}
+.ci-side{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:6px}
+.ci-box{border:1px solid var(--line);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:4px} .ci-box.sel{border-color:var(--ok,#17603f);background:color-mix(in srgb,var(--ok-bg,#dff3e7) 60%,transparent)}
+.btn.on{outline:2px solid var(--accent)}

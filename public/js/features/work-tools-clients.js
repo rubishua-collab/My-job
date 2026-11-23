@@ -1,5 +1,6 @@
 // מאגר הלקוחות (אוסף clients) והקמת לקוח חדש — מקור: app.html 4091-4313 (״הקמת לקוח חדש מתוך הפיצול״, nc*).
 // כרטיס לקוח בלבד: לא נרשמת הלוואה ולא תשלום. בדיקת כפילויות לפי טלפון ולפי שם בדיוק כמו במקור.
+import { checkPhone } from '../phone-check.js';
 import { get, save, uid } from '../api.js';
 import { $, $$, esc, money, dmy, toast, openSheet } from '../ui.js';
 import { App } from '../app.js';
@@ -125,6 +126,8 @@ export function openClientForm(opts = {}) {
     const nowIso = new Date().toISOString();
     const base = edit ? Object.fromEntries(Object.entries(edit).filter(([k]) => !['id', '_version', '_updatedAt', '_updatedBy'].includes(k))) : {};
     const doc = { ...base, name, phone, coll: ncColl($('#nc-coll', el).value), hard: normHard($('#nc-hard', el).value), note: $('#nc-note', el).value.trim(), created: edit ? (edit.created || nowIso) : nowIso, updated: nowIso, src: edit ? (edit.src || '') : (opts.src || 'מאגר לקוחות') };
+    if (edit && phone !== (edit.phone || '')) { doc.manual = { ...(edit.manual || {}), phones: true }; doc.phones = phone ? [{ ...checkPhone(phone), src: 'תיקון ידני' }] : []; }
+    if (edit && name !== (edit.name || '')) doc.manual = { ...(doc.manual || edit.manual || {}), name: true };
     busy = true; btn(); msg('');
     try {
       if (edit) { const r = await save('PUT', '/api/docs/clients/' + encodeURIComponent(cid), { data: doc, baseVersion: edit._version, opId }, { label: 'עדכון כרטיס לקוח ' + name }); edit._version = r.version; }

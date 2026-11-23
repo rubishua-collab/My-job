@@ -9,6 +9,7 @@ export const R = {
   panelBinders: {},    // kind -> [(ctx) => void]  חיבור אירועים לתוכן הנוסף
   todayPanels: [],     // [(data, App) => html]   תוכן נוסף במסך ״היום״
   newAccountKinds: [], // [{kind, label}]  לא בשימוש כרגע
+  clientsTop: [],      // [(host, view, q) => void]  תוכן בראש לשונית ״לקוחות״ (מעל החיפוש)
 };
 export const route = (name, fn) => { R.routes[name] = fn; };
 export const more = (item) => { R.more.push(item); };
@@ -16,6 +17,7 @@ export const accountAction = (kind, a) => { (R.accountActions[kind] ||= []).push
 export const editorAction = (kind, a) => { (R.editorActions[kind] ||= []).push(a); };
 export const accountPanel = (kind, render, bind) => { (R.accountPanels[kind] ||= []).push(render); if (bind) (R.panelBinders[kind] ||= []).push(bind); };
 export const todayPanel = (fn) => { R.todayPanels.push(fn); };
+export const clientsTop = (fn) => { R.clientsTop.push(fn); };
 
 // טעינת ספרייה חיצונית שנשמרה מקומית (public/vendor), פעם אחת בלבד
 const loaded = {};
