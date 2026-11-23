@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getDoc, listDocs, putDoc, deleteDoc, docHistory, newId, now, tx } from './db.js';
-import { FoodIndex, customFood, recipeFood, nutrients } from '../shared/foods.js';
+import { FoodIndex, customFood, recipeFood, nutrients, manualFood } from '../shared/foods.js';
 import { israelDate, isISO, addDays } from '../shared/dates.js';
-import { computeTargets, targetFor } from '../shared/nutrition.js';
+import { computeTargets, targetFor, withTraining } from '../shared/nutrition.js';
 import { uniqueByDate } from '../shared/weights.js';
 import { planPeriods, planFor, profileOn, pickPlanFields, PLAN_FIELDS } from '../shared/plans.js';
 
@@ -114,7 +114,7 @@ export function addTarget(uid, t) {
   const plan = activePlan(uid, effectiveFrom);
   return putDoc(uid, 'targets', newId('t'), { effectiveFrom, kcal, protein, carbs: +t.carbs || null, fat: +t.fat || null, fiber: +t.fiber || null, reason: t.reason || '', source: t.source || 'manual', mode: t.mode || 'auto', details: t.details || null, expectedWeekly: t.expectedWeekly ?? null, planId: plan?.id || null });
 }
-export function currentTarget(uid, date = today()) { return targetFor(targets(uid), date); }
+export function currentTarget(uid, date = today()) { return withTraining(targetFor(targets(uid), date), getDoc(uid, 'days', date)); }
 export function previewTargets(uid, kg, profile) {
   const p = profile || profileOnDate(uid);
   const w = kg || latestWeight(uid)?.kg;
@@ -123,22 +123,30 @@ export function previewTargets(uid, kg, profile) {
 }
 
 // ---- יומן ----
-const SNAP = f => ({ n: f.n, src: f.src, k: f.k, p: f.p, f: f.f, c: f.c, fi: f.fi ?? null, u: f.u || [], st: f.st || null, g: f.g, vf: f.vf });
+const SNAP = f => ({ n: f.n, src: f.src, k: f.k, p: f.p, f: f.f, c: f.c, fi: f.fi ?? null, u: f.u || [], st: f.st || null, g: f.g, vf: f.vf, ...(f.pp ? { pp: f.pp } : {}) });
 export function entriesFor(uid, from, to) { return listDocs(uid, 'entries').filter(e => e.date >= from && e.date <= to).sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : (a.order || 0) - (b.order || 0) || a.createdAt - b.createdAt); }
 export function addEntries(uid, list) {
   const foods = foodsFor(uid);
   if (!Array.isArray(list) || list.length > 40) throw err(400, 'רשימה לא תקינה');
   return tx(() => list.map(e => {
-    const f = foods.get(e.foodId); if (!f) throw err(400, 'המזון לא נמצא במאגר');
+    const f = e.manual ? manualSnap(e.manual) : foods.get(e.foodId); if (!f) throw err(400, 'המזון לא נמצא במאגר');
     const date = isISO(e.date) ? e.date : today();
     const grams = Math.round(+e.grams * 10) / 10; if (!(grams > 0 && grams <= 5000)) throw err(400, 'כמות לא תקינה');
     const status = e.status === 'eaten' ? 'eaten' : 'planned';
     return putDoc(uid, 'entries', newId('e'), {
-      date, meal: String(e.meal || 'breakfast').slice(0, 20), foodId: f.id, snapshot: SNAP(f), grams, unit: e.unit || 'g', qty: e.qty ?? null,
+      date, meal: String(e.meal || 'breakfast').slice(0, 20), foodId: e.manual ? newId('q:') : f.id, snapshot: SNAP(f), grams, unit: e.unit || 'g', qty: e.qty ?? null,
       status, plannedGrams: status === 'planned' ? grams : (e.plannedGrams ?? null), eatenGrams: status === 'eaten' ? grams : null,
       source: e.source || 'manual', comp: e.comp || null, order: e.order ?? now(),
     });
   }));
+}
+/** רישום ידני (שם + ערכים) או ערכים שנקראו מתמונה — בלי מוצר במאגר. הערכים נשמרים ברישום עצמו */
+function manualSnap(m) {
+  const f = manualFood(m || {});
+  if (!f.n) throw err(400, 'חסר שם למנה');
+  const max = f.pp ? 5000 : 900;
+  for (const k of ['k', 'p', 'c', 'f']) if (!(f[k] >= 0 && f[k] <= max)) throw err(400, f.pp ? 'ערכים לא סבירים למנה' : 'ערכים לא סבירים ל-100 ג׳');
+  return f;
 }
 export function updateEntry(uid, id, patch) {
   const e = getDoc(uid, 'entries', id); if (!e) throw err(404, 'הרישום לא נמצא');
@@ -158,7 +166,7 @@ export function days(uid, from, to) { const o = {}; for (const d of listDocs(uid
 export function setDay(uid, date, patch) {
   if (!isISO(date)) throw err(400, 'תאריך לא תקין');
   const d = getDoc(uid, 'days', date) || { locked: [], complete: false };
-  const next = { ...d, ...('complete' in patch ? { complete: !!patch.complete } : {}), ...(Array.isArray(patch.locked) ? { locked: [...new Set(patch.locked)].slice(0, 8) } : {}), ...('note' in patch ? { note: String(patch.note || '').slice(0, 500) } : {}) };
+  const next = { ...d, ...('cups' in patch ? { cups: Math.max(0, Math.min(60, Math.round(+patch.cups) || 0)) } : {}), ...('train' in patch ? { train: !!patch.train } : {}), ...('complete' in patch ? { complete: !!patch.complete } : {}), ...(Array.isArray(patch.locked) ? { locked: [...new Set(patch.locked)].slice(0, 8) } : {}), ...('note' in patch ? { note: String(patch.note || '').slice(0, 500) } : {}) };
   return putDoc(uid, 'days', date, next);
 }
 
@@ -168,8 +176,20 @@ export function saveCustom(uid, c) {
   for (const k of ['k', 'p', 'f', 'c']) if (!(+c[k] >= 0)) throw err(400, 'חסרים ערכים ל-100 גרם');
   if (+c.k > 900) throw err(400, 'יותר מ-900 קק״ל ל-100 גרם — בדוק את התווית');
   const id = c.id && getDoc(uid, 'custom', c.id) ? c.id : newId('c');
-  const d = putDoc(uid, 'custom', id, { name: String(c.name).slice(0, 120), brand: String(c.brand || '').slice(0, 80), k: +c.k, p: +c.p, f: +c.f, c: +c.c, fi: c.fi === '' || c.fi == null ? null : +c.fi, na: c.na === '' || c.na == null ? null : +c.na, unitName: String(c.unitName || '').slice(0, 40), unitGrams: +c.unitGrams || null, st: c.st || null, origin: c.origin === 'usda' ? 'usda' : 'label', fdcId: c.fdcId || null, vf: !!c.vf });
+  const barcode = normBarcode(c.barcode);
+  if (barcode) { const dup = findByBarcode(uid, barcode); if (dup && dup.id !== id) throw err(400, `הברקוד הזה כבר שמור על "${dup.name}"`); }
+  const d = putDoc(uid, 'custom', id, { barcode: barcode || null, name: String(c.name).slice(0, 120), brand: String(c.brand || '').slice(0, 80), k: +c.k, p: +c.p, f: +c.f, c: +c.c, fi: c.fi === '' || c.fi == null ? null : +c.fi, na: c.na === '' || c.na == null ? null : +c.na, unitName: String(c.unitName || '').slice(0, 40), unitGrams: +c.unitGrams || null, st: c.st || null, origin: c.origin === 'usda' ? 'usda' : 'label', fdcId: c.fdcId || null, vf: !!c.vf });
   refreshPersonalFoods(uid); return { ...d, food: foodsFor(uid).get('c:' + id) };
+}
+export const normBarcode = s => String(s || '').replace(/\D/g, '').slice(0, 20);
+const bcKey = s => normBarcode(s).replace(/^0+/, '');
+/** מוצר אישי לפי ברקוד (מתעלם מאפסים מובילים: UPC-A מול EAN-13) */
+export function findByBarcode(uid, code) { const k = bcKey(code); return k ? listDocs(uid, 'custom').find(c => c.barcode && bcKey(c.barcode) === k) || null : null; }
+export function linkBarcode(uid, customId, code) {
+  const c = getDoc(uid, 'custom', customId); if (!c) throw err(404, 'המוצר לא נמצא');
+  const bc = normBarcode(code); if (bc.length < 6) throw err(400, 'ברקוד קצר מדי');
+  const dup = findByBarcode(uid, bc); if (dup && dup.id !== customId) throw err(400, `הברקוד הזה כבר שמור על "${dup.name}"`);
+  const { id, createdAt, updatedAt, ...rest } = c; const d = putDoc(uid, 'custom', customId, { ...rest, barcode: bc }); refreshPersonalFoods(uid); return d;
 }
 export function saveRecipe(uid, r) {
   if (!r.name) throw err(400, 'חסר שם מתכון');
@@ -188,7 +208,14 @@ export function setFavorite(uid, foodId, on) {
 export function saveFixedMeal(uid, body) {
   if (!body.name || !Array.isArray(body.items) || !body.items.length) throw err(400, 'חסר שם או רכיבים');
   const id = body.id && getDoc(uid, 'fixedMeals', body.id) ? body.id : newId('f');
-  return putDoc(uid, 'fixedMeals', id, { name: String(body.name).slice(0, 80), items: body.items.slice(0, 20).map(i => ({ foodId: i.foodId, grams: +i.grams, unit: i.unit || 'g', qty: i.qty ?? null, comp: i.comp || null })) });
+  const foods = foodsFor(uid);
+  const items = body.items.slice(0, 20).map(i => {
+    if (!(+i.grams > 0 && +i.grams <= 5000)) throw err(400, 'כמות לא תקינה בארוחה');
+    if (i.manual) { const m = manualSnap(i.manual); return { foodId: 'q', manual: { name: m.n, k: m.k, p: m.p, c: m.c, f: m.f, per: m.pp ? 'portion' : '100g' }, grams: +i.grams, unit: i.unit || 'g', qty: i.qty ?? null, comp: null }; }
+    if (!foods.get(i.foodId)) throw err(400, 'מזון לא נמצא בארוחה');
+    return { foodId: i.foodId, grams: +i.grams, unit: i.unit || 'g', qty: i.qty ?? null, comp: i.comp || null };
+  });
+  return putDoc(uid, 'fixedMeals', id, { name: String(body.name).slice(0, 80), items });
 }
 export function saveCheckin(uid, week, body) {
   if (!isISO(week)) throw err(400, 'תאריך לא תקין');

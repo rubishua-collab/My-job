@@ -15,7 +15,7 @@
 | Identifiers → User ID | מזהה חשבון פנימי | שיוך הנתונים לחשבון |
 
 לא נאסף: מיקום, אנשי קשר, תמונות, נתוני שימוש לאנליטיקה, נתוני אבחון של צד שלישי.
-**Third-party sharing:** אם המשתמש אישר את המלווה החכם — השאלה ונתונים מינימליים נשלחים ל-Anthropic לצורך התשובה בלבד (Service provider; לא למטרות פרסום).
+**Third-party sharing:** אם המשתמש אישר את המלווה החכם — השאלה ונתונים מינימליים נשלחים ל-Anthropic לצורך התשובה בלבד (Service provider; לא למטרות פרסום). באותה הסכמה, תמונה של טבלה תזונתית שהמשתמש בחר לצלם נשלחת לקריאת הערכים ואינה נשמרת (Photos: Collected, not stored, App functionality). סריקת ברקוד מתבצעת במכשיר בלבד.
 קובץ ההצהרה בפרויקט: `ios/App/App/PrivacyInfo.xcprivacy`. ‏ITSAppUsesNonExemptEncryption=false (רק HTTPS והצפנה סטנדרטית של מערכת ההפעלה/Node).
 
 ## Google Play — Data safety

@@ -13,8 +13,9 @@ export const view = () => $('#app');
 export function freshView() { const old = view(); const el = old.cloneNode(false); old.replaceWith(el); return el; }
 export function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
 
-let cleanup = null;
+let cleanup = null; let renderSeq = 0;
 export async function render() {
+  const seq = ++renderSeq; // מעבר מהיר בין מסכים: רק הניווט האחרון מצייר
   closeAllSheets();
   const [name, ...args] = (location.hash.replace(/^#\/?/, '') || 'today').split('/');
   const signed = !!D.session?.user;
@@ -23,6 +24,7 @@ export async function render() {
   if (signed && name !== 'onboarding' && D.state && !D.state.profile?.onboarding?.done) return go('#/onboarding');
   const fn = routes[name] || routes.today;
   if (signed && D.state) { try { await refresh(); } catch {} } // נתונים עדכניים בכל מעבר מסך (גם ממכשיר אחר)
+  if (seq !== renderSeq) return;
   document.querySelectorAll('.tabbar a').forEach(a => a.classList.toggle('on', a.dataset.r === name));
   $('#tabbar').hidden = !signed || name === 'onboarding';
   if (typeof cleanup === 'function') cleanup();

@@ -1,6 +1,6 @@
 // סיכום שבועי: ממוצע משקל, שינוי, ממוצע אכילה בימים מתועדים, צ׳ק-אין והצעת התאמה
 import { route, render } from '../app.js';
-import { D, refresh, profile, today, targetOn } from '../data.js';
+import { D, refresh, profile, today, baseTargetOn as targetOn } from '../data.js';
 import { save } from '../api.js';
 import { $, $$, esc, n0, kg, toast, sign, on } from '../ui.js';
 import { weeklyReview, MIN_WEIGHINS, MIN_LOGGED_DAYS } from '/shared/adjust.js';

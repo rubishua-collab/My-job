@@ -1,6 +1,6 @@
 // "התוכנית שלי", "שינוי מטרה ותוכנית" (אשף) ו"היסטוריית תוכניות"
 import { route, go } from '../app.js';
-import { D, refresh, profile, baseProfile, planOn, plans, today, targetOn, recentComps } from '../data.js';
+import { D, refresh, profile, baseProfile, planOn, plans, today, baseTargetOn as targetOn, recentComps } from '../data.js';
 import { save, del } from '../api.js';
 import { $, $$, esc, n0, kg, sign, toast, on, openSheet } from '../ui.js';
 import { computeTargets, GOALS, GOAL_HINT, JOB, GENERAL, mealSlots } from '/shared/nutrition.js';

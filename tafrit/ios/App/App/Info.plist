@@ -22,6 +22,10 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>המצלמה משמשת לצילום ברקוד של מוצר או של הטבלה התזונתית על האריזה.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>אפשר לבחור תמונה של הטבלה התזונתית מהגלריה.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>CFBundleLocalizations</key>

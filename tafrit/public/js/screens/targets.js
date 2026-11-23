@@ -1,10 +1,10 @@
 // "כמה אני שורף וכמה כדאי לי לאכול" + "איך חישבת לי?" + היסטוריית יעדים
 import { route, go } from '../app.js';
-import { D, refresh, profile, baseProfile, today, targetOn } from '../data.js';
+import { D, refresh, profile, baseProfile, today, baseTargetOn as targetOn } from '../data.js';
 import { pickPlanFields } from '/shared/plans.js';
 import { save } from '../api.js';
 import { $, esc, n0, kg, toast } from '../ui.js';
-import { computeTargets, GOALS } from '/shared/nutrition.js';
+import { computeTargets, GOALS, macros } from '/shared/nutrition.js';
 import { sourcesFor } from '/shared/sources.js';
 import { dmy, savedAt } from '/shared/dates.js';
 
@@ -54,7 +54,23 @@ route('targets', async (el, [mode]) => {
       <button class="btn block xl" id="savet">${cur ? `החל יעד: ${t.kcal} קק״ל, ${t.protein} ג׳` : `שמור יעד: ${t.kcal} קק״ל, ${t.protein} ג׳ חלבון`}</button>
       <p class="tiny muted">ימים קודמים ישמרו את היעד שהיה בתוקף בהם.</p>` : ''}</div>` : ''}
     ${hist.length ? `<div class="card"><h3>היסטוריית יעדים</h3><ul class="list">${hist.map(h => `<li class="li"><div class="m"><b>${h.kcal} קק״ל · ${h.protein} ג׳</b><small>מ-${dmy(h.effectiveFrom)} · ${esc(h.reason || (h.source === 'onboarding' ? 'חישוב ראשוני' : h.source))}</small></div><div class="a tiny">נשמר ${esc(savedAt(h.createdAt))}</div></li>`).join('')}</ul></div>` : ''}
+    ${cur ? `<details class="card how" id="manual"><summary>תיקון ידני של היעד</summary>
+      <p class="small muted">כמו "תיקון קלוריות" ביומן הקודם: אפשר להוריד או להעלות את היעד בעצמך (למשל −150 קק״ל כשהממוצע השבועי לא זז). היעד החדש נשמר בהיסטוריה, וימים קודמים לא משתנים.</p>
+      <div class="row" style="gap:6px;margin-bottom:8px">${[-150, -100, 100, 150].map(d => `<button type="button" class="btn xs soft" data-adj="${d}">${d > 0 ? '+' : '−'}${Math.abs(d)} קק״ל</button>`).join('')}</div>
+      <div class="grid2"><label class="field"><span>קלוריות</span><input class="in" id="mk" inputmode="numeric" value="${cur.kcal}"></label><label class="field"><span>חלבון (ג׳)</span><input class="in" id="mp" inputmode="numeric" value="${cur.protein}"></label></div>
+      <label class="field"><span>להחיל מתאריך</span><input class="in" type="date" id="meff" value="${today()}"></label>
+      <label class="field"><span>סיבה (לא חובה)</span><input class="in" id="mr" placeholder="למשל: הממוצע לא זז שבועיים"></label>
+      <button class="btn block" id="msave">שמור יעד ידני</button></details>` : ''}
     <a class="btn block plain" href="#/onboarding">בדיקת הנתונים שלי</a></div>`;
+  el.addEventListener('click', e => { const b = e.target.closest('[data-adj]'); if (b) $('#mk', el).value = cur.kcal + +b.dataset.adj; });
+  $('#msave', el)?.addEventListener('click', async () => {
+    const kcal = Math.round(+$('#mk', el).value), protein = Math.round(+$('#mp', el).value);
+    if (!(kcal >= 800 && kcal <= 6000) || !(protein >= 20 && protein <= 400)) return toast('ערכים לא סבירים');
+    const mac = macros(kcal, protein, t.refWeight?.kg || w.kg, p.goal || 'maintain');
+    const eff = $('#meff', el).value || today();
+    await save('POST', '/api/targets', { kcal, protein, carbs: mac.carbs, fat: mac.fat, fiber: cur.fiber || null, effectiveFrom: eff, source: 'manual', reason: $('#mr', el).value.trim() || `תיקון ידני (${kcal - cur.kcal >= 0 ? '+' : '−'}${Math.abs(kcal - cur.kcal)} קק״ל)` });
+    await refresh(); toast(`היעד הידני יחול מ-${dmy(eff)}`); go('#/today');
+  });
   $('#savet', el)?.addEventListener('click', async () => {
     const eff = $('#eff', el).value || today();
     const hasPlans = (D.state.plans || []).length > 0;

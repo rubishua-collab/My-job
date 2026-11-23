@@ -1,6 +1,7 @@
 // "היום שלי": סיכום, שקילת בוקר, שלוש פעולות, הארוחות עם תכננתי / אכלתי / ערוך כמות
 import { route, go } from '../app.js';
-import { D, refresh, profile, planOn, today, food, foodOf, targetOn, slots, entriesOn, dayDoc, dayTotals, recentComps } from '../data.js';
+import { D, refresh, profile, planOn, today, food, foodOf, targetOn, slots, entriesOn, dayDoc, dayTotals, recentComps, waterGoalMl, CUP_ML } from '../data.js';
+import { TRAIN_BONUS } from '/shared/nutrition.js';
 import { save, del, get } from '../api.js';
 import { $, $$, esc, n0, n1, kg, toast, openSheet, meter, on, confirmSheet } from '../ui.js';
 import { nutrients, qtyText, unitsFor, STATE, isVegFruit } from '/shared/foods.js';
@@ -20,6 +21,7 @@ route('today', async (el, [d]) => {
 
 export async function draw() {
   const { freshView } = await import('../app.js');
+  if (((location.hash || '').replace(/^#\/?/, '') || 'today').split('/')[0] !== 'today') return; // המשתמש כבר עבר למסך אחר
   const el = freshView();
   const date = curDate; const isToday = date === today();
   const tgt = targetOn(date); const tot = dayTotals(date); const day = dayDoc(date);
@@ -29,7 +31,9 @@ export async function draw() {
     <div class="top"><div><h1>${isToday ? 'היום שלי' : hebDay(date)}</h1><div class="sub">${hebDay(date)} · ${dmy(date)}</div></div>
       <div class="daynav"><button class="iconbtn" data-day="-1" aria-label="יום קודם">›</button>${isToday ? '' : '<button class="btn xs plain" data-day="0">היום</button>'}<button class="iconbtn" data-day="1" aria-label="יום הבא" ${date >= addDays(today(), 7) ? 'disabled' : ''}>‹</button></div></div>
     ${tgt ? `<div class="card sum">${meter('קלוריות', tot.eaten.kcal, tot.planned.kcal, tgt.kcal, 'קק״ל')}${meter('חלבון', tot.eaten.protein, tot.planned.protein, tgt.protein, 'ג׳')}
-      <div class="tiny muted">נספר רק מה שסימנת "אכלתי". סיבים: ${n0(tot.eaten.fiber)} ג׳ · ירקות ופירות: ${n0(tot.eaten.vf)} ג׳</div></div>`
+      ${tgt.carbs && tgt.fat ? `<div class="grid2 minis">${meter('פחמימות', tot.eaten.carbs, tot.planned.carbs, tgt.carbs, 'ג׳')}${meter('שומן', tot.eaten.fat, tot.planned.fat, tgt.fat, 'ג׳')}</div>` : ''}
+      <div class="tiny muted">נספר רק מה שסימנת "אכלתי". סיבים: ${n0(tot.eaten.fiber)} ג׳ · ירקות ופירות: ${n0(tot.eaten.vf)} ג׳${tgt.train ? ` · כולל תוספת יום אימון ${tgt.train} קק״ל` : ''}</div>
+      <label class="row small" style="gap:8px;margin-top:8px;cursor:pointer"><input type="checkbox" id="train" style="width:22px;height:22px" ${day.train ? 'checked' : ''}> היום יום אימון כוח (+${TRAIN_BONUS} קק״ל, כפחמימה)</label></div>`
       : `<div class="note warn">אין עדיין יעד יומי לתאריך הזה. <a href="#/targets/new">לחישוב היעדים</a></div>`}
     ${isToday || date < today() ? `<button class="btn block ${w ? 'soft' : 'xl'}" data-weigh>${w ? `⚖️ שקילת בוקר: <span class="num">${kg(w.kg)}</span> ק״ג · עריכה` : '⚖️ רשום שקילת בוקר'}</button>` : ''}
     ${(() => { const pl = planOn(date); return `<div class="card tight row between"><div class="small"><b>${esc(pl ? GOALS[pl.goal] : GOALS[profile(date)?.goal] || '')}</b>${pl ? ` · מ-${dmy(pl.startDate)}` : ''}${(D.state.plans || []).some(x => x.startDate > date) ? ' · <span class="pill">יש תוכנית עתידית</span>' : ''}</div><a class="btn xs soft" href="#/plan-change">🎯 שינוי מטרה ותוכנית</a></div>`; })()}
@@ -39,11 +43,21 @@ export async function draw() {
       <button class="btn xl soft" data-act="next"><span class="ic">✨</span><span class="t">הצע לי את הארוחה הבאה<small>לפי מה שנשאר לך היום</small></span></button>
     </div>
     ${slots(date).map(s => mealCard(s, date, day)).join('')}
+    ${waterCard(date, day)}
     <label class="card tight row" style="gap:12px;cursor:pointer"><input type="checkbox" id="complete" style="width:26px;height:26px" ${day.complete ? 'checked' : ''}><span class="grow"><b>תיעדתי את כל מה שאכלתי היום</b><br><span class="tiny muted">רק ימים מסומנים נכנסים לממוצע האכילה השבועי. יום לא מסומן לא נחשב כ"אפס".</span></span></label>
+    <div class="grid2"><button class="btn" data-pdf="share">📤 שלח PDF בוואטסאפ</button><button class="btn plain" data-pdf="save">⬇ שמור PDF</button></div><div class="small muted" id="pdfmsg"></div>
   </div>`;
   bind(el, date);
 }
 
+/** מים: כוסות ליום (כמו ביומן הקודם). גודל הכוס והיעד — בפרופיל */
+function waterCard(date, day) {
+  const p = profile(date) || {}; const cup = +p.cupMl || CUP_ML; const n = day.cups || 0;
+  const w = [...D.state.weights].filter(x => x.date <= date).pop()?.kg; const goal = waterGoalMl(p, w);
+  return `<section class="card tight water"><div class="row between"><b>💧 מים</b><button class="btn xs plain" data-wset>הגדרות</button></div>
+    <div class="row" style="gap:12px;margin-top:6px"><button class="cupbtn" data-cup="-1" aria-label="הורד כוס">−</button><div><b class="num" style="font-size:22px">${n}</b> <span class="small muted">כוסות</span></div><button class="cupbtn" data-cup="1" aria-label="הוסף כוס">+</button>
+    <span class="small muted num">${(n * cup / 1000).toFixed(2)} מתוך ${(goal / 1000).toFixed(goal % 1000 ? 1 : 0)} ליטר</span></div></section>`;
+}
 function mealCard(s, date, day) {
   const es = entriesOn(date).filter(e => e.meal === s.id);
   const locked = (day.locked || []).includes(s.id);
@@ -67,6 +81,10 @@ function bind(el, date) {
   const redraw = async () => { await refresh(); draw(); };
   on(el, '[data-day]', 'click', (e, b) => { const d = +b.dataset.day; go(d === 0 ? '#/today' : '#/today/' + addDays(date, d)); });
   on(el, '[data-weigh]', 'click', () => openWeightSheet({ date, onSaved: redraw }));
+  $('#train', el)?.addEventListener('change', async e => { await save('PUT', '/api/days/' + date, { train: e.target.checked }); await redraw(); toast(e.target.checked ? `יום אימון: היעד עלה ב-${TRAIN_BONUS} קק״ל` : 'הסימון הוסר'); });
+  on(el, '[data-cup]', 'click', async (e, b) => { const n = Math.max(0, (dayDoc(date).cups || 0) + +b.dataset.cup); await save('PUT', '/api/days/' + date, { cups: n }); await redraw(); });
+  on(el, '[data-wset]', 'click', () => openWaterSettings(date, redraw));
+  on(el, '[data-pdf]', 'click', async (e, b) => { const { sendDayPdf } = await import('./pdf.js'); sendDayPdf(date, b.dataset.pdf, $('#pdfmsg', el)); });
   $('#complete', el).addEventListener('change', async e => { await save('PUT', '/api/days/' + date, { complete: e.target.checked }); await refresh(); toast(e.target.checked ? 'היום סומן כמתועד במלואו' : 'הסימון הוסר'); });
   on(el, '[data-act]', 'click', (e, b) => {
     const a = b.dataset.act;
@@ -88,11 +106,23 @@ function bind(el, date) {
     if (a === 'edit') return openEditAmounts(date, slot, () => draw());
     if (a === 'fixed') {
       const name = prompt('שם לארוחה הקבועה', slots(date).find(s => s.id === slot)?.label || ''); if (!name) return;
-      await save('PUT', '/api/fixed-meals', { name, items: es.map(x => ({ foodId: x.foodId, grams: x.status === 'eaten' ? x.grams : (x.plannedGrams || x.grams), unit: x.unit, qty: x.qty, comp: x.comp })) });
+      await save('PUT', '/api/fixed-meals', { name, items: es.map(x => ({ foodId: x.foodId, grams: x.status === 'eaten' ? x.grams : (x.plannedGrams || x.grams), unit: x.unit, qty: x.qty, comp: x.comp, ...(x.snapshot?.src === 'manual' ? { manual: { name: x.snapshot.n, k: x.snapshot.k, p: x.snapshot.p, c: x.snapshot.c, f: x.snapshot.f, per: x.snapshot.pp ? 'portion' : '100g', unitName: x.snapshot.u?.[0]?.[0], unitGrams: x.snapshot.pp ? null : x.snapshot.u?.[0]?.[1] } } : {}) })) });
       await refresh(); toast('נשמרה ארוחה קבועה');
     }
   });
   on(el, '[data-entry]', 'click', (e, li) => openItem(D.state.entries.find(x => x.id === li.dataset.entry), () => draw()));
+}
+
+function openWaterSettings(date, done) {
+  const p = profile(date) || {}; const w = [...D.state.weights].filter(x => x.date <= date).pop()?.kg;
+  const s = openSheet({ title: 'מים — הגדרות', body: `<label class="field"><span>גודל כוס (מ״ל)</span><input class="in" id="wcup" inputmode="numeric" value="${+p.cupMl || CUP_ML}"></label>
+    <label class="field"><span>יעד יומי (מ״ל)</span><input class="in" id="wgoal" inputmode="numeric" value="${waterGoalMl(p, w)}"></label>
+    <p class="tiny muted">ברירת המחדל: 33 מ״ל לכל ק״ג משקל, ולפחות 2 ליטר. ביום חם או ביום אימון כדאי יותר.</p>`, foot: '<button class="btn" data-ok>שמור</button>' });
+  on(s.el, '[data-ok]', 'click', async () => {
+    const cup = +$('#wcup', s.el).value, goal = +$('#wgoal', s.el).value;
+    if (!(cup >= 50 && cup <= 1500) || !(goal >= 500 && goal <= 10000)) return toast('ערכים לא סבירים');
+    await save('PUT', '/api/profile', { profile: { ...D.state.profile, cupMl: cup, waterGoalMl: goal } }); s.close(); toast('נשמר'); done();
+  });
 }
 
 /** "אכלתי": אישור הכמות שנאכלה בפועל לכל פריט (ברירת מחדל: מה שתוכנן) */
@@ -122,7 +152,7 @@ function openEditAmounts(date, slot, done) {
 function openItem(e, done) {
   const f = foodOf(e); const n = nutrients(f, e.grams);
   const s = openSheet({ title: COMPONENTS[e.comp]?.name || f.n, body: `<div class="small muted">${esc(f.n)}</div>
-    <dl class="kv" style="margin-top:10px"><dt>כמות</dt><dd>${esc(qtyText(f, e.grams, e.unit, e.qty))}</dd>${e.plannedGrams ? `<dt>תוכנן</dt><dd>${n0(e.plannedGrams)} ג׳</dd>` : ''}${e.status === 'eaten' ? `<dt>נאכל</dt><dd>${n0(e.grams)} ג׳</dd>` : ''}<dt>קלוריות</dt><dd>${n0(n.kcal)}</dd><dt>חלבון</dt><dd>${n1(n.protein)} ג׳</dd><dt>מצב</dt><dd>${e.status === 'eaten' ? 'אכלתי' : 'תכננתי'}</dd></dl>
+    <dl class="kv" style="margin-top:10px"><dt>כמות</dt><dd>${esc(qtyText(f, e.grams, e.unit, e.qty))}</dd>${e.plannedGrams ? `<dt>תוכנן</dt><dd>${n0(e.plannedGrams)} ג׳</dd>` : ''}${e.status === 'eaten' ? `<dt>נאכל</dt><dd>${n0(e.grams)} ג׳</dd>` : ''}<dt>קלוריות</dt><dd>${n0(n.kcal)}</dd><dt>חלבון</dt><dd>${n1(n.protein)} ג׳</dd><dt>פחמימות</dt><dd>${n1(n.carbs)} ג׳</dd><dt>שומן</dt><dd>${n1(n.fat)} ג׳</dd><dt>מצב</dt><dd>${e.status === 'eaten' ? 'אכלתי' : 'תכננתי'}</dd></dl>
     ${f.st ? `<p class="small">${esc(STATE[f.st].label)}</p>` : ''}<p class="saved">נשמר: ${esc(savedAt(e.updatedAt))} · <a href="#" data-hist>היסטוריה</a></p><div id="hist"></div>`,
     foot: `<button class="btn ${e.status === 'eaten' ? 'plain' : ''}" data-st="${e.status === 'eaten' ? 'planned' : 'eaten'}">${e.status === 'eaten' ? 'תכננתי' : 'אכלתי'}</button><button class="btn plain" data-edit>ערוך כמות</button><button class="btn plain" data-swap>החלף</button><button class="iconbtn" data-del aria-label="מחק">🗑</button>` });
   on(s.el, '[data-st]', 'click', async (ev, b) => { if (b.dataset.st === 'eaten') { s.close(); return openEaten(e.date, e.meal, done); } await save('PUT', '/api/entries/' + e.id, { status: 'planned' }); await refresh(); s.close(); done(); });

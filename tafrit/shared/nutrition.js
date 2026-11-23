@@ -215,3 +215,18 @@ export function targetFor(history, iso) {
   const list = (history || []).filter(t => t.effectiveFrom <= iso).sort((a, b) => a.effectiveFrom < b.effectiveFrom ? -1 : a.effectiveFrom > b.effectiveFrom ? 1 : (a.createdAt || 0) - (b.createdAt || 0));
   return list.length ? list[list.length - 1] : null;
 }
+
+// ---- מהיומן הקודם: יום אימון ומים ----
+/** תוספת ליום אימון כוח: 150 קק״ל, כפחמימה (החלטת תוכנה מהיומן הקודם) */
+export const TRAIN_BONUS = 150;
+export function withTraining(t, day) {
+  if (!t || !day?.train) return t;
+  return { ...t, kcal: t.kcal + TRAIN_BONUS, carbs: t.carbs != null ? t.carbs + Math.round(TRAIN_BONUS / 4) : t.carbs, train: TRAIN_BONUS };
+}
+/** כוס מים בברירת מחדל (מ״ל) — כמו ביומן הקודם */
+export const CUP_ML = 132;
+/** יעד מים: מה שנקבע בפרופיל, אחרת 33 מ״ל לק״ג מעוגל ל-100, ולא פחות מ-2 ליטר (כמו ביומן הקודם) */
+export function waterGoalMl(profile, kg) {
+  if (+profile?.waterGoalMl > 0) return +profile.waterGoalMl;
+  return kg ? Math.max(2000, Math.round(kg * 33 / 100) * 100) : 2000;
+}

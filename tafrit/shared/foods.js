@@ -5,6 +5,9 @@ export const SRC_LABEL = {
   usda: 'USDA FoodData Central',
   custom: 'מוצר אישי לפי תווית',
   recipe: 'מתכון ביתי',
+  yoman: 'ממוצעי USDA ומוצרים נפוצים (מהיומן הקודם)',
+  chain: 'רשת מזון מהיר — ערכים מפורסמים בחו״ל, למנה אחת. המנות בארץ יכולות להיות שונות',
+  manual: 'רישום ידני',
 };
 export const MAKOR_LABEL = { 1: 'נתוני USDA', 2: 'תווית יצרן', 3: 'תווית יצרן עם חישוב', 4: 'מתכון מחושב', 5: 'אחר', 6: 'נתוני USDA עם חישוב', 7: 'ערכים משולבים' };
 
@@ -52,7 +55,9 @@ export class FoodIndex {
       if (head === words[0]) s += 15;
       if (words.length > 1 && n.includes(words.join(' '))) s += 10;
       s -= Math.min(30, f.n.length / 3);
-      if (f.src !== 'moh') s += 25; // אישי / מתכון
+      if (f.src === 'custom' || f.src === 'recipe') s += 25; // אישי / מתכון
+      else if (f.src === 'yoman') s += 12; // הרשימה הנפוצה מהיומן הקודם — לפני הווריאציות הנדירות במאגר
+      else if (f.src === 'chain') s -= 5;
       if (f.mk === 1 || f.mk === 6) s += 4; // ערכי בסיס
       if (f.mk === 4) s -= 2;
       if (boost.has(f.id)) s += 40;
@@ -69,6 +74,7 @@ const EGG_SIZE = { 'יחידה קטנה': 'ביצה S', 'יחידה בינוני
 export function isEgg(f) { return f && f.src === 'moh' && f.g === 3 && /^ביצה (שלמה|קשה|רכה)/.test(f.n); }
 /** יחידות מידה זמינות למזון: גרמים + יחידות עם משקל ידוע */
 export function unitsFor(f) {
+  if (f.pp) return [{ key: f.pp, label: f.pp, g: 100 }];
   const list = [{ key: 'g', label: 'גרם', g: 1 }];
   for (const [name, g] of f.u || []) {
     if (!(g > 0)) continue;
@@ -84,6 +90,7 @@ export function unitGrams(f, unitKey) {
 }
 /** יחידה מועדפת להצגה (לביצה: L; לפיתה: יחידה; ללחם: פרוסה בינונית) */
 export function defaultUnit(f) {
+  if (f.pp) return [f.pp, 100];
   const u = f.u || [];
   const pick = names => names.map(n => u.find(x => x[0] === n)).find(Boolean);
   if (isEgg(f)) return pick(['יחידה גדולה', 'יחידה']);
@@ -106,6 +113,15 @@ export function sumNutrients(list) {
   }
   return t;
 }
+/** טקסט "ל-100 ג׳" או "למנה" לפי סוג המזון */
+export const perLabel = f => f.pp ? `ל-1 ${f.pp}` : 'ל-100 ג׳';
+/** רישום ידני / ממצלמה: מזון "וירטואלי" שנשמר רק ברישום עצמו (snapshot). per: '100g' או 'portion' */
+export function manualFood({ name, k, p, c, f, per, unitName, unitGrams }) {
+  const base = { n: String(name || '').trim().slice(0, 80), src: 'manual', k: +k || 0, p: +p || 0, c: +c || 0, f: +f || 0, fi: null, st: null };
+  if (per === 'portion') return { ...base, pp: 'מנה', u: [['מנה', 100]] };
+  return { ...base, u: +unitGrams > 0 ? [[String(unitName || 'יחידה').slice(0, 20), +unitGrams]] : [] };
+}
+
 /** ירק או פרי (לפי קוד הקבוצה במאגר: 6 = פירות, 7 = ירקות), בלי מיצים */
 export function isVegFruit(f) {
   if (f.vf != null) return !!f.vf;
@@ -114,6 +130,7 @@ export function isVegFruit(f) {
 /** כמות בטקסט קריא: "2 ביצה L (116 ג׳)" */
 export function qtyText(f, grams, unitKey, qty) {
   const g = Math.round(grams);
+  if (f.pp) return `${fmtQty(unitKey === f.pp && qty ? qty : grams / 100)} ${f.pp}`;
   if (unitKey && unitKey !== 'g' && qty) {
     const u = unitsFor(f).find(x => x.key === unitKey);
     if (u) return `${fmtQty(qty)} ${u.label} (${g} ג׳)`;

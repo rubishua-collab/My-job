@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import * as S from './store.js';
 import * as A from './auth.js';
 import { db, once, chatList, chatClear, docHistory, audit, auditList, countDocs, kvGet, now, KEY_SOURCE } from './db.js';
-import { chat, aiEnabled, MODEL } from './ai.js';
+import { readLabel, chat, aiEnabled, MODEL } from './ai.js';
 import { usdaSearch } from './usda.js';
 import { mailEnabled, mailDev, devOutbox } from './mail.js';
 import { scheduleBackups, createBackup, legacyPending } from './backup.js';
@@ -140,6 +140,9 @@ route('PUT', '/api/fixed-meals', (req, res, { user, body }) => S.saveFixedMeal(u
 route('DELETE', '/api/fixed-meals/:id', (req, res, { user, params }) => ({ ok: S.removePersonal(user.id, 'fixedMeals', params.id) }));
 route('PUT', '/api/checkins/:week', (req, res, { user, params, body }) => S.saveCheckin(user.id, params.week, body));
 
+route('POST', '/api/ai/label', async (req, res, { user, body }) => { A.rateLimit('label:' + user.id, 30, 3600e3); return readLabel(user, body); });
+route('GET', '/api/barcode/:code', (req, res, { user, params }) => { const c = S.findByBarcode(user.id, params.code); return { code: S.normBarcode(params.code), product: c ? { id: c.id, foodId: 'c:' + c.id, name: c.name } : null }; });
+route('PUT', '/api/custom/:id/barcode', (req, res, { user, params, body }) => S.linkBarcode(user.id, params.id, body.barcode));
 route('GET', '/api/usda/search', (req, res, { q }) => usdaSearch(q.get('q') || ''));
 route('GET', '/api/chat', (req, res, { user }) => chatList(user.id, 200));
 route('DELETE', '/api/chat', (req, res, { user }) => { chatClear(user.id); return { ok: true }; });

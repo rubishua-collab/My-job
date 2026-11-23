@@ -76,6 +76,10 @@ textarea.in { min-height: 90px; resize: vertical; }
 .opt b { display: block; font-size: 16px; } .opt small { color: var(--muted); }
 .seg { display: flex; background: var(--track); border-radius: 12px; padding: 3px; gap: 3px; }
 .seg button { flex: 1; border: 0; background: transparent; border-radius: 10px; min-height: 40px; font-size: 15px; cursor: pointer; }
+.seg.wrap { flex-wrap: wrap; }
+.seg.wrap button { flex: 1 1 30%; font-size: 14px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.grid4 .field span { font-size: 12px; }
 .seg button.on { background: var(--card); box-shadow: var(--shadow); font-weight: 600; }
 
 /* סיכום היום */
@@ -184,3 +188,6 @@ details.how summary { cursor: pointer; min-height: 44px; display: flex; align-it
 .daynav { display: flex; align-items: center; gap: 6px; }
 .daynav .iconbtn { width: 40px; height: 40px; }
 .tabbar[hidden] { display: none; }
+
+.minis { margin-top: 4px; } .minis .meter .lab b { font-size: 17px; } .minis .meter .foot { font-size: 12px; }
+.cupbtn { width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid #2d73b8; background: transparent; color: #2d73b8; font-size: 22px; cursor: pointer; }

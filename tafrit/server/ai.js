@@ -84,3 +84,24 @@ export async function chat(user, message) {
 
 function merge(list) { const out = []; for (const m of list) { if (out.length && out[out.length - 1].role === m.role) out[out.length - 1].content += '\n' + m.content; else out.push({ ...m }); } return out; }
 function dedupe(cards) { const seen = new Set(); return cards.filter(c => { const k = c.type === 'meal' ? c.id : c.type + JSON.stringify(c.items || c.date); if (seen.has(k)) return false; seen.add(k); return true; }); }
+
+// ---- קריאת טבלה תזונתית מתמונה (כמו ביומן הקודם): נשלחת רק התמונה, בלי פרטי משתמש ----
+const LABEL_PROMPT = 'This is a photo of a food package nutrition facts table (likely Israeli, in Hebrew). Return the values PER 100 g (or per 100 ml if the product is a liquid and only a per-100 ml column exists). If the table only shows a per-serving column, convert to per 100 using the serving weight. Also return the weight of ONE serving/unit/piece if the package shows it (for example a serving of 30 g), else null, and a short Hebrew word for the unit (יחידה, מנה, חטיף, פרוסה). Return only JSON: {"found": true, "name": product name in Hebrew if visible else "", "basis": "100g" or "100ml", "kcal": number, "protein": number, "carbs": number, "fat": number, "unitGrams": number or null, "unitLabel": string}. If you cannot read a nutrition table, return {"found": false}.';
+const IMG_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+export async function readLabel(user, { image, mediaType }) {
+  const bad = (status, message, code) => Object.assign(new Error(message), { status, code });
+  if (!aiEnabled()) throw bad(503, 'קריאת תמונות לא זמינה כרגע. אפשר להזין את הערכים ידנית.', 'ai_off');
+  if (!user.ai_consent_at) throw bad(403, 'כדי לקרוא תמונה צריך לאשר שליחה לספק ה-AI (עוד ← מלווה חכם).', 'consent');
+  const type = IMG_TYPES.includes(mediaType) ? mediaType : 'image/jpeg';
+  const data = String(image || '').replace(/^data:[^,]+,/, '');
+  if (data.length < 100 || data.length > 4.5e6 || !/^[A-Za-z0-9+/=]+$/.test(data)) throw bad(400, 'התמונה לא תקינה או גדולה מדי');
+  let res;
+  try {
+    res = await getClient().messages.create({ model: MODEL, max_tokens: 1000, messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: type, data } }, { type: 'text', text: LABEL_PROMPT }] }] });
+  } catch (e) { console.error('[ai label]', e?.status || '', e?.message); throw bad(502, 'קריאת התמונה נכשלה. נסה שוב או הזן ידנית.'); }
+  const text = (res.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+  let r; try { r = JSON.parse((text.match(/\{[\s\S]*\}/) || ['{}'])[0]); } catch { r = {}; }
+  const num = (x, max) => { const v = Number(x); return v >= 0 && v <= max ? Math.round(v * 10) / 10 : null; };
+  if (!r.found || num(r.kcal, 900) == null) return { found: false };
+  return { found: true, name: String(r.name || '').slice(0, 80), basis: r.basis === '100ml' ? '100ml' : '100g', kcal: num(r.kcal, 900), protein: num(r.protein, 100) ?? 0, carbs: num(r.carbs, 100) ?? 0, fat: num(r.fat, 100) ?? 0, unitGrams: num(r.unitGrams, 2000) || null, unitLabel: String(r.unitLabel || '').slice(0, 20) };
+}
