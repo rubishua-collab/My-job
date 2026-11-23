@@ -21,24 +21,28 @@ const SYSTEM = `אתה "מלווה התזונה שלי" באפליקציה "תפ
 - "הבוקר שקלתי X" → log_weight. אם הכלי מחזיר שכבר יש שקילה לאותו יום, אמור זאת ובקש אישור (הכרטיס מאפשר לעדכן).
 - שאלות "למה" על היעד → weekly_review ו/או explain_targets. אל תסיק משקילה בודדת כמה קלוריות נשרפו.
 - כשאתה מסביר על מה מבוססת המלצה, קרא ל-get_sources עם המקורות הרלוונטיים, והבחן במפורש בין ממצא מחקרי (מקור, שנה) לבין החלטת תוכנה של האפליקציה (למשל כמה שקילות נדרשות כדי להציג מגמה).
+- המטרה הפעילה מופיעה ב-get_status (active_plan). התייחס אליה, ובסיכום השבועי השווה בין מגמת ממוצעי המשקל לבין המטרה. כל שינוי יעד או תוכנית מוצג למשתמש לאישור במסכים — אל תכריז שהיעד שונה.
+- אל תבקש ואל תציין פרטים מזהים (שם, דוא״ל, טלפון). אין לך גישה לנתונים של משתמשים אחרים.
 - במחלת כליה, הפרעת אכילה, הריון, סוכרת עם תרופות או כל הנחיה רפואית — אל תשנה יעדים; הפנה לדיאטן/רופא ועבוד לפי היעדים שהוזנו.`;
 
 const MAX_STEPS = 8;
 
 /** שיחה אחת: הודעת משתמש → תשובה + כרטיסים. היסטוריית הצ׳אט נשמרת ב-DB. */
-export async function chat(message) {
+export async function chat(user, message) {
+  const uid = user.id;
   const text = String(message || '').trim().slice(0, 2000);
   if (!text) throw Object.assign(new Error('הודעה ריקה'), { status: 400 });
-  chatAppend('user', { text });
-  if (!aiEnabled()) {
-    const rep = localReply(text);
-    const reply = { ...rep, mode: 'basic' };
-    chatAppend('assistant', reply);
+  chatAppend(uid, 'user', { text });
+  // מצב בסיסי: בלי ספק חיצוני; גם כשאין למשתמש הסכמה לשליחה לספק AI
+  if (!aiEnabled() || !user.ai_consent_at) {
+    const rep = localReply(uid, text);
+    const reply = { ...rep, mode: 'basic', ...(aiEnabled() && !user.ai_consent_at ? { notice: 'עניתי במצב בסיסי, בלי לשלוח מידע לספק AI. אפשר לאשר שליחה בהגדרות.' } : {}) };
+    chatAppend(uid, 'assistant', reply);
     return reply;
   }
   const cards = [];
   // ההקשר: 12 ההודעות האחרונות בטקסט (הכרטיסים כבר שמורים במסך)
-  const hist = chatList(13).slice(0, -1).filter(m => m.content?.text).slice(-12).map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content.text }));
+  const hist = chatList(uid, 13).slice(0, -1).filter(m => m.content?.text).slice(-12).map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content.text }));
   while (hist.length && hist[0].role !== 'user') hist.shift();
   const messages = [...merge(hist), { role: 'user', content: `${text}\n\n(עכשיו: ${hebDay(israelDate())} ${israelDate()} ${israelTime()} שעון ישראל)` }];
   if (messages.length > 1 && messages[messages.length - 2].role === 'user') messages.splice(messages.length - 2, 1);
@@ -60,21 +64,21 @@ export async function chat(message) {
       if (res.stop_reason !== 'tool_use' || !uses.length) { finalText = texts; break; }
       const results = uses.map(u => {
         let out; let isErr = false;
-        try { out = runTool(u.name, u.input || {}, cards); } catch (e) { out = { error: e.message }; isErr = true; }
+        try { out = runTool(uid, u.name, u.input || {}, cards); } catch (e) { out = { error: e.message }; isErr = true; }
         return { type: 'tool_result', tool_use_id: u.id, content: JSON.stringify(out), ...(isErr ? { is_error: true } : {}) };
       });
       messages.push({ role: 'user', content: results });
     }
   } catch (e) {
     // נפילה למצב בסיסי, כדי שהמשתמש עדיין יקבל תשובה מחושבת
-    const rep = localReply(text);
+    const rep = localReply(uid, text);
     const reply = { ...rep, mode: 'basic', notice: e instanceof Anthropic.AuthenticationError ? 'מפתח Claude לא תקין — עברתי למצב בסיסי.' : e instanceof Anthropic.RateLimitError ? 'יותר מדי בקשות ל-Claude כרגע — עניתי במצב בסיסי.' : 'לא הצלחתי להתחבר ל-Claude — עניתי במצב בסיסי.' };
     console.error('[ai]', e?.status || '', e?.message);
-    chatAppend('assistant', reply);
+    chatAppend(uid, 'assistant', reply);
     return reply;
   }
   const reply = { text: finalText || 'הנה מה שמצאתי:', cards: dedupe(cards), mode: 'ai' };
-  chatAppend('assistant', reply);
+  chatAppend(uid, 'assistant', reply);
   return reply;
 }
 

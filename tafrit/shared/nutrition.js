@@ -22,7 +22,9 @@ export const MET = {
 };
 export const LOSS_RATES = { slow: 0.5, moderate: 0.75, fast: 1.0 }; // % ממשקל הגוף בשבוע
 export const GAIN_SURPLUS = { slow: 0.05, standard: 0.1 }; // שיעור מעל ההוצאה היומית
-export const GOALS = { lose: 'ירידה בשומן תוך שמירה על השריר', maintain: 'שמירה על המשקל', gain: 'עלייה במסת שריר' };
+export const GOALS = { lose: 'חיטוב וירידה בשומן', gain: 'עלייה במסת שריר', maintain: 'שמירת משקל', recomp: 'שיפור הרכב הגוף' };
+export const GOAL_HINT = { lose: 'גירעון מתון + חלבון גבוה', gain: 'עודף קטן + אימוני כוח', maintain: 'אכילה לפי ההוצאה, בטווח משקל שתבחר', recomp: 'גירעון קטן (כ-10%) + חלבון גבוה + אימוני כוח' };
+export const RECOMP_DEFICIT = 0.1;
 const STEP_BASE = 3000; // צעדים שכבר כלולים בגורם העבודה
 const KCAL_PER_STEP_KG = 0.0004; // ≈0.5 קק״ל לק״ג לק״מ, כ-1,300 צעדים לק״מ (נטו)
 export const KCAL_PER_KG = 7700;
@@ -101,8 +103,8 @@ export function proteinTarget(p, weightKg) {
   const strength = (+p.strength?.perWeek || 0) >= 2;
   const goal = p.goal || 'maintain';
   let lo, hi, per, src = [];
-  if (strength) { lo = 1.6; hi = 2.2; per = goal === 'lose' ? 2.0 : goal === 'gain' ? 1.8 : 1.6; src = ['morton2018', 'issn2017']; if (goal === 'lose') src.push('helms2014'); }
-  else { lo = 1.2; hi = 1.6; per = goal === 'lose' ? 1.4 : goal === 'gain' ? 1.6 : 1.2; src = ['issn2017']; }
+  if (strength) { lo = 1.6; hi = 2.2; per = goal === 'lose' || goal === 'recomp' ? 2.0 : goal === 'gain' ? 1.8 : 1.6; src = ['morton2018', 'issn2017']; if (goal === 'lose' || goal === 'recomp') src.push('helms2014'); }
+  else { lo = 1.2; hi = 1.6; per = goal === 'lose' || goal === 'recomp' ? 1.4 : goal === 'gain' ? 1.6 : 1.2; src = ['issn2017']; }
   if (+p.age >= 65) { lo = Math.max(lo, 1.0); per = Math.max(per, 1.2); src.push('protage'); }
   if (ref.source) src.push(ref.source);
   const grams = round(per * ref.kg, 5);
@@ -112,7 +114,7 @@ export function proteinTarget(p, weightKg) {
   return { grams, range: [round(lo * ref.kg, 5), round(hi * ref.kg, 5)], perKg: per, ref, why, sources: src };
 }
 
-export function mealSlots(count) {
+export function mealSlots(count, times = {}) {
   const n = Math.min(6, Math.max(2, +count || 3));
   const sets = {
     2: [['breakfast', 'ארוחה ראשונה', '10:00'], ['dinner', 'ארוחת ערב', '18:30']],
@@ -121,12 +123,12 @@ export function mealSlots(count) {
     5: [['breakfast', 'ארוחת בוקר', '07:30'], ['snack1', 'ביניים בוקר', '10:30'], ['lunch', 'ארוחת צהריים', '13:30'], ['snack', 'ביניים אחה״צ', '16:30'], ['dinner', 'ארוחת ערב', '19:30']],
     6: [['breakfast', 'ארוחת בוקר', '07:30'], ['snack1', 'ביניים בוקר', '10:00'], ['lunch', 'ארוחת צהריים', '13:00'], ['snack', 'ביניים אחה״צ', '16:00'], ['dinner', 'ארוחת ערב', '19:00'], ['night', 'ארוחת לילה', '21:30']],
   };
-  return sets[n].map(([id, label, time]) => ({ id, label, time, snack: /snack|night/.test(id) }));
+  return sets[n].map(([id, label, time]) => ({ id, label, time: /^\d{2}:\d{2}$/.test(times?.[id] || '') ? times[id] : time, snack: /snack|night/.test(id) }));
 }
 
 /** משקל יחסי לכל ארוחה (ביניים קטנות יותר, תוספת לשעות הרעב) */
 export function mealWeights(p) {
-  const slots = mealSlots(p.meals);
+  const slots = mealSlots(p.meals, p.mealTimes);
   const hunger = new Set(p.hungerTimes || []);
   const period = s => s.id === 'breakfast' || s.id === 'snack1' ? 'morning' : s.id === 'lunch' ? 'noon' : s.id === 'snack' ? 'afternoon' : 'evening';
   const w = slots.map(s => (s.snack ? 0.5 : 1) * (hunger.has(period(s)) ? 1.25 : 1));
@@ -172,9 +174,17 @@ export function computeTargets(p, weightKg) {
     const s = GAIN_SURPLUS[p.rate] ?? GAIN_SURPLUS.slow;
     kcal = t.total * (1 + s); weekly = (t.total * s * 7) / KCAL_PER_KG;
     goalLine = `עודף מתון של ${Math.round(s * 100)}% מעל ההוצאה היומית (≈ ${Math.round(t.total * s)} קק״ל).`;
-  } else goalLine = 'שמירה: היעד שווה להוצאה היומית המשוערת.';
+  } else if (goal === 'recomp') {
+    kcal = t.total * (1 - RECOMP_DEFICIT); weekly = -(t.total * RECOMP_DEFICIT * 7) / KCAL_PER_KG;
+    if (kcal < floor) { kcal = floor; capped.push(`היעד הועלה לרף המינימום (${Math.round(floor)} קק״ל).`); }
+    goalLine = `שיפור הרכב הגוף: גירעון קטן של ${Math.round(RECOMP_DEFICIT * 100)}% (≈ ${Math.round(t.total * RECOMP_DEFICIT)} קק״ל), עם חלבון גבוה ואימוני כוח. המשקל צפוי לרדת לאט.`;
+  } else {
+    const r = p.weightRange;
+    goalLine = r?.min && r?.max ? `שמירת משקל בטווח ${r.min}–${r.max} ק״ג: היעד שווה להוצאה היומית המשוערת.` : 'שמירת משקל: היעד שווה להוצאה היומית המשוערת.';
+  }
   const target = round(kcal, 50);
   const pr = proteinTarget(p, weightKg);
+  const mac = macros(round(kcal, 50), pr.grams, pr.ref.kg, goal);
   let etaWeeks = null;
   if (+p.targetWeight && weekly) {
     const w = (+p.targetWeight - weightKg) / weekly;
@@ -186,9 +196,18 @@ export function computeTargets(p, weightKg) {
     kcal: target, kcalExact: Math.round(kcal), goal, goalLine, capped, expectedWeekly: weekly, etaWeeks,
     protein: pr.grams, proteinRange: pr.range, proteinPerKg: pr.perKg, refWeight: pr.ref, proteinWhy: pr.why,
     perMeal: proteinPerMeal(p, pr.grams),
-    fiber: p.sex === 'female' ? 25 : 30,
-    sources: [...new Set(['mifflin', 'frankenfield', 'compendium', 'dec_activity', 'dec_floor', ...(goal === 'gain' ? ['iraki2019'] : []), 'hall2011', ...pr.sources])].filter(id => SOURCES[id]),
+    fiber: p.sex === 'female' ? 25 : 30, carbs: mac.carbs, fat: mac.fat, macroWhy: mac.why,
+    sources: [...new Set(['mifflin', 'frankenfield', 'compendium', 'dec_activity', 'dec_floor', ...(goal === 'gain' ? ['iraki2019'] : []), ...(goal === 'recomp' ? ['barakat2020'] : []), 'hall2011', 'iom_macros', 'dec_macros', ...pr.sources])].filter(id => SOURCES[id]),
   };
+}
+
+/** פחמימות ושומן: שומן לפי אחוז מהקלוריות (בטווח 20–35% של ה-AMDR) ולא פחות מ-0.6 ג׳ לק״ג; פחמימות = היתרה */
+export function macros(kcal, protein, refKg, goal) {
+  const pct = goal === 'gain' ? 0.25 : goal === 'maintain' ? 0.3 : 0.28;
+  let fat = Math.max(Math.round(kcal * pct / 9 / 5) * 5, Math.round(0.6 * refKg / 5) * 5);
+  let carbs = Math.round((kcal - protein * 4 - fat * 9) / 4 / 5) * 5;
+  if (carbs < 50) { carbs = 50; fat = Math.max(20, Math.round((kcal - protein * 4 - carbs * 4) / 9 / 5) * 5); }
+  return { carbs, fat, why: `שומן כ-${Math.round(fat * 9 / kcal * 100)}% מהקלוריות (${fat} ג׳), חלבון ${protein} ג׳, והשאר פחמימות (${carbs} ג׳).` };
 }
 
 /** היעד שבתוקף בתאריך מסוים, מתוך היסטוריית היעדים */

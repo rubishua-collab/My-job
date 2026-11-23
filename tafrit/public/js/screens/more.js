@@ -1,5 +1,7 @@
 // "עוד": פרופיל, יעדים, מועדפים, מתכונים, מוצרים אישיים, ארוחות קבועות, מקורות וגיבוי
-import { route, render } from '../app.js';
+import { route, render, logout, wipeLocal } from '../app.js';
+import { privacySummaryHtml } from './auth.js';
+import { openAiConsent } from './chat.js';
 import { D, refresh, food } from '../data.js';
 import { get, save, del } from '../api.js';
 import { $, esc, n0, toast, on, openSheet, confirmSheet } from '../ui.js';
@@ -13,6 +15,7 @@ route('more', async (el) => {
   const st = D.state;
   el.innerHTML = `<div class="stack"><div class="top"><h1>עוד</h1></div>
     <div class="card"><ul class="list">
+      <li class="li" data-go="#/plan"><div class="m"><b>התוכנית שלי</b><small>מטרה, יעדים, שינוי מטרה ותוכנית, היסטוריית תוכניות</small></div><div class="a">›</div></li>
       <li class="li" data-go="#/targets"><div class="m"><b>היעדים שלי</b><small>כמה אני שורף, כמה לאכול, איך חושב, היסטוריה</small></div><div class="a">›</div></li>
       <li class="li" data-go="#/onboarding"><div class="m"><b>הפרופיל שלי</b><small>עודכן ${esc(savedAt(st.profile?.updatedAt))}</small></div><div class="a">›</div></li>
       <li class="li" data-sec="fav"><div class="m"><b>מועדפים</b><small>${st.favorites.length} פריטים</small></div><div class="a">›</div></li>
@@ -22,12 +25,33 @@ route('more', async (el) => {
       <li class="li" data-sec="sources"><div class="m"><b>על מה מבוססות ההמלצות?</b><small>מחקרים, הנחיות והחלטות תוכנה</small></div><div class="a">›</div></li>
       <li class="li" data-sec="db"><div class="m"><b>מאגר המזון</b><small>${esc(st.foodsMeta?.source || '')}</small></div><div class="a">›</div></li>
       <li class="li" data-sec="backup"><div class="m"><b>גיבוי ושחזור</b><small>הורדת כל הנתונים לקובץ</small></div><div class="a">›</div></li>
+    </ul></div>
+    <div class="card"><h3>החשבון שלי</h3><div class="small muted" dir="ltr" style="text-align:right">${esc(D.session.user.email)}</div><ul class="list">
+      ${D.session.user.admin ? '<li class="li" data-go="#/admin"><div class="m"><b>ניהול משתמשים</b><small>דורש אימות דו-שלבי</small></div><div class="a">›</div></li>' : ''}
+      ${D.session.ai ? `<li class="li" data-sec="ai"><div class="m"><b>מלווה חכם (ספק AI חיצוני)</b><small>${D.session.user.aiConsent ? 'מאושר — אפשר לבטל' : 'לא מאושר — המלווה עובד במצב בסיסי'}</small></div><div class="a">›</div></li>` : ''}
+      <li class="li" data-sec="password"><div class="m"><b>שינוי סיסמה</b></div><div class="a">›</div></li>
+      <li class="li" data-sec="privacy"><div class="m"><b>פרטיות — מה נשמר ומי רואה</b></div><div class="a">›</div></li>
+      <li class="li" data-sec="logout"><div class="m"><b>התנתקות</b><small>המידע המקומי במכשיר יימחק</small></div><div class="a">›</div></li>
+      <li class="li" data-sec="logoutAll"><div class="m"><b>התנתקות מכל המכשירים</b></div><div class="a">›</div></li>
+      <li class="li" data-sec="deleteAcc"><div class="m"><b style="color:var(--danger)">מחיקת החשבון וכל המידע</b><small>לא ניתן לשחזר</small></div><div class="a">›</div></li>
     </ul></div><p class="tiny muted">האפליקציה עוזרת לתכנן ולתעד. היא לא מחליפה ייעוץ רפואי או תזונתי אישי.</p></div>`;
   on(el, '[data-go]', 'click', (e, li) => { location.hash = li.dataset.go; });
   on(el, '[data-sec]', 'click', (e, li) => SECTIONS[li.dataset.sec]());
 });
 
 const SECTIONS = {
+  ai() { openAiConsent(); },
+  password() {
+    const s = openSheet({ title: 'שינוי סיסמה', body: `<label class="field"><span>סיסמה נוכחית</span><input class="in" id="c" type="password" autocomplete="current-password" dir="ltr"></label><label class="field"><span>סיסמה חדשה</span><input class="in" id="n" type="password" autocomplete="new-password" dir="ltr"></label>`, foot: '<button class="btn" data-ok>שמירה</button>' });
+    on(s.el, '[data-ok]', 'click', async () => { try { await save('POST', '/api/account/password', { current: $('#c', s.el).value, password: $('#n', s.el).value }); s.close(); toast('הסיסמה עודכנה'); } catch {} });
+  },
+  privacy() { openSheet({ title: 'פרטיות', body: privacySummaryHtml() }); },
+  logout() { logout(); },
+  async logoutAll() { if (await confirmSheet('להתנתק מכל המכשירים?', '<p>כל המכשירים שמחוברים לחשבון יתנתקו, כולל זה.</p>', 'התנתק')) logout({ all: true }); },
+  deleteAcc() {
+    const s = openSheet({ title: 'מחיקת החשבון', body: `<div class="note err">יימחקו לצמיתות: הפרופיל, התוכניות, היעדים, השקילות, יומן האכילה, המתכונים, המועדפים והשיחות עם המלווה. אי אפשר לשחזר.</div><p class="small">כדאי להוריד קודם גיבוי (עוד ← גיבוי ושחזור).</p><label class="field"><span>להמשך, הזן את הסיסמה</span><input class="in" id="p" type="password" autocomplete="current-password" dir="ltr"></label>`, foot: '<button class="btn danger" data-ok>מחק את החשבון לצמיתות</button>' });
+    on(s.el, '[data-ok]', 'click', async () => { try { await save('POST', '/api/account/delete', { password: $('#p', s.el).value }); await wipeLocal(); location.hash = '#/welcome'; location.reload(); } catch {} });
+  },
   fav() { const list = D.state.favorites.map(f => food(f.id)).filter(Boolean); const s = openSheet({ title: 'מועדפים', body: list.length ? `<ul class="list">${list.map(foodRow).join('')}</ul>` : '<div class="empty-state">אין עדיין. בכרטיס מזון לחץ ☆.</div>' }); on(s.el, '[data-food]', 'click', (e, li) => openFoodDetail(food(li.dataset.food), {})); },
   recipes() {
     const s = openSheet({ title: 'מתכונים ביתיים', body: `<button class="btn block soft" data-new>+ מתכון חדש</button><ul class="list">${D.state.recipes.map(r => { const f = food('r:' + r.id); return `<li class="li" data-r="${r.id}"><div class="m"><b>${esc(r.name)}</b><small>${r.items.length} רכיבים · ${f ? `${n0(f.k)} קק״ל ל-100 ג׳` : ''}</small></div><div class="a">›</div></li>`; }).join('')}</ul>` });

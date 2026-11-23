@@ -164,3 +164,34 @@ test('שבוע אחד בלבד עם פער → לא משנים יעד', () => {
 test('תאריך ישראל', () => {
   assert.equal(israelDate(new Date('2026-11-22T22:30:00Z')), '2026-11-23'); // 00:30 בישראל
 });
+
+test('תוכניות: תוכנית לפי תאריך, תאריך סיום מחושב, פרופיל אפקטיבי', async () => {
+  const { planFor, planPeriods, profileOn } = await import('../../shared/plans.js');
+  const plans = [{ id: 'a', goal: 'lose', startDate: '2026-11-01', settings: { meals: 4 }, createdAt: 1 }, { id: 'b', goal: 'maintain', startDate: '2026-11-22', settings: { meals: 3, weightRange: { min: 70, max: 72 } }, createdAt: 2 }];
+  assert.equal(planFor(plans, '2026-11-21').goal, 'lose');
+  assert.equal(planFor(plans, '2026-11-22').goal, 'maintain');
+  assert.equal(planPeriods(plans)[0].endDate, '2026-11-21');
+  assert.equal(profileOn({ sex: 'male', goal: 'lose', meals: 5 }, plans, '2026-11-25').meals, 3);
+  assert.equal(planFor(plans, '2026-10-01'), null);
+});
+
+test('פחמימות ושומן + מטרת שיפור הרכב גוף', () => {
+  const t = computeTargets({ ...P, goal: 'recomp' }, 90);
+  assert.ok(t.kcal < t.tdee && t.kcal > t.tdee * 0.85);
+  assert.equal(t.protein * 4 + t.carbs * 4 + t.fat * 9 <= t.kcal + 40, true);
+  assert.ok(t.fat * 9 / t.kcal >= 0.2 && t.fat * 9 / t.kcal <= 0.35);
+});
+
+test('הצפנה, סיסמאות ו-TOTP', async () => {
+  const C = await import('../../server/crypto.js');
+  const key = Buffer.alloc(32, 7);
+  const e = C.encrypt('שקילה 72.4', key); assert.ok(e.startsWith('e1:') && !e.includes('72'));
+  assert.equal(C.decrypt(e, key), 'שקילה 72.4');
+  assert.throws(() => C.decrypt(e, Buffer.alloc(32, 8)));
+  const h = C.hashPassword('abcd1234'); assert.ok(C.verifyPassword('abcd1234', h)); assert.ok(!C.verifyPassword('abcd12345', h));
+  // RFC 6238 test vector (SHA-1, T=59s): 94287082 → 6 ספרות אחרונות 287082
+  const secret = C.base32(Buffer.from('12345678901234567890'));
+  assert.equal(C.totp(secret, 59 * 1000), '287082');
+  assert.ok(C.verifyTotp(secret, C.totp(secret)) !== null);
+  assert.equal(C.verifyTotp(secret, '000000', 59000) === null || C.totp(secret, 59000) === '000000', true);
+});

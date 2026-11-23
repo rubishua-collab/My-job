@@ -1,6 +1,7 @@
 // "כמה אני שורף וכמה כדאי לי לאכול" + "איך חישבת לי?" + היסטוריית יעדים
 import { route, go } from '../app.js';
-import { D, refresh, profile, today, targetOn } from '../data.js';
+import { D, refresh, profile, baseProfile, today, targetOn } from '../data.js';
+import { pickPlanFields } from '/shared/plans.js';
 import { save } from '../api.js';
 import { $, esc, n0, kg, toast } from '../ui.js';
 import { computeTargets, GOALS } from '/shared/nutrition.js';
@@ -32,7 +33,8 @@ route('targets', async (el, [mode]) => {
       <div class="card"><div class="q">כמה אתה כנראה מוציא ביום ממוצע?</div><div class="a"><span class="num">${n0(t.tdeeRange[0])}–${n0(t.tdeeRange[1])}</span> <small>קק״ל</small></div><div class="small muted">הערכה כוללת עבודה, צעדים ואימונים. זה טווח, כי נוסחה לא מדויקת לכל אחד.</div></div>
       <div class="card soft"><div class="q">כמה כדאי לך לאכול ביום כדי להתקדם?</div><div class="a"><span class="num">${n0(t.kcal)}</span> <small>קק״ל</small></div><div class="small">${esc(GOALS[t.goal])}. מספר פתיחה — נבדוק אותו מול השקילות.</div>${t.etaWeeks ? `<div class="small muted">בקצב הזה: כ-${t.etaWeeks} שבועות למשקל היעד.</div>` : ''}</div>
       <div class="card"><div class="q">כמה חלבון ביום?</div><div class="a"><span class="num">${n0(t.protein)}</span> <small>גרם</small></div><div class="small">טווח אישי: ${t.proteinRange[0]}–${t.proteinRange[1]} ג׳. ${t.refWeight.kg !== w.kg ? `חושב לפי משקל ייחוס ${kg(t.refWeight.kg)} ק״ג.` : ''}</div>
-        <div class="small" style="margin-top:6px">${t.perMeal.map(m => `${esc(m.label)}: <b>${m.g}</b> ג׳`).join(' · ')}</div></div></div>
+        <div class="small" style="margin-top:6px">${t.perMeal.map(m => `${esc(m.label)}: <b>${m.g}</b> ג׳`).join(' · ')}</div></div>
+      <div class="card"><div class="q">פחמימות ושומן</div><div class="a"><span class="num">${n0(t.carbs)}</span> <small>ג׳ פחמימות</small> · <span class="num">${n0(t.fat)}</span> <small>ג׳ שומן</small></div><div class="small muted">${esc(t.macroWhy)}</div></div></div>
       <details class="how" id="how"><summary>איך חישבת לי?</summary><div class="calc">
         <div class="ln small muted">נתונים: ${p.sex === 'female' ? 'אישה' : 'גבר'}, גיל ${p.age}, ${p.heightCm} ס״מ, משקל בוקר ${kg(w.kg)} ק״ג (${dmy(w.date)})</div>
         ${t.tdeeLines.map(l => `<div class="ln"><b class="num">${l.k === 'bmr' ? '' : '+'}${n0(l.v)}</b>${esc(l.label)}<div class="tiny muted">${esc(l.how)}</div></div>`).join('')}
@@ -55,7 +57,9 @@ route('targets', async (el, [mode]) => {
     <a class="btn block plain" href="#/onboarding">בדיקת הנתונים שלי</a></div>`;
   $('#savet', el)?.addEventListener('click', async () => {
     const eff = $('#eff', el).value || today();
-    await save('POST', '/api/targets', { kcal: t.kcal, protein: t.protein, fiber: t.fiber, effectiveFrom: eff, source: cur ? 'recalc' : 'onboarding', reason: cur ? 'חישוב מחדש לפי הפרופיל והמשקל' : 'חישוב ראשוני', mode: t.mode, expectedWeekly: t.expectedWeekly ?? null, details: t.mode === 'auto' ? { bmr: t.bmr, tdee: t.tdee, refWeight: t.refWeight.kg, weight: w.kg } : null });
+    const hasPlans = (D.state.plans || []).length > 0;
+    if (!hasPlans) await save('POST', '/api/plans', { kind: 'initial', goal: p.goal || 'maintain', settings: pickPlanFields(baseProfile()), startDate: eff, weightKg: w.kg, reason: 'חישוב ראשוני' });
+    else await save('POST', '/api/targets', { kcal: t.kcal, protein: t.protein, carbs: t.carbs, fat: t.fat, fiber: t.fiber, effectiveFrom: eff, source: 'recalc', reason: 'חישוב מחדש לפי הפרופיל והמשקל', mode: t.mode, expectedWeekly: t.expectedWeekly ?? null, details: t.mode === 'auto' ? { bmr: t.bmr, tdee: t.tdee, refWeight: t.refWeight.kg, weight: w.kg } : null });
     await refresh(); toast('היעד נשמר'); go('#/today');
   });
 });

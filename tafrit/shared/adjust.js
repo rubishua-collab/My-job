@@ -30,8 +30,10 @@ export function weekIntake(start, days, entries, foods) {
   };
 }
 
-function expectedWeekly(profile, avgKg) {
+function expectedWeekly(profile, avgKg, tgt) {
+  if (tgt?.expectedWeekly != null && profile.goal !== 'maintain') return tgt.expectedWeekly;
   if (profile.goal === 'lose') return -((LOSS_RATES[profile.rate] ?? 0.75) / 100) * avgKg;
+  if (profile.goal === 'recomp') return -0.0025 * avgKg;
   if (profile.goal === 'gain') { const s = GAIN_SURPLUS[profile.rate] ?? 0.05; return s === 0.1 ? 0.005 * avgKg : 0.0025 * avgKg; }
   return 0;
 }
@@ -55,19 +57,33 @@ export function weeklyReview({ profile, targets, weights, days = {}, entries = [
   const res = { weeks, last, prev, change, intake, intakePrev, target: tgt, missing, checkin, status: 'insufficient', proposal: null, notes: [], sources: ['dec_weekavg', 'dec_review', 'hall2011'] };
   if (!tgt || !last?.avg) return res;
 
-  const exp = expectedWeekly(profile, last.avg); res.expected = Math.round(exp * 100) / 100;
+  const exp = expectedWeekly(profile, last.avg, tgt); res.expected = Math.round(exp * 100) / 100;
   const tol = Math.max(0.2, 0.0025 * last.avg); res.tolerance = Math.round(tol * 100) / 100;
   const ok = w => w && w.n >= MIN_WEIGHINS;
   if (!(ok(last) && ok(prev))) { res.status = 'insufficient'; return res; }
   const gap1 = change.kg - exp;
   const gap0 = change2 && ok(prev2) ? change2.kg - exp : null;
   res.gap = Math.round(gap1 * 100) / 100;
-  const onPace = Math.abs(gap1) <= tol;
+  const range = profile.goal === 'maintain' && profile.weightRange?.min && profile.weightRange?.max ? profile.weightRange : null;
+  if (range) res.range = range;
+  // שמירת משקל עם טווח: בתוך הטווח = בסדר גם אם יש תנודה; מחוץ לטווח ובכיוון הלא נכון = כמו פער
+  const outside = range ? (last.avg > range.max ? 1 : last.avg < range.min ? -1 : 0) : null;
+  const onPace = range ? (outside === 0 || Math.sign(change.kg) === -outside) : Math.abs(gap1) <= tol;
   const feelBad = checkin && (checkin.hunger >= 4 || checkin.energy <= 2 || checkin.performance <= 2);
 
   if (onPace) {
     res.status = 'on_track';
-    res.notes.push(feelBad ? 'אתה בקצב שבחרת, אבל דיווחת על רעב או עייפות. אפשר להשאיר את היעד ולהזיז חלבון וסיבים לשעות הרעב, או לשקול תוספת קטנה של 100 קק״ל.' : 'אתה מתקדם בקצב שבחרת. ההמלצה: להמשיך עם אותו יעד.');
+    if (range) res.notes.push(outside === 0 ? `ממוצע המשקל (${last.avg} ק״ג) בתוך הטווח שבחרת (${range.min}–${range.max}). ההמלצה: להמשיך.` : `ממוצע המשקל מחוץ לטווח, אבל המגמה חוזרת אליו. ההמלצה: להמשיך ולעקוב.`);
+    else res.notes.push(feelBad ? 'אתה בקצב שבחרת, אבל דיווחת על רעב או עייפות. אפשר להשאיר את היעד ולהזיז חלבון וסיבים לשעות הרעב, או לשקול תוספת קטנה של 100 קק״ל.' : 'אתה מתקדם בקצב שבחרת. ההמלצה: להמשיך עם אותו יעד.');
+  } else if (range) {
+    const prevOut = prev.avg > range.max ? 1 : prev.avg < range.min ? -1 : 0;
+    if (prevOut !== outside) { res.status = 'watch'; res.notes.push(`ממוצע המשקל (${last.avg} ק״ג) יצא מהטווח שבחרת (${range.min}–${range.max}) בשבוע האחרון. ההמלצה: לעקוב עוד שבוע.`); }
+    else {
+      const floor = profile.sex === 'female' ? 1200 : 1500; const delta = -outside * 150; const toKcal = Math.max(floor, tgt.kcal + delta);
+      res.status = outside > 0 ? 'too_slow' : 'too_fast';
+      res.proposal = { from: { kcal: tgt.kcal, protein: tgt.protein }, to: { kcal: toKcal, protein: tgt.protein }, effectiveFrom: today,
+        reason: `שבועיים ברציפות ממוצע המשקל ${outside > 0 ? 'מעל' : 'מתחת ל'}טווח שבחרת (${range.min}–${range.max} ק״ג), ובלי מגמה של חזרה אליו. הצעה: ${Math.abs(delta)} קק״ל ${outside > 0 ? 'פחות' : 'יותר'} ביום.` };
+    }
   } else if (gap0 == null || Math.sign(gap0) !== Math.sign(gap1) || Math.abs(gap0) <= tol) {
     res.status = 'watch';
     res.notes.push('יש פער מהקצב שבחרת בשבוע האחרון בלבד. שבוע אחד יכול לנבוע ממים, מלח או מחזור. ההמלצה: להמשיך שבוע נוסף ולבדוק שוב.');

@@ -183,3 +183,4 @@ details.how summary { cursor: pointer; min-height: 44px; display: flex; align-it
 .saved { font-size: 12px; color: var(--muted); }
 .daynav { display: flex; align-items: center; gap: 6px; }
 .daynav .iconbtn { width: 40px; height: 40px; }
+.tabbar[hidden] { display: none; }

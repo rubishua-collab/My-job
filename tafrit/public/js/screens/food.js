@@ -15,7 +15,7 @@ export function foodRow(f) {
 export function openFoodPicker({ date, meal, onAdded, onPick, title } = {}) {
   let tab = 'search';
   const s = openSheet({ title: title || 'אבחר בעצמי', body: `
-    ${meal ? `<label class="field"><span>לארוחה</span><select class="in" id="fpmeal">${slots().map(x => `<option value="${x.id}" ${x.id === meal ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></label>` : ''}
+    ${meal ? `<label class="field"><span>לארוחה</span><select class="in" id="fpmeal">${slots(date).map(x => `<option value="${x.id}" ${x.id === meal ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></label>` : ''}
     <input class="in" id="fpq" type="search" placeholder="חפש מזון, מותג או מנה — למשל אורז, קוטג׳, שניצל" autocomplete="off" enterkeyhint="search">
     <div class="seg" id="fptabs" style="margin:10px 0">${[['search', 'חיפוש'], ['fav', 'מועדפים'], ['recipes', 'מתכונים'], ['fixed', 'ארוחות קבועות'], ['mine', 'מוצר אישי']].map(([k, l]) => `<button type="button" data-t="${k}" class="${k === tab ? 'on' : ''}">${l}</button>`).join('')}</div>
     <div id="fpres"></div>` });

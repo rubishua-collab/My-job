@@ -22,9 +22,12 @@ test('Claude tool loop → כרטיסי ארוחה מהמאגר', async () => {
   process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'tafrit-ai-'));
   const S = await import('../../server/store.js');
   const { chat } = await import('../../server/ai.js');
-  S.saveProfile({ sex: 'male', age: 38, heightCm: 180, goal: 'lose', rate: 'moderate', job: 'sitting', strength: { perWeek: 3, minutes: 60 }, meals: 3, onboarding: { done: true } });
-  S.upsertWeight({ kg: 120 }); S.addTarget({ kcal: 2250, protein: 180 });
-  const r = await chat('מה כדאי לי לאכול הערב?');
+  const uid = 'u_test1';
+  S.saveProfile(uid, { sex: 'male', age: 38, heightCm: 180, goal: 'lose', rate: 'moderate', job: 'sitting', strength: { perWeek: 3, minutes: 60 }, meals: 3, onboarding: { done: true } });
+  S.upsertWeight(uid, { kg: 120 }); S.addTarget(uid, { kcal: 2250, protein: 180 });
+  // משתמש אחר עם נתונים שונים — לא אמור להופיע בתשובה
+  S.saveProfile('u_other', { sex: 'female', age: 30, heightCm: 160, goal: 'gain', meals: 3, onboarding: { done: true } }); S.upsertWeight('u_other', { kg: 55 });
+  const r = await chat({ id: uid, ai_consent_at: Date.now() }, 'מה כדאי לי לאכול הערב?');
   mock.close();
   assert.equal(r.mode, 'ai');
   assert.equal(r.text, 'הנה שלוש אפשרויות לערב.');
@@ -36,6 +39,8 @@ test('Claude tool loop → כרטיסי ארוחה מהמאגר', async () => {
   assert.equal(toolResult.type, 'tool_result'); assert.equal(toolResult.tool_use_id, 'tu2');
   const out = JSON.parse(toolResult.content); assert.equal(out.slot, 'dinner'); assert.ok(out.options[0].total_kcal > 0);
   // הכמויות בכרטיס זהות לחישוב מול המאגר
-  const c = r.cards[0]; const f = S.foods.get(c.items[0].foodId);
+  const c = r.cards[0]; const f = S.foodsFor(uid).get(c.items[0].foodId);
+  const status = JSON.parse(calls[1].messages.at(-1).content[0].content); assert.equal(status.latest_weight.kg, 120);
+  assert.ok(!JSON.stringify(calls).includes('55'), 'אין נתונים של משתמש אחר');
   assert.equal(c.items[0].kcal, Math.round(f.k * c.items[0].grams / 100));
 });

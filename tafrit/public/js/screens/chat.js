@@ -7,6 +7,22 @@ import { suggestionHtml, addOption } from './today.js';
 import { sourcesHtml } from './targets.js';
 import { dmy } from '/shared/dates.js';
 
+/** הסכמה לפני העברה ראשונה לספק AI חיצוני. מחזיר true אם אושר */
+export function openAiConsent() {
+  return new Promise(res => {
+    const on1 = !!D.session.user?.aiConsent;
+    const s = openSheet({ title: 'מלווה חכם — ספק AI חיצוני', body: `<div class="stack small">
+      <div>כדי לענות בחופשיות, המלווה נעזר במודל Claude של חברת <b>Anthropic</b>.</div>
+      <div><b>מה יישלח בכל שאלה:</b> השאלה שכתבת, 12 ההודעות האחרונות בשיחה, ומהיומן רק מה שנדרש לתשובה — היעד היומי, מה שאכלת ותכננת היום, השקילות והממוצע השבועי האחרונים, המטרה הפעילה, והעדפות מזון/אלרגיות לצורך הצעת ארוחות.</div>
+      <div><b>מה לא יישלח:</b> שם, דוא״ל, סיסמה או מזהה החשבון.</div>
+      <div>אפשר לבטל את ההסכמה בכל רגע ב״עוד ← החשבון שלי״. בלי הסכמה המלווה ממשיך לעבוד במצב בסיסי, בתוך השרת שלנו.</div></div>`,
+      foot: on1 ? '<button class="btn danger" data-off>ביטול ההסכמה</button>' : '<button class="btn plain" data-no>המשך במצב בסיסי</button><button class="btn" data-yes>מאשר/ת</button>' , onClose: () => res(false) });
+    on(s.el, '[data-yes]', 'click', async () => { await save('POST', '/api/account/ai-consent', { consent: true }); D.session.user.aiConsent = true; s.close(); res(true); });
+    on(s.el, '[data-no]', 'click', () => { sessionStorage.setItem('tafrit-ai-asked', '1'); s.close(); res(false); });
+    on(s.el, '[data-off]', 'click', async () => { await save('POST', '/api/account/ai-consent', { consent: false }); D.session.user.aiConsent = false; s.close(); toast('ההסכמה בוטלה. המלווה עובד במצב בסיסי'); res(false); });
+  });
+}
+
 const QUICK = ['מה כדאי לי לאכול הערב?', 'איך אגיע לחלבון שלי בלי לבשל?', 'יש לי בבית ביצים, קוטג׳ ופיתה, מה אפשר להכין?', 'כמה נשאר לי היום?', 'למה המלצת להשאיר השבוע את אותן קלוריות?', 'איך חישבת לי את היעדים?'];
 
 function cardsHtml(cards = [], seq) {
@@ -36,6 +52,7 @@ route('chat', async (el) => {
   scroll();
   const send = async text => {
     if (!text.trim()) return;
+    if (D.session.ai && !D.session.user.aiConsent && !sessionStorage.getItem('tafrit-ai-asked')) await openAiConsent();
     $('#ci', el).value = ''; $('#cs', el).disabled = true;
     box.insertAdjacentHTML('beforeend', `<div class="msg u">${esc(text)}</div><div class="msg a" id="typing">חושב…</div>`); scroll();
     try {

@@ -4,6 +4,7 @@ import { FoodIndex, customFood, recipeFood, nutrients, isVegFruit } from '/share
 import { COMMON_IDS } from '/shared/catalog.js';
 import { israelDate, addDays } from '/shared/dates.js';
 import { targetFor, mealSlots } from '/shared/nutrition.js';
+import { profileOn, planFor, planPeriods } from '/shared/plans.js';
 
 export const D = { state: null, foods: null, meta: null, session: null };
 
@@ -23,13 +24,17 @@ export async function refresh() {
   return st;
 }
 export const today = () => israelDate();
-export const profile = () => D.state?.profile || null;
+/** הפרופיל האפקטיבי לתאריך (פרטים קבועים + התוכנית שבתוקף באותו יום) */
+export const profile = (date = today()) => profileOn(D.state?.profile || null, D.state?.plans || [], date);
+export const baseProfile = () => D.state?.profile || null;
+export const planOn = (date = today()) => planFor(D.state?.plans || [], date);
+export const plans = () => planPeriods(D.state?.plans || []);
 export const food = id => D.foods?.get(id) || null;
 export const foodOf = e => D.foods.get(e.foodId) || { ...e.snapshot, id: e.foodId };
 export const favorites = () => new Set((D.state?.favorites || []).map(f => f.id));
 export const searchFoods = (q, limit = 40) => D.foods.search(q, { limit, boost: favorites(), common: COMMON_IDS });
 export const targetOn = date => targetFor(D.state?.targets || [], date);
-export const slots = () => mealSlots(profile()?.meals || 3);
+export const slots = (date = today()) => { const p = profile(date); return mealSlots(p?.meals || 3, p?.mealTimes); };
 export const entriesOn = date => (D.state?.entries || []).filter(e => e.date === date);
 export const dayDoc = date => D.state?.days?.[date] || { locked: [], complete: false };
 

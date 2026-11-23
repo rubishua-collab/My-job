@@ -4,7 +4,7 @@ import { D, refresh, profile, today, targetOn } from '../data.js';
 import { save } from '../api.js';
 import { $, $$, esc, n0, kg, toast, sign, on } from '../ui.js';
 import { weeklyReview, MIN_WEIGHINS, MIN_LOGGED_DAYS } from '/shared/adjust.js';
-import { dm, dmy, addDays } from '/shared/dates.js';
+import { dm, dmy, addDays, weekStart } from '/shared/dates.js';
 import { sourcesHtml } from './targets.js';
 
 const STATUS = {
@@ -13,7 +13,7 @@ const STATUS = {
 };
 
 route('week', async (el) => {
-  const p = profile(); const t = today();
+  const t = today(); const p = profile(addDays(weekStart(t), -1));
   const rv = weeklyReview({ profile: p, targets: D.state.targets, weights: D.state.weights, days: D.state.days, entries: D.state.entries, foods: D.foods, today: t, checkins: D.state.checkins });
   const L = rv.last; const cur = rv.weeks[0];
   const ck = L ? D.state.checkins[L.start] || {} : {};

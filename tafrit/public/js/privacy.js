@@ -1,0 +1,1 @@
+fetch('/api/public/info').then(r => r.json()).then(i => { if (i.supportEmail) { const a = document.createElement('a'); a.href = 'mailto:' + i.supportEmail; a.textContent = i.supportEmail; a.dir = 'ltr'; const c = document.getElementById('contact'); c.textContent = ''; c.appendChild(a); } }).catch(() => {});

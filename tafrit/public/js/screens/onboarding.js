@@ -3,7 +3,7 @@ import { route, go } from '../app.js';
 import { D, refresh, today } from '../data.js';
 import { save } from '../api.js';
 import { $, $$, esc, toast, kg } from '../ui.js';
-import { GOALS, JOB, GENERAL } from '/shared/nutrition.js';
+import { GOALS, GOAL_HINT, JOB, GENERAL } from '/shared/nutrition.js';
 import { ALLERGENS } from '/shared/catalog.js';
 import { savedAt, dmy } from '/shared/dates.js';
 
@@ -26,9 +26,12 @@ const STEPS = [
     html: p => `${num('h', 'גובה (ס״מ)', p.heightCm, 'inputmode="numeric" placeholder="למשל 178"')}${num('w', 'משקל הבוקר (ק״ג)', p._weight ?? lastW(), 'placeholder="למשל 119.8"')}`,
     read: (el, p) => { p.heightCm = +val(el, 'h'); p._weight = +val(el, 'w'); if (!(p.heightCm >= 120 && p.heightCm <= 230)) return 'הזן גובה בס״מ'; if (!(p._weight >= 30 && p._weight <= 350)) return 'הזן משקל בק״ג'; } },
   { id: 'goal', q: 'מה המטרה שלך כרגע?', hint: 'אפשר לשנות בכל זמן.',
-    html: p => opts('goal', [['lose', GOALS.lose, 'גירעון מתון + חלבון גבוה'], ['maintain', GOALS.maintain], ['gain', GOALS.gain, 'עודף קטן + אימוני כוח']], p.goal),
+    html: p => opts('goal', Object.keys(GOALS).map(k => [k, GOALS[k], GOAL_HINT[k]]), p.goal),
     read: (el, p) => { p.goal = getOpt(el, 'goal'); if (!p.goal) return 'בחר מטרה'; } },
-  { id: 'pace', q: 'משקל יעד וקצב', hint: 'משקל יעד לא חובה. הקצב קובע כמה גדול יהיה הגירעון או העודף.', skip: p => p.goal === 'maintain',
+  { id: 'range', q: 'טווח משקל רצוי', hint: 'בשמירת משקל — באיזה טווח נוח לך להיות? (לא חובה)', skip: p => p.goal !== 'maintain',
+    html: p => `<div class="grid2">${num('rmin', 'מ- (ק״ג)', p.weightRange?.min, 'placeholder="למשל 78"')}${num('rmax', 'עד (ק״ג)', p.weightRange?.max, 'placeholder="למשל 81"')}</div>`,
+    read: (el, p) => { const a = +val(el, 'rmin'), b = +val(el, 'rmax'); p.weightRange = a && b ? { min: Math.min(a, b), max: Math.max(a, b) } : null; } },
+  { id: 'pace', q: 'משקל יעד וקצב', hint: 'משקל יעד לא חובה. הקצב קובע כמה גדול יהיה הגירעון או העודף.', skip: p => p.goal === 'maintain' || p.goal === 'recomp',
     html: p => `${num('tw', 'משקל יעד (ק״ג, לא חובה)', p.targetWeight, 'placeholder="למשל 100"')}${p.goal === 'gain'
       ? opts('rate', [['slow', 'איטי', 'עודף של כ-5% — פחות שומן'], ['standard', 'רגיל', 'עודף של כ-10%']], p.rate || 'slow')
       : opts('rate', [['slow', 'עדין', '0.5% ממשקל הגוף בשבוע'], ['moderate', 'מתון', '0.75% בשבוע'], ['fast', 'מהיר', '1% בשבוע (מקסימום מומלץ)']], p.rate || 'moderate')}`,
@@ -97,7 +100,10 @@ route('onboarding', async (el, [arg]) => {
   p = p || structuredClone(prof || {});
   // יש נתונים קודמים — מציגים לאישור עם תאריך העדכון
   if (prof?.onboarding?.done && arg !== 'edit') return review(el, prof);
-  const visible = () => STEPS.filter(s => !s.skip?.(p));
+  // משתמש שכבר יש לו תוכנית: את המטרה, הפעילות, הארוחות וההעדפות משנים דרך "שינוי מטרה ותוכנית" (כדי לשמור היסטוריה)
+  const hasPlans = (D.state.plans || []).length > 0;
+  const PLAN_STEPS = new Set(['goal', 'range', 'pace', 'job', 'strength', 'cardio', 'mode', 'rhythm', 'hunger', 'likes', 'fav']);
+  const visible = () => STEPS.filter(s => !s.skip?.(p) && !(hasPlans && PLAN_STEPS.has(s.id)));
   let i = arg === 'edit' ? 0 : Math.max(0, visible().indexOf(STEPS[Math.min(prof?.onboarding?.step || 0, STEPS.length - 1)]));
   const show = () => {
     const steps = visible(); i = Math.max(0, Math.min(i, steps.length - 1)); const s = steps[i];
@@ -146,8 +152,9 @@ function review(el, prof) {
     <label class="field"><span>משקל הבוקר היום (${dmy(today())})</span><input class="in big" id="rw" inputmode="decimal" value="${lw?.date === today() ? lw.kg : ''}" placeholder="ק״ג"></label>
     <label class="row" style="gap:10px"><input type="checkbox" id="rok" style="width:24px;height:24px"><span>המטרה עדיין: ${esc(GOALS[prof.goal])}</span></label>
     <button class="btn block xl" id="rgo">הנתונים נכונים — חשב יעדים</button>
-    <button class="btn block plain" id="redit">עדכן תשובות</button></div>`;
+    ${(D.state.plans || []).length ? '<button class="btn block soft" id="rplan">שינוי מטרה ותוכנית</button><button class="btn block plain" id="redit">עדכון פרטים אישיים (גיל, גובה, אלרגיות, הנחיות רפואיות)</button>' : '<button class="btn block plain" id="redit">עדכן תשובות</button>'}</div>`;
   $('#redit', el).onclick = () => go('#/onboarding/edit');
+  $('#rplan', el)?.addEventListener('click', () => go('#/plan-change'));
   $('#rgo', el).onclick = async () => {
     const w = +$('#rw', el).value.replace(',', '.');
     if (!(w >= 30 && w <= 350)) return toast('הזן את משקל הבוקר');

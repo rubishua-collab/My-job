@@ -93,6 +93,20 @@ export const SOURCES = {
     url: 'https://www.who.int/news-room/fact-sheets/detail/healthy-diet',
     supports: 'לפחות 400 גרם ירקות ופירות ביום. משמש כיעד הירקות והפירות בהמלצות הארוחות.',
   },
+  iom_macros: {
+    kind: 'guideline', year: 2005,
+    title: 'Dietary Reference Intakes for Energy, Carbohydrate, Fiber, Fat, Fatty Acids, Cholesterol, Protein, and Amino Acids',
+    authors: 'Institute of Medicine (National Academies)', journal: 'National Academies Press',
+    url: 'https://doi.org/10.17226/10490',
+    supports: 'טווחים מקובלים למבוגרים: שומן 20–35% מהקלוריות ופחמימות 45–65%. יעד השומן נקבע בתוך הטווח הזה, והפחמימות משלימות את היתרה.',
+  },
+  barakat2020: {
+    kind: 'research', year: 2020,
+    title: 'Body Recomposition: Can Trained Individuals Build Muscle and Lose Fat at the Same Time?',
+    authors: 'Barakat C, Pearson J, Escalante G, Campbell B, De Souza EO', journal: 'Strength Cond J 42(5):7–21',
+    url: 'https://doi.org/10.1519/SSC.0000000000000584',
+    supports: 'שיפור הרכב הגוף (פחות שומן ויותר שריר בו-זמנית) אפשרי עם אימוני כוח, חלבון גבוה וגירעון קלורי קטן. מכאן הגירעון המתון במטרה הזו.',
+  },
   moh_db: {
     kind: 'data', year: 2023,
     title: 'מאגר התזונה הלאומי הישראלי (צמרת)',
@@ -127,6 +141,16 @@ export const SOURCES = {
     kind: 'decision',
     title: 'ממוצע שבועי',
     supports: 'הממוצע מחושב מיום ראשון עד שבת: סכום השקילות חלקי מספר הימים שבהם נשקלת בפועל. יום בלי שקילה לא נכנס לחישוב.',
+  },
+  dec_macros: {
+    kind: 'decision',
+    title: 'חלוקת פחמימות ושומן',
+    supports: 'שומן: 28% מהקלוריות בחיטוב ובשיפור הרכב הגוף, 30% בשמירת משקל ו-25% בעלייה במסה, ולא פחות מ-0.6 ג׳ לק״ג. הפחמימות משלימות את היתרה (לפחות 50 ג׳). המספרים מעוגלים ל-5 ג׳.',
+  },
+  dec_plans: {
+    kind: 'decision',
+    title: 'תקופות ותוכניות',
+    supports: 'כל תוכנית חלה מתאריך ההתחלה שלה עד היום שלפני התוכנית הבאה. דוחות של ימים קודמים מוצגים לפי התוכנית שהייתה בתוקף באותו יום, ולכן החלפת תוכנית לא משנה את ההיסטוריה.',
   },
   dec_review: {
     kind: 'decision',
