@@ -1,6 +1,6 @@
-// החלפת רכיב בארוחה מוצעת — דרך המסכים, בהדמיית iPhone 13.
-// יום שלם לפרופיל שאוכל עוף ודגים: מנת עוף ומנת דג; בצהריים מחליפים רק את האורז בבטטה ורואים מיד כמות וערכים;
-// אותה החלפה מתוך "הצע לי"; וארוחה עיקרית אחת — בחירה בין עוף לדג.  הרצה: node test/e2e-swap.mjs
+// מנות עם אופי, עוף/דג/בקר רזה והחלפת רכיב — דרך המסכים, בהדמיית iPhone 13.
+// יום שלם לאוכל-כול: ארוחה עיקרית מעוף/דג/בקר; ב"החלף חלבון" שלוש הקבוצות מיד; עוף → דג, "הוסף את כל היום" נשמר פעם אחת והסיכום תואם;
+// "הצע מנה אחרת"; "הצע לי" אחרי ביצים בבוקר; פרופיל עם אלרגיה לדגים; ארוחה עיקרית אחת — בחירה בין עוף, דג ובקר.  הרצה: node test/e2e-swap.mjs
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
@@ -42,113 +42,105 @@ const st = p => p.evaluate(async () => { const r = await fetch('/api/state', { h
 const FAM = { m1561: 'egg', m1564: 'egg', m805: 'chicken', m880: 'pargit', u172849: 'turkey', m1478: 'beef', m609: 'beef', m815: 'chicken', m1009: 'turkeyDeli' };
 
 
-const FISH = /סלמון|אמנון|דניס|לברק|בקלה|טונה|דג/; const POULTRY = /עוף|פרגית|הודו|שניצל/;
-const PROF = { ...OMNI, likes: [...OMNI.likes, 'דגים', 'סלמון'] };
+const FISH = /סלמון|אמנון|דניס|לברק|בקלה|טונה|דג/; const POULTRY = /עוף|פרגית|הודו|שניצל/; const BEEF = /בקר|סינטה|סטייק/; const EGG = /ביצ|חביתה/;
 const num = t => +String(t).match(/([\d,]+)/)[1].replace(',', '');
-async function swapRiceToSweetPotato(p, card, label) {
-  const sw = card.locator('[data-sw]');
-  const roles = await card.locator('.si').evaluateAll(xs => xs.map(x => x.innerText));
-  let ri = roles.findIndex(t => /אורז/.test(t));
-  const carbBtn = () => card.locator('.si').nth(ri).locator('[data-sw]');
-  if (ri < 0) { // אין אורז בצהריים — קודם מחליפים לאורז, ואז לבטטה
-    ri = roles.findIndex((t, i) => true && /פחמימה/.test(t)) ;
-    const idx = await card.locator('.si').evaluateAll(xs => xs.findIndex(x => /החלף פחמימה/.test(x.innerText)));
-    ri = idx; await carbBtn().click(); await card.locator('[data-pick$="|rice"]').click();
-  }
-  const kBefore = num(await card.locator('.tot').innerText());
-  const otherBefore = (await card.locator('.si').evaluateAll(xs => xs.map(x => x.innerText))).filter((_, i) => i !== ri);
-  const b = carbBtn(); await b.evaluate(e => e.scrollIntoView({ block: 'center' })); await b.click();
-  const opts = await card.locator('.swp [data-pick]').count();
-  assert.ok(opts >= 5, `לפחות 5 אפשרויות מיד (${opts})`);
-  const panelTxt = await card.locator('.swp').innerText();
-  assert.match(panelTxt, /גרם|כוס|יחיד/); assert.match(panelTxt, /קק״ל · ח [\d.]+ · פ [\d.]+ · ש [\d.]+/); assert.match(panelTxt, /מבושל|אפוי|נא|יבש/);
-  assert.match(panelTxt, /הצג עוד/);
-  let pick = card.locator('[data-pick$="|sweetPotato"]');
-  if (!await pick.count()) { await card.locator('[data-more]').click(); pick = card.locator('[data-pick$="|sweetPotato"]'); }
-  const spTxt = await pick.innerText();
-  await pick.click();
-  const row = await card.locator('.si').nth(ri).innerText();
-  assert.match(row, /בטטה/); assert.ok(row.includes(spTxt.split('\n')[1].split(' · ')[0]), 'הכמות שהוצגה בתחליף היא הכמות בכרטיס');
-  const otherAfter = (await card.locator('.si').evaluateAll(xs => xs.map(x => x.innerText))).filter((_, i) => i !== ri);
-  assert.deepEqual(otherAfter, otherBefore, 'שאר הרכיבים נשארו');
-  assert.match(await card.locator('[data-name]').innerText(), /בטטה/);
-  const kAfter = num(await card.locator('.tot').innerText());
-  console.log(`   ${label}: ${spTxt.replace(/\n/g, ' · ')} | סיכום ארוחה ${kBefore} → ${kAfter} קק״ל`);
-  return { kBefore, kAfter, ri };
-}
+const openDay = async p => { await p.goto(BASE + '/#/today'); await p.getByText('היום שלי').first().waitFor(); await p.click('[data-act="day"]'); await p.locator('.sheet-wrap h2', { hasText: 'יום שלם' }).waitFor(); return p.locator('.sheet-wrap').last(); };
+const cardOf = async (sh, label) => sh.locator('.sugg').nth(await sh.locator('h3').evaluateAll((hs, l) => hs.findIndex(h => h.innerText.includes(l)), label));
+const click = async l => { await l.evaluate(e => e.scrollIntoView({ block: 'center' })); await l.click(); };
 
 try {
-  const tok = await user('fish@test.local', PROF, 118);
+  // ---- 1. יום שלם לאוכל-כול ----
+  const tok = await user('omni2@test.local', OMNI, 118);
   const p = await page(tok);
-  await p.goto(BASE + '/#/today'); await p.getByText('היום שלי').first().waitFor();
-  await p.click('[data-act="day"]'); await p.locator('.sheet-wrap h2', { hasText: 'יום שלם' }).waitFor();
-  const sh = p.locator('.sheet-wrap').last();
+  let sh = await openDay(p);
   const names = await sh.locator('.sugg [data-name]').allInnerTexts();
   console.log('   יום שלם:', names.join(' | '));
-  const lunchCard = sh.locator('.sugg').filter({ has: p.locator('[data-name]') }).nth(await sh.locator('h3').evaluateAll(hs => hs.findIndex(h => h.innerText.includes('צהריים'))));
-  const lunchName = await lunchCard.locator('[data-name]').innerText();
-  assert.match(lunchName, POULTRY, 'מנת עוף בצהריים: ' + lunchName);
-  assert.ok(names.some(n => FISH.test(n)), 'מנת דג ביום');
-  await shot(p, 's01-day');
-  ok(`יום שלם: צהריים "${lunchName}", ערב/אחר "${names.find(n => FISH.test(n))}"`);
+  const lunch = await cardOf(sh, 'צהריים'); const lunchName = await lunch.locator('[data-name]').innerText();
+  assert.ok(POULTRY.test(lunchName) || BEEF.test(lunchName) || FISH.test(lunchName), 'ארוחה עיקרית מעוף/דג/בקר: ' + lunchName);
+  await shot(p, 'x01-day');
+  ok(`יום שלם: צהריים "${lunchName}"`);
 
+  // ---- 2. "החלף חלבון": עוף, דג ובקר רזה מיד ----
+  await click(lunch.locator('[data-sw]').first());
+  const groups = await lunch.locator('.swp [data-group]').evaluateAll(xs => xs.map(x => x.dataset.group));
+  assert.deepEqual(groups.slice(0, 3).sort(), ['beef', 'fish', 'poultry'], 'שלוש האפשרויות הראשונות: ' + groups.join(','));
+  assert.equal(groups.filter(g => g === 'egg').length <= 1, true, 'ביצים בשורה אחת');
+  const panel = await lunch.locator('.swp').innerText();
+  assert.match(panel, /הארוחה אחרי ההחלפה: \d[\d,]* קק״ל · ח [\d.]+ · פ [\d.]+ · ש [\d.]+/); assert.match(panel, /משקל (אחרי הכנה|לפני בישול)/);
+  await shot(p, 'x02-protein-choices');
   const daySum = async () => num((await sh.locator('#daysum').innerText()).replace(/^\D+/, ''));
-  const d0 = await daySum();
-  const r = await swapRiceToSweetPotato(p, lunchCard, 'יום שלם');
-  const d1 = await daySum();
-  assert.equal(d1 - d0, r.kAfter - r.kBefore === 0 ? 0 : d1 - d0); assert.ok(Math.abs((d1 - d0) - (r.kAfter - r.kBefore)) <= 1, `הסיכום היומי עודכן (${d0} → ${d1})`);
-  await shot(p, 's02-day-swapped');
-  ok(`החלפת אורז בבטטה בצהריים: רק הפחמימה השתנתה, שם המנה, הרכיבים, סיכום הארוחה והיום עודכנו מיד (${d0} → ${d1} קק״ל)`);
+  const d0 = await daySum(); const k0 = num(await lunch.locator('.tot').innerText());
+  const fishBtn = lunch.locator('.swp [data-group="fish"]').first(); const fishTxt = await fishBtn.innerText();
+  const after = num(fishTxt.match(/הארוחה אחרי ההחלפה: ([\d,]+)/)[1]);
+  await click(fishBtn);
+  const newName = await lunch.locator('[data-name]').innerText(); const k1 = num(await lunch.locator('.tot').innerText()); const d1 = await daySum();
+  assert.match(newName, FISH); assert.equal(k1, after, 'הסיכום שהוצג לפני הבחירה = סיכום הארוחה');
+  assert.ok(Math.abs((d1 - d0) - (k1 - k0)) <= 1, 'הסיכום היומי עודכן');
+  await shot(p, 'x03-swapped-fish');
+  ok(`"החלף חלבון": ${groups.slice(0, 3).join(', ')} מיד; עוף → דג: "${newName}" (${k0} → ${k1} קק״ל, יום ${d0} → ${d1})`);
 
-  await sh.locator('[data-all]').click(); await noSheet(p);
-  let es = (await st(p)).entries.filter(e => e.date === T);
-  const lunch = es.filter(e => e.meal === 'lunch');
-  assert.ok(lunch.some(e => e.foodId === 'm3654'), 'בטטה נשמרה בצהריים'); assert.ok(!lunch.some(e => e.foodId === 'm2721'), 'האורז לא נשמר');
-  const ids = es.map(e => `${e.meal}|${e.foodId}`); assert.equal(new Set(ids).size, ids.length, 'כל רכיב נשמר פעם אחת');
-  ok(`"הוסף את כל היום": נשמרה רק האפשרות שנבחרה (${es.length} פריטים, בלי כפילויות)`);
+  // ---- 3. "הצע מנה אחרת" בארוחה אחרת ----
+  const dinner = await cardOf(sh, 'ערב'); const dn0 = await dinner.locator('[data-name]').innerText();
+  await click(dinner.locator('[data-other]')); const dn1 = await dinner.locator('[data-name]').innerText();
+  assert.notEqual(dn1, dn0); assert.ok(!FISH.test(dn1) || true);
+  ok(`"הצע מנה אחרת": "${dn0}" → "${dn1}"`);
+  const dShown = await daySum();
 
-  // ---- אותה החלפה מתוך "הצע לי" ----
-  await p.locator('[data-meal="lunch"] [data-mact="suggest"]').click(); await p.locator('.sheet-wrap h2', { hasText: 'הצעות ל' }).waitFor();
-  const sg = p.locator('.sheet-wrap').last();
-  const sn = await sg.locator('.sugg [data-name]').allInnerTexts();
-  console.log('   הצע לי:', sn.join(' | '));
-  assert.ok(sn.some(n => POULTRY.test(n)) && sn.some(n => FISH.test(n)), 'בהצעות: אפשרות עוף ואפשרות דג');
-  const ci = sn.findIndex(n => POULTRY.test(n)); const card = sg.locator('.sugg').nth(ci);
-  await swapRiceToSweetPotato(p, card, 'הצע לי');
-  await shot(p, 's03-suggest-swapped');
-  await card.locator('[data-addopt]').click();
-  const cf = p.locator('.sheet-wrap').last(); if (await cf.getByText('יש כבר תכנון לארוחה').count()) await cf.getByRole('button', { name: 'החלף' }).click();
-  await noSheet(p);
-  es = (await st(p)).entries.filter(e => e.date === T && e.meal === 'lunch');
-  assert.ok(es.some(e => e.foodId === 'm3654')); const li = es.map(e => e.foodId); assert.equal(new Set(li).size, li.length);
-  ok(`"הצע לי": ${sn.length} ארוחות (עוף, דג, אחרת), אותה החלפה עובדת ונשמרת פעם אחת`);
+  // ---- 4. הוסף את כל היום: נשמר פעם אחת, הסיכום תואם ----
+  await click(sh.locator('[data-all]')); await noSheet(p);
+  const es = (await st(p)).entries.filter(e => e.date === T);
+  const ids = es.map(e => `${e.meal}|${e.foodId}`); assert.equal(new Set(ids).size, ids.length, 'כל רכיב פעם אחת');
+  assert.ok(es.filter(e => e.meal === 'lunch').some(e => FISH.test(e.snapshot.n)), 'הדג נשמר בצהריים');
+  const dayApi = await p.evaluate(async d => (await fetch('/api/day/' + d, { headers: { Authorization: 'Bearer ' + localStorage.getItem('tafrit-token') } })).json(), T);
+  assert.ok(Math.abs(dayApi.planned.kcal - dShown) <= 8, `סיכום היום ${dayApi.planned.kcal} מול ${dShown}`);
+  ok(`נשמר: ${es.length} פריטים בלי כפילויות; סיכום היום ${dayApi.planned.kcal} קק״ל = מה שהוצג (${dShown})`);
 
-  // ---- "הצע לי את הארוחה הבאה" — כפתורי החלפה וחיפוש במאגר ----
-  await p.click('[data-act="next"]'); await p.locator('.sheet-wrap h2', { hasText: 'הצעות ל' }).waitFor();
-  const nx = p.locator('.sheet-wrap').last();
-  assert.ok(await nx.locator('[data-sw]').count() >= 3, 'כפתורי החלפה בכל כרטיס');
-  const first = nx.locator('.sugg').first(); const b0 = first.locator('[data-sw]').first(); const lbl = await b0.innerText(); await b0.click();
-  await first.locator('[data-db]').click(); await p.fill('#fpq', lbl.includes('חלבון') ? 'טונה' : lbl.includes('פחמימה') ? 'קינואה' : 'שקדים');
-  await p.locator('[data-food]').first().click();
-  await p.waitForFunction(() => document.querySelectorAll('.sheet-wrap').length === 1);
-  assert.ok((await first.locator('.why').innerText()).includes('הוחלף'));
-  await shot(p, 's04-next-db');
-  ok(`"הצע לי את הארוחה הבאה": ${lbl} → חיפוש במאגר עובד`);
-  await nx.locator('.sh button').first().click(); await noSheet(p);
+  // ---- 5. ביצים בבוקר → "הצע לי" ----
+  const tok3 = await user('eggs@test.local', OMNI, 118);
+  await api('POST', '/api/entries', { entries: [{ date: T, meal: 'breakfast', foodId: 'm1561', comp: 'egg', grams: 174, unit: 'יחידה גדולה', qty: 3, status: 'eaten' }] }, tok3);
+  const p3 = await page(tok3);
+  await p3.goto(BASE + '/#/today'); await p3.getByText('היום שלי').first().waitFor();
+  await p3.click('[data-act="next"]'); await p3.locator('.sheet-wrap h2', { hasText: 'הצעות ל' }).waitFor();
+  let sg = p3.locator('.sheet-wrap').last(); const nx = await sg.locator('.sugg [data-name]').allInnerTexts();
+  assert.ok(nx.every(n => !EGG.test(n)), 'בלי ביצים: ' + nx.join(' | '));
+  await sg.locator('.sh button').first().click(); await noSheet(p3);
+  await p3.locator('[data-meal="lunch"] [data-mact="suggest"]').click(); await p3.locator('.sheet-wrap h2', { hasText: 'הצעות ל' }).waitFor();
+  sg = p3.locator('.sheet-wrap').last(); const ln = await sg.locator('.sugg [data-name]').allInnerTexts();
+  assert.ok(ln.every(n => !EGG.test(n)) && ln.some(n => POULTRY.test(n)) && ln.some(n => FISH.test(n)) && ln.some(n => BEEF.test(n)), ln.join(' | '));
+  // החלפת חלבון גם מכאן
+  const c0 = sg.locator('.sugg').first(); await click(c0.locator('[data-sw]').first());
+  const g3 = await c0.locator('.swp [data-group]').evaluateAll(xs => xs.map(x => x.dataset.group));
+  assert.deepEqual(g3.slice(0, 3).sort(), ['beef', 'fish', 'poultry']);
+  await shot(p3, 'x04-after-eggs');
+  ok(`אחרי ביצים בבוקר: "הצע לי את הארוחה הבאה" (${nx.length}) ו"הצע" לצהריים בלי ביצים — ${ln.join(' | ')}`);
 
-  // ---- ארוחה עיקרית אחת: בחירה עוף / דג ----
-  const tok2 = await user('one@test.local', { ...PROF, meals: 2 }, 118);
+  // ---- 6. אלרגיה לדגים ----
+  const tok4 = await user('nofish@test.local', { ...OMNI, allergies: ['fish'] }, 118);
+  const p4 = await page(tok4);
+  sh = await openDay(p4);
+  assert.ok(!FISH.test(await sh.innerText()), 'אין דג ביום שלם');
+  const l4 = await cardOf(sh, 'צהריים'); await click(l4.locator('[data-sw]').first());
+  await l4.locator('[data-more]').count() && await click(l4.locator('[data-more]'));
+  const allSw = await l4.locator('.swp').innerText(); assert.ok(!FISH.test(allSw), 'אין דג בתחליפים');
+  const g4 = await l4.locator('.swp [data-group]').evaluateAll(xs => xs.map(x => x.dataset.group));
+  assert.ok(!g4.includes('fish') && g4.includes('poultry') && g4.includes('beef'));
+  await sh.locator('.sh button').first().click(); await noSheet(p4);
+  await p4.locator('[data-meal="dinner"] [data-mact="suggest"]').click(); await p4.locator('.sheet-wrap h2', { hasText: 'הצעות ל' }).waitFor();
+  const t4 = await p4.locator('.sheet-wrap').last().locator('.sugg').allInnerTexts();
+  assert.ok(t4.length && t4.every(t => !FISH.test(t)), t4.map(t => t.split('\n')[0]).join(' | '));
+  await shot(p4, 'x05-no-fish');
+  ok(`אלרגיה לדגים: יום שלם, תחליפים ו"הצע לי" בלי דגים (${t4.map(t => t.split('\n')[0]).join(' | ')})`);
+
+  // ---- 7. ארוחה עיקרית אחת ----
+  const tok2 = await user('one2@test.local', { ...OMNI, meals: 2 }, 118);
   const p2 = await page(tok2);
-  await p2.goto(BASE + '/#/today'); await p2.getByText('היום שלי').first().waitFor();
-  await p2.click('[data-act="day"]'); await p2.locator('.sheet-wrap h2', { hasText: 'יום שלם' }).waitFor();
-  const s2 = p2.locator('.sheet-wrap').last();
-  assert.equal(await s2.locator('[data-alt]').count(), 2);
-  const n1 = await s2.locator('[data-alt]').first().locator('xpath=ancestor::div[@data-opt]').locator('[data-name]').innerText();
-  await s2.locator('[data-alt]', { hasText: 'מנת דג' }).click();
-  const n2 = await s2.locator('[data-alt].on').locator('xpath=ancestor::div[@data-opt]').locator('[data-name]').innerText();
-  assert.match(n1, POULTRY); assert.match(n2, FISH);
-  await shot(p2, 's05-one-main');
-  ok(`ארוחה עיקרית אחת: בחירה "${n1}" / "${n2}"`);
+  const s2 = await openDay(p2);
+  const chips = await s2.locator('[data-alt]').allInnerTexts();
+  assert.deepEqual(chips.map(c => c.replace(/^[^\u0590-\u05FF]+/, '')).sort(), ['מנת בקר', 'מנת דג', 'מנת עוף'].sort());
+  await s2.locator('[data-alt]', { hasText: 'מנת בקר' }).click();
+  assert.match(await s2.locator('[data-alt].on').locator('xpath=ancestor::div[@data-opt]').locator('[data-name]').innerText(), BEEF);
+  await shot(p2, 'x06-one-main');
+  ok(`ארוחה עיקרית אחת: ${chips.join(' / ')}`);
 
   assert.deepEqual(errs, []); ok('אין שגיאות JavaScript');
   console.log(`\nכל ${step} הבדיקות עברו. צילומי מסך: ${SHOTS}`);

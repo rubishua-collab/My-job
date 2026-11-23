@@ -214,3 +214,7 @@ form.ac-open { padding-bottom: 70vh; }
 .sugg .swp { list-style: none; background: var(--brand-soft); border-radius: 12px; padding: 8px; margin: 6px 0; }
 .sugg .swo { display: block; width: 100%; text-align: start; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; margin-bottom: 6px; cursor: pointer; color: var(--ink); min-height: 48px; }
 .sugg .swo small { color: var(--muted); font-size: 13px; line-height: 1.5; } .sugg .swo:active { border-color: var(--brand); }
+.sugg .swo .gtag { display: inline-block; font-size: 12px; font-weight: 700; background: var(--brand-soft); color: var(--brand); border-radius: 999px; padding: 1px 8px; margin-inline-end: 6px; }
+.sugg .swo .aft { color: var(--ink); font-weight: 600; } .sugg .swo .warn { color: var(--accent); }
+.sugg .swo.eggs { cursor: default; }
+.sugg .swo small { display: block; margin-top: 2px; }
