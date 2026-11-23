@@ -1,0 +1,85 @@
+# בניית אפליקציית "תפריט יומי רובי" ל-Android ול-iOS.
+# בלי סודות: נבנים APK לבדיקה (Android) ובנייה לסימולטור (iOS) — כדי לוודא שהקוד מתקמפל.
+# עם הסודות של חשבונות המפתח (ראה tafrit/store/RELEASE.md): AAB חתום שעולה ל-Google Play (בדיקה פנימית)
+# ו-IPA חתום שעולה ל-TestFlight.
+name: tafrit-mobile
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/tapuach-yomi-robi-nutrition-genyea]
+    paths: ['tafrit/**', '.github/workflows/tafrit-mobile.yml']
+permissions: { contents: read }
+env:
+  APP_API_BASE: ${{ vars.TAFRIT_API_BASE || 'https://tafrit-robi.onrender.com' }}
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: tafrit } }
+    env:
+      HAS_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+      HAS_PLAY: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - run: npm ci
+      - run: node scripts/build-app.mjs && npx cap sync android
+      - name: גרסה לבדיקה (APK)
+        run: cd android && ./gradlew --no-daemon assembleDebug
+      - uses: actions/upload-artifact@v4
+        with: { name: tafrit-android-debug-apk, path: tafrit/android/app/build/outputs/apk/debug/app-debug.apk }
+      - name: גרסת הפצה חתומה (AAB)
+        if: ${{ env.HAS_KEY == 'true' }}
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          TAFRIT_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          TAFRIT_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          TAFRIT_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > android/upload.jks
+          export TAFRIT_KEYSTORE=$PWD/android/upload.jks
+          cd android && ./gradlew --no-daemon bundleRelease -PversionCode=${{ github.run_number }}
+          rm -f upload.jks
+      - uses: actions/upload-artifact@v4
+        if: ${{ env.HAS_KEY == 'true' }}
+        with: { name: tafrit-android-release-aab, path: tafrit/android/app/build/outputs/bundle/release/app-release.aab }
+      - name: העלאה ל-Google Play (בדיקה פנימית)
+        if: ${{ env.HAS_PLAY == 'true' && env.HAS_KEY == 'true' }}
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.rubishua.tafritrobi
+          releaseFiles: tafrit/android/app/build/outputs/bundle/release/app-release.aab
+          track: internal
+          status: draft
+
+  ios:
+    runs-on: macos-15
+    defaults: { run: { working-directory: tafrit } }
+    env:
+      HAS_APPLE: ${{ secrets.APPSTORE_API_KEY_P8 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+      - run: node scripts/build-app.mjs && npx cap sync ios
+      - name: בנייה לסימולטור (בדיקת קומפילציה)
+        run: xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build | tail -20
+      - name: ארכיון חתום והעלאה ל-TestFlight
+        if: ${{ env.HAS_APPLE == 'true' }}
+        env:
+          KEY_P8: ${{ secrets.APPSTORE_API_KEY_P8 }}
+          KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          ISSUER: ${{ secrets.APPSTORE_ISSUER_ID }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          mkdir -p ~/keys && echo "$KEY_P8" > ~/keys/AuthKey.p8
+          AUTH="-allowProvisioningUpdates -authenticationKeyPath $HOME/keys/AuthKey.p8 -authenticationKeyID $KEY_ID -authenticationKeyIssuerID $ISSUER"
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath $RUNNER_TEMP/App.xcarchive DEVELOPMENT_TEAM=$TEAM_ID CURRENT_PROJECT_VERSION=${{ github.run_number }} $AUTH archive | tail -20
+          sed "s/TEAM_ID_PLACEHOLDER/$TEAM_ID/" store/ios/ExportOptions.plist > $RUNNER_TEMP/ExportOptions.plist
+          xcodebuild -exportArchive -archivePath $RUNNER_TEMP/App.xcarchive -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist -exportPath $RUNNER_TEMP/export $AUTH | tail -20
+          rm -rf ~/keys

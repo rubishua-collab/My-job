@@ -3,3 +3,7 @@ data-local/
 *.sqlite
 *.sqlite-*
 .env
+app-www/
+*.jks
+*.p8
+android/local.properties

@@ -4,14 +4,27 @@
   "private": true,
   "description": "תפריט יומי רובי — אפליקציית תזונה אישית (PWA) בעברית, עם מאגר התזונה הלאומי, חישובי יעדים, יומן ושקילות",
   "type": "module",
-  "engines": { "node": ">=22.5" },
+  "engines": {
+    "node": ">=22.5"
+  },
   "scripts": {
     "start": "node --no-warnings server/index.js",
     "test": "node --no-warnings --test test/unit/*.test.js",
-    "e2e": "node test/e2e-iphone.cjs",
-    "build-foods": "python3 -I scripts/build-foods.py"
+    "e2e": "node --no-warnings test/e2e-multiuser.mjs",
+    "build-foods": "python3 -I scripts/build-foods.py",
+    "e2e:app": "node --no-warnings test/e2e-appbundle.mjs",
+    "e2e:single": "node test/e2e-iphone.cjs",
+    "app:build": "node scripts/build-app.mjs && npx cap sync",
+    "store:screenshots": "node --no-warnings scripts/store-screenshots.mjs",
+    "icons": "node scripts/make-icons.cjs && node scripts/make-splash.cjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.12.0"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/cli": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/ios": "^8.6.2"
   }
 }
