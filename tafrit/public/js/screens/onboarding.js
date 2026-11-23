@@ -4,7 +4,8 @@ import { D, refresh, today } from '../data.js';
 import { save } from '../api.js';
 import { $, $$, esc, toast, kg } from '../ui.js';
 import { GOALS, GOAL_HINT, JOB, GENERAL, weeklyKg, fmtWeekly } from '/shared/nutrition.js';
-import { ALLERGENS } from '/shared/catalog.js';
+import { ALLERGENS, COMPONENTS } from '/shared/catalog.js';
+import { likeNames, suggestLikes, likeKey } from '/shared/likes.js';
 import { savedAt, dmy } from '/shared/dates.js';
 
 const chips = (name, list, sel) => `<div class="chips" data-chips="${name}">${list.map(([v, l]) => `<button type="button" class="chip ${sel.includes(v) ? 'on' : ''}" data-v="${esc(v)}">${esc(l)}</button>`).join('')}</div>`;
@@ -33,6 +34,55 @@ function paceCards(p) {
   }).join('');
   const note = !okW ? 'לאחר הזנת המשקל הנוכחי תופיע גם הכמות השבועית' : '';
   return `<div class="opts" data-opts="rate">${cards}</div>${note ? `<p class="small muted" style="margin-top:8px">${note}</p>` : ''}`;
+}
+
+// ---- השלמה אוטומטית למאכלים אהובים ----
+const tagHtml = v => `<button type="button" class="chip on tag" data-tag="${esc(v)}" aria-label="הסר את ${esc(v)}">${esc(v)} <span aria-hidden="true">✕</span></button>`;
+let likeList = null;
+function bindLikes(el) {
+  if (!likeList || (!likeList.full && D.foods)) { likeList = likeNames({ chips: LIKES, components: Object.values(COMPONENTS).map(c => c.name), foods: D.foods?.list || [] }); likeList.full = !!D.foods; }
+  const inp = $('#likesx', el), box = $('#likesug', el), tags = $('#liketags', el);
+  const chipFor = key => $$('[data-chips="likes"] .chip', el).find(c => likeKey(c.dataset.v) === key);
+  const chosen = () => new Set([...$$('[data-chips="likes"] .chip.on', el).map(c => likeKey(c.dataset.v)), ...$$('[data-tag]', tags).map(t => likeKey(t.dataset.tag))]);
+  const add = name => {
+    const n = String(name).trim().slice(0, 40); if (!n) return; const k = likeKey(n); if (!k) return;
+    const chip = chipFor(k);
+    if (chip) chip.classList.add('on');
+    else if (!$$('[data-tag]', tags).some(t => likeKey(t.dataset.tag) === k)) tags.insertAdjacentHTML('beforeend', tagHtml(n));
+  };
+  const draw = () => {
+    const q = inp.value.split(/[,،]/).pop().trim();
+    if (!q) { box.hidden = true; box.innerHTML = ''; inp.setAttribute('aria-expanded', 'false'); return; }
+    const have = chosen(); const list = suggestLikes(likeList, q, 8); const qk = likeKey(q);
+    // "מאכל אישי" רק כשאין במאגר שם שמתחיל במה שהוקלד (כלומר המאכל באמת חסר, ולא סתם מילה חלקית)
+    const exact = list.some(x => x.key === qk) || list.some(x => x.key.startsWith(qk));
+    box.innerHTML = list.map(x => have.has(x.key)
+      ? `<div class="ac-opt done" role="option" aria-disabled="true">${esc(x.name)} <small>כבר נבחר</small></div>`
+      : `<button type="button" class="ac-opt" role="option" data-pick="${esc(x.name)}">${esc(x.name)}</button>`).join('')
+      + (!exact && !have.has(qk) ? `<button type="button" class="ac-opt add" role="option" data-pick="${esc(q)}">הוסף את ‘${esc(q)}’ כמאכל אישי</button>` : '');
+    box.hidden = !box.innerHTML; inp.setAttribute('aria-expanded', String(!box.hidden));
+  };
+  // פסיקים: כל מה שלפני הפסיק נוסף, והטקסט שאחריו ממשיך לחיפוש
+  inp.addEventListener('input', () => {
+    const parts = inp.value.split(/[,،]/);
+    if (parts.length > 1) { parts.slice(0, -1).forEach(add); inp.value = parts.at(-1).trimStart(); }
+    draw();
+  });
+  // בפוקוס: מקום פנוי מתחת, כדי שהשדה יעלה לראש המסך וההצעות ייראו מעל המקלדת
+  const form = inp.closest('form');
+  inp.addEventListener('focus', () => { form.classList.add('ac-open'); setTimeout(() => inp.scrollIntoView({ block: 'start', behavior: 'smooth' }), 250); draw(); });
+  inp.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== inp) form.classList.remove('ac-open'); }, 200));
+  inp.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return; e.preventDefault(); // Enter לא מעביר שאלה — מוסיף את ההצעה הראשונה או את מה שהוקלד
+    const first = $('[data-pick]', box); const q = inp.value.trim();
+    if (first) add(first.dataset.pick); else if (q) add(q);
+    inp.value = ''; draw();
+  });
+  // pointerdown: הבחירה לא מורידה את הפוקוס מהשדה, כך שהמקלדת נשארת פתוחה למאכל הבא
+  box.addEventListener('pointerdown', e => { if (e.target.closest('.ac-opt')) e.preventDefault(); });
+  box.addEventListener('click', e => { const b = e.target.closest('[data-pick]'); if (!b) return; add(b.dataset.pick); inp.value = ''; draw(); inp.focus(); });
+  tags.addEventListener('click', e => { const t = e.target.closest('[data-tag]'); if (!t) return; t.replaceWith(); draw(); });
+  $('[data-chips="likes"]', el).addEventListener('click', () => setTimeout(draw));
 }
 
 const STEPS = [
@@ -72,8 +122,15 @@ const STEPS = [
     html: p => `${chips('hunger', [['morning', 'בוקר'], ['noon', 'צהריים'], ['afternoon', 'אחר הצהריים'], ['evening', 'ערב'], ['night', 'לילה']], p.hungerTimes || [])}<div style="height:16px"></div>${opts('prep', [[5, 'עד 5 דקות'], [15, 'עד 15 דקות'], [30, 'עד 30 דקות'], [60, 'יש לי זמן']], p.prepMinutes || 15)}`,
     read: (el, p) => { p.hungerTimes = getChips(el, 'hunger'); p.prepMinutes = +getOpt(el, 'prep'); } },
   { id: 'likes', q: 'מה אתה אוהב לאכול?', hint: 'בחר כמה שרוצים, ואפשר להוסיף בטקסט.',
-    html: p => `${chips('likes', LIKES.map(x => [x, x]), p.likes || [])}<label class="field" style="margin-top:12px"><span>עוד (מופרד בפסיקים)</span><input class="in" id="likesx" value="${esc((p.likes || []).filter(x => !LIKES.includes(x)).join(', '))}"></label>`,
-    read: (el, p) => { p.likes = [...getChips(el, 'likes'), ...list(val(el, 'likesx'))]; } },
+    html: p => `${chips('likes', LIKES.map(x => [x, x]), p.likes || [])}
+      <label class="field" style="margin-top:12px" for="likesx"><span>עוד (מופרד בפסיקים)</span></label>
+      <div class="ac" id="likeac">
+        <div class="chips ac-tags" id="liketags">${(p.likes || []).filter(x => !LIKES.includes(x)).map(tagHtml).join('')}</div>
+        <input class="in" id="likesx" autocomplete="off" autocapitalize="off" enterkeyhint="done" placeholder="התחל להקליד, למשל חמ" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="likesug">
+        <div class="ac-list" id="likesug" role="listbox" aria-label="הצעות מהמאגר" hidden></div>
+      </div>`,
+    bind: el => bindLikes(el),
+    read: (el, p) => { p.likes = [...new Set([...getChips(el, 'likes'), ...$$('#liketags [data-tag]', el).map(b => b.dataset.tag), ...list(val(el, 'likesx'))])]; } },
   { id: 'avoid', q: 'ממה אתה מעדיף להימנע?', hint: 'למשל: סלמון, חריף, חצילים. וגם סוג תזונה.',
     html: p => `<label class="field"><span>מאכלים להימנע (מופרד בפסיקים)</span><input class="in" id="avoid" value="${esc((p.avoid || []).join(', '))}"></label>${opts('diet', [['none', 'אוכל הכל'], ['pescatarian', 'בלי בשר (כן דגים)'], ['vegetarian', 'צמחוני'], ['vegan', 'טבעוני']], p.diet || 'none')}`,
     read: (el, p) => { p.avoid = list(val(el, 'avoid')); p.diet = getOpt(el, 'diet'); } },
@@ -130,7 +187,7 @@ route('onboarding', async (el, [arg]) => {
     $$('[data-opts]', el).forEach(g => g.addEventListener('click', e => { const b = e.target.closest('.opt'); if (!b) return; $$('.opt', g).forEach(x => x.classList.toggle('on', x === b)); }));
     $$('[data-chips]', el).forEach(g => g.addEventListener('click', e => { const b = e.target.closest('.chip'); if (b) b.classList.toggle('on'); }));
     s.bind?.(el);
-    $('#back', el)?.addEventListener('click', () => { s.read(el, p); i--; persist(); show(); });
+    $('#back', el)?.addEventListener('click', () => { s.read(el, p); i--; persist(true); show(); }); // שומר גם את המיקום: רענון חוזר לשאלה הזו
     $('#next', el).onclick = async () => {
       const er = s.read(el, p);
       if (er) { $('#oberr', el).innerHTML = `<div class="note warn">${esc(er)}</div>`; return; }

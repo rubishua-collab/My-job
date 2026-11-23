@@ -192,3 +192,17 @@ details.how summary { cursor: pointer; min-height: 44px; display: flex; align-it
 .minis { margin-top: 4px; } .minis .meter .lab b { font-size: 17px; } .minis .meter .foot { font-size: 12px; }
 .cupbtn { width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid #2d73b8; background: transparent; color: #2d73b8; font-size: 22px; cursor: pointer; }
 .opt small .wk { white-space: nowrap; }
+/* השלמה אוטומטית (מאכלים אהובים): הרשימה מתחת לשדה, בתוך הזרימה, כדי שתיראה גם כשהמקלדת פתוחה */
+.ac { scroll-margin-top: 12px; }
+.ac-tags:empty { display: none; }
+.ac-tags { margin-bottom: 8px; }
+.chip.tag span { font-size: 13px; opacity: .85; margin-inline-start: 4px; }
+.ac-list { margin-top: 6px; border: 1.5px solid var(--line); border-radius: 14px; background: var(--card); overflow: hidden; }
+.ac-opt { display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 48px; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--line); background: transparent; font-size: 17px; text-align: start; cursor: pointer; color: var(--ink); }
+.ac-opt:last-child { border-bottom: 0; }
+.ac-opt:active, .ac-opt:hover { background: var(--brand-soft); }
+.ac-opt.done { color: var(--muted); cursor: default; }
+.ac-opt.done small { font-size: 13px; }
+.ac-opt.add { color: var(--brand); font-weight: 600; }
+form.ac-open { padding-bottom: 70vh; }
+.ac { scroll-margin-top: 44px; }
