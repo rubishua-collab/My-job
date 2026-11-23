@@ -191,3 +191,4 @@ details.how summary { cursor: pointer; min-height: 44px; display: flex; align-it
 
 .minis { margin-top: 4px; } .minis .meter .lab b { font-size: 17px; } .minis .meter .foot { font-size: 12px; }
 .cupbtn { width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid #2d73b8; background: transparent; color: #2d73b8; font-size: 22px; cursor: pointer; }
+.opt small .wk { white-space: nowrap; }

@@ -230,3 +230,18 @@ export function waterGoalMl(profile, kg) {
   if (+profile?.waterGoalMl > 0) return +profile.waterGoalMl;
   return kg ? Math.max(2000, Math.round(kg * 33 / 100) * 100) : 2000;
 }
+
+// ---- כמות שבועית לכרטיסי הקצב בשאלון ----
+/** כמה ק״ג בשבוע מייצג קצב: בירידה — אחוז ממשקל הגוף; בעלייה — העודף הקלורי מעל ההוצאה היומית ÷ 7,700 */
+export function weeklyKg(goal, rate, p, weightKg) {
+  if (!(weightKg >= 30 && weightKg <= 350)) return null;
+  if (goal === 'gain') { const s = GAIN_SURPLUS[rate]; if (s == null || !(+p?.heightCm > 0) || !(+p?.age > 0)) return null; return tdee(p, weightKg).total * s * 7 / KCAL_PER_KG; }
+  const pct = LOSS_RATES[rate]; return pct == null ? null : weightKg * pct / 100;
+}
+/** "600 גרם" מתחת לקילו, "1.2 ק״ג" מקילו ומעלה */
+export function fmtWeekly(kg) {
+  const g = Math.round(kg * 1000 / 10) * 10;
+  if (g < 1000) return `${g} גרם`;
+  const k = Math.round(kg * 10) / 10;
+  return `${k.toLocaleString('he-IL', { maximumFractionDigits: 1 })} ק״ג`;
+}

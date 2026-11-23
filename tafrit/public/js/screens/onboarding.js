@@ -3,7 +3,7 @@ import { route, go } from '../app.js';
 import { D, refresh, today } from '../data.js';
 import { save } from '../api.js';
 import { $, $$, esc, toast, kg } from '../ui.js';
-import { GOALS, GOAL_HINT, JOB, GENERAL } from '/shared/nutrition.js';
+import { GOALS, GOAL_HINT, JOB, GENERAL, weeklyKg, fmtWeekly } from '/shared/nutrition.js';
 import { ALLERGENS } from '/shared/catalog.js';
 import { savedAt, dmy } from '/shared/dates.js';
 
@@ -17,6 +17,24 @@ const list = s => String(s || '').split(/[,،\n]+/).map(x => x.trim()).filter(Bo
 
 const LIKES = ['עוף', 'ביצים', 'קוטג׳', 'גבינות', 'טונה', 'דגים', 'בשר בקר', 'הודו', 'טופו', 'עדשים וקטניות', 'אורז', 'פסטה', 'פיתה', 'לחם', 'בטטה', 'סלט ירקות', 'פירות', 'יוגורט', 'שיבולת שועל', 'טחינה', 'אבוקדו'];
 const MEALS_EX = ['חביתה עם סלט ולחם', 'חזה עוף עם אורז וסלט', 'קוטג׳ עם פיתה וירקות'];
+
+/** כרטיסי הקצב: האחוז, ולצידו הכמות השבועית לפי משקל הבוקר שהוזן בשאלון (גם כשמשקל היעד ריק) */
+function paceCards(p) {
+  const w = +p._weight; const okW = w >= 30 && w <= 350;
+  const gain = p.goal === 'gain';
+  const list = gain
+    ? [['slow', 'איטי', 'עודף של כ-5% מעל ההוצאה היומית'], ['standard', 'רגיל', 'עודף של כ-10% מעל ההוצאה היומית']]
+    : [['slow', 'עדין', '0.5% ממשקל הגוף בשבוע'], ['moderate', 'מתון', '0.75% ממשקל הגוף בשבוע'], ['fast', 'מהיר', '1% ממשקל הגוף בשבוע']];
+  const val = p.rate && list.some(x => x[0] === p.rate) ? p.rate : gain ? 'slow' : 'moderate';
+  const cards = list.map(([v, l, pct]) => {
+    const kg = okW ? weeklyKg(p.goal, v, p, w) : null;
+    const amount = kg ? ` <span class="wk">· ${gain ? 'עלייה' : 'ירידה'} של כ־${esc(fmtWeekly(kg))} בשבוע</span>` : '';
+    return `<button type="button" class="opt ${val === v ? 'on' : ''}" data-v="${v}"><b>${l}</b><small>${esc(pct)}${amount}</small></button>`;
+  }).join('');
+  const note = !okW ? 'לאחר הזנת המשקל הנוכחי תופיע גם הכמות השבועית'
+    : gain && !p.job && p.activityMode !== 'general' ? 'בעלייה במשקל הכמות מחושבת מההוצאה היומית המשוערת, ותתעדכן אחרי שאלות הפעילות.' : '';
+  return `<div class="opts" data-opts="rate">${cards}</div>${note ? `<p class="small muted" style="margin-top:8px">${note}</p>` : ''}`;
+}
 
 const STEPS = [
   { id: 'basic', q: 'נתחיל: גיל ומין', hint: 'המין משמש רק לחישוב ההוצאה האנרגטית (בנוסחה יש ערך שונה לגברים ולנשים).',
@@ -32,9 +50,7 @@ const STEPS = [
     html: p => `<div class="grid2">${num('rmin', 'מ- (ק״ג)', p.weightRange?.min, 'placeholder="למשל 78"')}${num('rmax', 'עד (ק״ג)', p.weightRange?.max, 'placeholder="למשל 81"')}</div>`,
     read: (el, p) => { const a = +val(el, 'rmin'), b = +val(el, 'rmax'); p.weightRange = a && b ? { min: Math.min(a, b), max: Math.max(a, b) } : null; } },
   { id: 'pace', q: 'משקל יעד וקצב', hint: 'משקל יעד לא חובה. הקצב קובע כמה גדול יהיה הגירעון או העודף.', skip: p => p.goal === 'maintain' || p.goal === 'recomp',
-    html: p => `${num('tw', 'משקל יעד (ק״ג, לא חובה)', p.targetWeight, 'placeholder="למשל 100"')}${p.goal === 'gain'
-      ? opts('rate', [['slow', 'איטי', 'עודף של כ-5% — פחות שומן'], ['standard', 'רגיל', 'עודף של כ-10%']], p.rate || 'slow')
-      : opts('rate', [['slow', 'עדין', '0.5% ממשקל הגוף בשבוע'], ['moderate', 'מתון', '0.75% בשבוע'], ['fast', 'מהיר', '1% בשבוע (מקסימום מומלץ)']], p.rate || 'moderate')}`,
+    html: p => `${num('tw', 'משקל יעד (ק״ג, לא חובה)', p.targetWeight, 'placeholder="למשל 100"')}${paceCards(p)}`,
     read: (el, p) => { p.targetWeight = +val(el, 'tw') || null; p.rate = getOpt(el, 'rate'); } },
   { id: 'job', q: 'איך נראה יום עבודה רגיל?', hint: 'בלי האימונים — עליהם נשאל בנפרד.',
     html: p => `${opts('job', Object.entries(JOB).map(([k, v]) => [k, v.label]), p.job)}<div style="height:12px"></div>${num('steps', 'צעדים ביום בממוצע (אם ידוע)', p.steps, 'inputmode="numeric" placeholder="למשל 6500"')}`,
