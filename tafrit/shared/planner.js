@@ -37,6 +37,10 @@ export function familyContext({ entries = [], foods, date, slot }) {
   return { dayFams, weekFams };
 }
 
+/** קבוצה לתכנון: עוף (חזה, פרגית, קציצות הודו) / דג / אחר */
+export const famGroup = fam => ['chicken', 'pargit', 'turkey'].includes(fam) ? 'poultry' : fam === 'fish' ? 'fish' : fam ? 'other' : null;
+const MAIN_SLOTS = ['lunch', 'dinner'];
+
 const roundTo = (x, s) => Math.round(x / s) * s;
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 
@@ -53,7 +57,7 @@ export function makeItem(compKey, amount, foods) {
   else grams = amount;
   const n = nutrients(f, grams);
   const approx = !comp.step && ug && comp.unit ? `כ-${fmtQty(Math.round(grams / ug * 4) / 4)} ${unitsFor(f).find(u => u.key === comp.unit)?.label || comp.unit}` : null;
-  return { comp: compKey, foodId: f.id, name: comp.name, foodName: f.n, role: comp.role, grams: Math.round(grams), unit, qty, approx, ...n, vegFruitG: isVegFruit(f) ? grams : 0 };
+  return { comp: compKey, foodId: f.id, name: comp.name, foodName: f.n, role: comp.role, grams: Math.round(grams), unit, qty, approx, st: f.st || null, ...n, vegFruitG: isVegFruit(f) ? grams : 0 };
 }
 
 function perAmount(compKey, foods) {
@@ -134,7 +138,7 @@ const SHORT = { 'אורז לבן מבושל': 'אורז', 'אורז מלא מב�
 // המילה שמייצגת רכיב בשם הארוחה ("פרגית, אורז וסלט" + בורגול → "פרגית, בורגול וסלט")
 const WORD = { bread: 'לחם', lightBread: 'לחם קל', pita: 'פיתה', wwPita: 'פיתה מלאה', tortilla: 'טורטייה', riceCakes: 'פריכיות', rice: 'אורז', brownRice: 'אורז מלא', bulgur: 'בורגול', couscous: 'קוסקוס', ptitim: 'פתיתים', quinoa: 'קינואה', pasta: 'פסטה', potato: 'תפוח אדמה', sweetPotato: 'בטטה',
   salad: 'סלט', broccoli: 'ברוקולי', greenBeans: 'שעועית ירוקה', zucchini: 'קישואים', mushrooms: 'פטריות', cucumber: 'מלפפון', tomato: 'עגבנייה', pepper: 'פלפל', carrot: 'גזר',
-  cottage: 'קוטג׳', whiteCheese: 'גבינה לבנה', banana: 'בננה', apple: 'תפוח', strawberry: 'תותים', clementine: 'קלמנטינה', egg: 'ביצים', hardEgg: 'ביצה קשה' };
+  cottage: 'קוטג׳', whiteCheese: 'גבינה לבנה', salmon: 'סלמון', tilapia: 'אמנון', dennis: 'דניס', seaBass: 'לברק', cod: 'בקלה', chicken: 'חזה עוף', thigh: 'פרגית', turkeyPatty: 'קציצות הודו', schnitzel: 'שניצל', steak: 'סטייק', tofu: 'טופו', lentils: 'עדשים', chickpeas: 'חומוס', tuna: 'טונה', banana: 'בננה', apple: 'תפוח', strawberry: 'תותים', clementine: 'קלמנטינה', egg: 'ביצים', hardEgg: 'ביצה קשה' };
 function mealName(tpl, keys, items) {
   let name = tpl.name;
   for (const part of (tpl.parts || []).filter(Array.isArray)) {
@@ -186,7 +190,9 @@ function scoreOption(items, keys, tpl, budget, ctx, filt) {
   if (fam) s -= week * 6;
   const likedFams = ctx.likedFams || filt.likedFams();
   const likesMeat = [...likedFams].some(f => MEAT_FAMS.has(f));
-  if (ctx.slot === 'lunch' && likesMeat) { if (MEAT_FAMS.has(fam) && fam !== 'turkeyDeli') s += 22; else if (fam === 'egg' || fam === 'dairy') s -= 20; }
+  if (ctx.slot === 'lunch' && likesMeat && !ctx.wantGroup) { if (MEAT_FAMS.has(fam) && fam !== 'turkeyDeli') s += 22; else if (fam === 'egg' || fam === 'dairy') s -= 20; }
+  // "יום שלם": עוף בארוחה עיקרית אחת ודג בשנייה (כשהפרופיל מאפשר)
+  if (ctx.wantGroup) { if (famGroup(fam) === ctx.wantGroup) s += 45; else if (MAIN_SLOTS.includes(ctx.slot)) s -= 12; }
   // הסבר מהמספרים בפועל
   if (tot.protein >= 12) why.push(`מספק ${Math.round(tot.protein)} ג׳ חלבון למנה`);
   const plants = items.filter(i => ['veg', 'fruit'].includes(i.role) || COMPONENTS[i.comp]?.fam === 'legumes').map(i => i.name);
@@ -231,11 +237,22 @@ export function suggestMeals(ctx, budget, n = 3) {
   if (pantry && !cands.length) { const adhoc = pantryAdhoc(ctx, budget, filt); if (adhoc) cands.push(adhoc); }
   cands.sort((a, b) => b.score - a.score);
   // ההצעות שונות זו מזו: תבנית שונה ומקור חלבון עיקרי שונה (לא שלוש גרסאות של ביצים)
-  const out = []; const usedT = new Set(); const usedF = new Set();
+  const out = []; const usedT = new Set(); const usedF = new Set(); const usedCarb = new Set(); const usedFat = new Set();
+  const take = c => { out.push(finalize(c)); usedT.add(c.templateId); if (c.fam) usedF.add(c.fam); const cb = c.keys.find(k => COMPONENTS[k].role === 'carb'); if (cb) usedCarb.add(cb); const ft = c.keys.find(k => COMPONENTS[k].role === 'fat'); if (ft) usedFat.add(ft); };
+  // "הצע לי": בארוחה עיקרית — אפשרות עוף, אפשרות דג ואפשרות ממקור אחר, עם תוספות ושומן שונים
+  if (ctx.diverse && MAIN_SLOTS.includes(slot) && !pantry) {
+    for (const g of ['poultry', 'fish', 'other']) {
+      if (out.length >= n) break;
+      const ok = c => famGroup(c.fam) === g && !usedT.has(c.templateId) && !usedF.has(c.fam);
+      const fresh = c => !c.keys.some(k => (COMPONENTS[k].role === 'carb' && usedCarb.has(k)) || (COMPONENTS[k].role === 'fat' && usedFat.has(k)));
+      const c = cands.find(c => ok(c) && fresh(c) && c.score > -60) || cands.find(c => ok(c) && c.score > -60);
+      if (c) take(c);
+    }
+  }
   for (const c of cands) {
-    if (usedT.has(c.templateId) || (c.fam && usedF.has(c.fam))) continue;
-    out.push(finalize(c)); usedT.add(c.templateId); if (c.fam) usedF.add(c.fam);
     if (out.length >= n) break;
+    if (usedT.has(c.templateId) || (c.fam && usedF.has(c.fam))) continue;
+    take(c);
   }
   return out;
 }
@@ -249,11 +266,15 @@ function pantryAdhoc(ctx, budget, filt) {
   return { key: 'pantry:' + keys.join('+'), templateId: 'pantry', name: 'ארוחה ממה שיש בבית: ' + keys.map(k => COMPONENTS[k].name).join(', '), slot: ctx.slot, items, keys, ...sc };
 }
 
+const r1 = x => Math.round(x * 10) / 10;
+function shapeItem({ comp, foodId, name, foodName, role, grams, unit, qty, approx, st, kcal, protein, fat, carbs, fiber, vegFruitG }) {
+  return { comp: comp || null, foodId, name, foodName, role, grams, unit, qty, approx, st: st || null, kcal: Math.round(kcal), protein: r1(protein), fat: r1(fat), carbs: r1(carbs), fiber: r1(fiber || 0), vegFruitG: Math.round(vegFruitG || 0) };
+}
 function finalize(c) {
   const t = c.totals;
   return {
     key: c.key, templateId: c.templateId, name: c.name, slot: c.slot, prep: c.prep, why: c.why.slice(0, 4), fam: c.fam || null,
-    items: c.items.map(({ comp, foodId, name, foodName, role, grams, unit, qty, approx, kcal, protein, fat, carbs, fiber, vegFruitG }) => ({ comp, foodId, name, foodName, role, grams, unit, qty, approx, kcal: Math.round(kcal), protein: Math.round(protein * 10) / 10, fat: Math.round(fat * 10) / 10, carbs: Math.round(carbs * 10) / 10, fiber: Math.round(fiber * 10) / 10, vegFruitG: Math.round(vegFruitG) })),
+    items: c.items.map(shapeItem),
     totals: { kcal: Math.round(t.kcal), protein: Math.round(t.protein), fat: Math.round(t.fat), carbs: Math.round(t.carbs), fiber: Math.round(t.fiber), vegFruitG: Math.round(t.vegFruitG) },
   };
 }
@@ -305,20 +326,35 @@ export function planDay(ctx) {
   // מה כבר יש היום (ארוחות נעולות/שנאכלו) ובשבוע האחרון — לגיוון
   const fc = ctx.date ? familyContext({ entries: ctx.history || entries, foods, date: ctx.date, slot: null }) : { dayFams: new Map(), weekFams: ctx.weekFams || new Map() };
   const dayFams = new Map(fc.dayFams); const weekFams = ctx.weekFams || fc.weekFams;
-  const likedFams = profileFilter(profile).likedFams();
+  const filt0 = profileFilter(profile); const likedFams = filt0.likedFams();
+  // עוף ודג: כשהפרופיל מאפשר את שניהם — עוף בארוחה עיקרית אחת ודג בשנייה; ארוחה עיקרית אחת → בחירה בין השניים
+  const okPoultry = ['chicken', 'thigh', 'turkeyPatty', 'schnitzel'].some(k => filt0.allowed(k) && foods.get(COMPONENTS[k].id));
+  const okFish = ['salmon', 'tilapia', 'dennis', 'seaBass', 'cod'].some(k => filt0.allowed(k) && foods.get(COMPONENTS[k].id));
+  const mainsOpen = toFill.filter(s => MAIN_SLOTS.includes(s));
+  const keptGroups = new Set([...dayFams.keys()].map(famGroup));
+  const want = {};
+  if (okPoultry && okFish && mainsOpen.length >= 2) { want.lunch = keptGroups.has('poultry') && !keptGroups.has('fish') ? 'fish' : 'poultry'; want.dinner = want.lunch === 'poultry' ? 'fish' : 'poultry'; }
+  else if (okPoultry && okFish && mainsOpen.length === 1 && !keptGroups.has('poultry') && !keptGroups.has('fish')) want[mainsOpen[0]] = 'choose';
   const plan = [];
   for (const slot of toFill) {
     const open = toFill.filter(s => !plan.some(p => p.slot === s));
     const b = budgetForSlot({ profile, target, entries: [...kept, ...plan.flatMap(p => p.items.map(i => ({ meal: p.slot, foodId: i.foodId, grams: i.grams, status: 'planned' })))], foods, slot, openSlots: open });
-    const opt = suggestMeals({ ...ctx, slot, recent, dayFams, weekFams, likedFams }, b, 1)[0];
+    const base = { ...ctx, slot, recent, dayFams, weekFams, likedFams };
+    let opt, alts = null;
+    if (want[slot] === 'choose') {
+      const ch = suggestMeals({ ...base, wantGroup: 'poultry' }, b, 1)[0]; const fi = suggestMeals({ ...base, wantGroup: 'fish' }, b, 1)[0];
+      alts = [ch, fi].filter(o => o && ['poultry', 'fish'].includes(famGroup(o.fam)));
+      opt = alts[0] || suggestMeals(base, b, 1)[0];
+      if (alts.length < 2) alts = null;
+    } else opt = suggestMeals({ ...base, wantGroup: want[slot] }, b, 1)[0];
     if (opt) {
-      plan.push({ slot, option: opt, items: opt.items, budget: b });
+      plan.push({ slot, option: opt, items: opt.items, budget: b, alts });
       for (const k of opt.items.map(i => i.comp)) recent.set(k, (recent.get(k) || 0) + 1);
       if (opt.fam) dayFams.set(opt.fam, (dayFams.get(opt.fam) || 0) + 1);
     }
   }
   topUpProtein(plan, kept, ctx);
-  return plan.map(p => ({ slot: p.slot, option: p.option }));
+  return plan.map(p => ({ slot: p.slot, option: p.option, alts: p.alts || null, budget: p.budget }));
 }
 
 /** חסר חלבון ביום? קודם מגדילים את מנת החלבון של הארוחה העיקרית (עוף/בשר/דג/קטניות) — לא מוסיפים עוד ביצים או קוטג׳ */
@@ -364,6 +400,72 @@ export function swapItem(oldItem, newCompKey, foods) {
   const amt = clamp(roundTo(raw, comp.step || comp.stepG), comp.step || comp.stepG, comp.max * 1.5);
   const item = makeItem(newCompKey, amt, foods);
   return { item, delta: { kcal: Math.round(item.kcal - old.kcal), protein: Math.round((item.protein - old.protein) * 10) / 10 }, matchedBy: byProtein ? 'חלבון' : 'קלוריות', old: { kcal: Math.round(old.kcal), protein: Math.round(old.protein * 10) / 10 } };
+}
+
+// ---- החלפת רכיב בתוך ארוחה מוצעת ----
+export const SWAP_LABEL = { protein: 'החלף חלבון', carb: 'החלף פחמימה', fat: 'החלף שומן', veg: 'החלף ירק', fruit: 'החלף פרי', extra: 'החלף' };
+const MATCH = { protein: ['protein', 'p'], carb: ['carbs', 'c'], fat: ['fat', 'f'] };
+/**
+ * כמות לתחליף: מנה שמתקרבת לערך העיקרי של הרכיב המקורי לפי הערכים במאגר —
+ * חלבון לפי גרמי חלבון, פחמימה לפי גרמי פחמימה, שומן לפי גרמי שומן, ירק/פרי לפי משקל.
+ * הערכים המוצגים מחושבים מכל רכיבי המזון (למשל גם השומן שבסלמון).
+ */
+function amountFor(old, f, comp) {
+  const m = MATCH[old.role]; let grams;
+  if (m && old[m[0]] > 0.5 && f[m[1]] > 0.5) grams = old[m[0]] / (f[m[1]] / 100);
+  else if (old.role === 'veg' || old.role === 'fruit') grams = old.grams;
+  else grams = old.kcal / Math.max(1, f.k / 100);
+  if (comp) {
+    const ug = compUnitG(comp, f);
+    if (comp.step && ug) return clamp(roundTo(grams / ug, comp.step), comp.min, comp.max);
+    return clamp(roundTo(grams, comp.stepG || 10), comp.min, comp.max);
+  }
+  return clamp(roundTo(grams, grams > 60 ? 10 : 5), 5, 600);
+}
+/** פריט ממזון שאינו רכיב מוגדר (נבחר מהמאגר המלא) */
+export function itemFromFood(f, grams, role) {
+  return { comp: null, foodId: f.id, name: f.n.split(',')[0], foodName: f.n, role, grams: Math.round(grams), unit: 'g', qty: null, approx: null, st: f.st || null, ...nutrients(f, grams), vegFruitG: isVegFruit(f) ? grams : 0 };
+}
+export function substituteFor(old, newKey, foods) {
+  const comp = COMPONENTS[newKey]; const f = foods.get(comp.id); if (!f) return null;
+  return makeItem(newKey, amountFor(old, f, comp), foods);
+}
+export function substituteFood(old, f) { return itemFromFood(f, amountFor(old, f, null), old.role); }
+
+/**
+ * תחליפים לרכיב בארוחה: אותו תפקיד, מותר בפרופיל, לא סותר כשרות עם שאר הארוחה ולא כבר בארוחה.
+ * הסדר: מה שהמשתמש אוהב, מקור חלבון שעוד לא הופיע היום, ואז הקרוב בקלוריות.
+ */
+export function swapChoices(option, idx, { foods, profile, dayFams } = {}) {
+  const old = option.items[idx]; const filt = profileFilter(profile || {});
+  const others = option.items.filter((_, i) => i !== idx);
+  const kinds = new Set(others.map(i => COMPONENTS[i.comp]?.kosher).filter(Boolean));
+  const inMeal = new Set(others.map(i => i.comp));
+  const out = [];
+  for (const k of Object.keys(COMPONENTS)) {
+    const c = COMPONENTS[k];
+    if (c.role !== old.role || k === old.comp || inMeal.has(k) || !filt.allowed(k) || !foods.get(c.id)) continue;
+    if (filt.kosher && ((c.kosher === 'meat' && kinds.has('dairy')) || (c.kosher === 'dairy' && kinds.has('meat')))) continue;
+    const item = substituteFor(old, k, foods); if (!item) continue;
+    const rank = filt.liked(k) * 10 - (c.fam && dayFams?.get?.(c.fam) ? 6 : 0) - Math.abs(item.kcal - old.kcal) / 60;
+    out.push({ key: k, item: shapeItem(item), rank });
+  }
+  return out.sort((a, b) => b.rank - a.rank);
+}
+/** מחליף פריט אחד ומחשב מחדש: שם המנה, הסיכום וההסבר. שאר הרכיבים נשארים כפי שהם */
+export function applySwap(option, idx, newItem) {
+  const items = option.items.map((it, i) => i === idx ? shapeItem(newItem) : it);
+  // שם המנה: המילה של הרכיב הישן מוחלפת במילה של החדש ("חזה עוף, אורז וסלט" → "חזה עוף, בטטה וסלט")
+  const o = option.items[idx]; const word = i => WORD[i.comp] || SHORT[i.name] || String(i.name).split(',')[0];
+  const ow = [WORD[o.comp], SHORT[o.name], o.name].filter(Boolean).find(w => option.name.includes(w));
+  const pick = role => items.find(i => i.role === role);
+  const name = ow ? option.name.replace(ow, word(newItem))
+    : ['fat', 'extra'].includes(o.role) ? option.name
+    : joinHe([pick('protein'), pick('carb'), pick('veg') || pick('fruit')].filter(Boolean).map(word));
+  const t = sumNutrients(items);
+  const plants = items.filter(i => ['veg', 'fruit'].includes(i.role) || COMPONENTS[i.comp]?.fam === 'legumes').map(i => i.name);
+  const why = [...(t.protein >= 12 ? [`מספק ${Math.round(t.protein)} ג׳ חלבון למנה`] : []), ...(plants.length ? [`כולל ${joinHe(plants)}`] : []), ...(t.fiber >= 6 ? [`${Math.round(t.fiber)} ג׳ סיבים`] : []), `הוחלף: ${option.items[idx].name} ← ${newItem.name}`];
+  return { ...option, name, items, fam: mainFamily(items), why, totals: { kcal: Math.round(t.kcal), protein: Math.round(t.protein), fat: Math.round(t.fat), carbs: Math.round(t.carbs), fiber: Math.round(t.fiber), vegFruitG: Math.round(t.vegFruitG) } };
 }
 
 /** חלופות מתאימות להחלפה (אותו תפקיד בארוחה) */

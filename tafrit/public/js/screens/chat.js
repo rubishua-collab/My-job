@@ -28,7 +28,7 @@ const QUICK = ['מה כדאי לי לאכול הערב?', 'איך אגיע לח�
 function cardsHtml(cards = [], seq) {
   return cards.map((c, i) => {
     const key = `${seq}:${i}`;
-    if (c.type === 'meal') return `<div data-card="${key}"><div class="tiny muted" style="margin-bottom:4px">${esc(c.slotLabel)} · ${dmy(c.date)}</div>${suggestionHtml(c, key).replace(`data-addopt="${key}"`, `data-addcard="${key}"`)}</div>`;
+    if (c.type === 'meal') return `<div data-card="${key}"><div class="tiny muted" style="margin-bottom:4px">${esc(c.slotLabel)} · ${dmy(c.date)}</div>${suggestionHtml(c, key, {}, { swap: false }).replace(`data-addopt="${key}"`, `data-addcard="${key}"`)}</div>`;
     if (c.type === 'weight') return `<div class="sugg" data-card="${key}">${c.saved ? `✓ נשמר: <b>${kg(c.kg)}</b> ק״ג ל-${dmy(c.date)}${c.existed ? ` (עודכן מ-${kg(c.previous)})` : ''}${c.weekAvg ? `<div class="small muted">ממוצע השבוע: ${kg(c.weekAvg)} · ${esc(c.weekLabel)}</div>` : ''}` : `כבר רשום ${kg(c.previous)} ק״ג ל-${dmy(c.date)}.<button class="btn block sm" style="margin-top:8px" data-wupd="${key}">עדכן ל-${kg(c.kg)} ק״ג</button>`}</div>`;
     if (c.type === 'sources') return `<details class="how" data-card="${key}"><summary>על מה מבוססת ההמלצה?</summary>${sourcesHtml(c.items)}</details>`;
     return '';

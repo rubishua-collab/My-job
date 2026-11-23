@@ -140,7 +140,7 @@ route('plan-change', async (el, [mode, baseId]) => {
       <details class="how"><summary>איך חושב?</summary><div class="small">${esc(n.goalLine)} ${esc(n.proteinWhy)} ${esc(n.macroWhy)}</div>${sourcesHtml(n.sources)}</details>
       <h3 style="margin-top:12px">יום אכילה לדוגמה בתוכנית החדשה</h3>
       <div class="note small">סה״כ: <b>${n0(st2.k)}</b> / ${n.kcal} קק״ל · <b>${n0(st2.p)}</b> / ${n.protein} ג׳ חלבון. אפשר להחליף כל ארוחה.</div>
-      ${w.sample.map((x, i) => `<div style="margin-top:10px"><div class="row between"><b>${esc(slotsNew.find(s => s.id === x.slot)?.label || x.slot)}</b><button class="btn xs plain" data-swapmeal="${i}">החלף ארוחה</button></div>${suggestionHtml(x.option, 'p' + i).replace(/<button class="btn block sm"[^>]*>הוסף לתכנון<\/button>/, '')}</div>`).join('')}
+      ${w.sample.map((x, i) => `<div style="margin-top:10px"><div class="row between"><b>${esc(slotsNew.find(s => s.id === x.slot)?.label || x.slot)}</b><button class="btn xs plain" data-swapmeal="${i}">החלף ארוחה</button></div>${suggestionHtml(x.option, 'p' + i, {}, { swap: false }).replace(/<button class="btn block sm"[^>]*>הוסף לתכנון<\/button>/, '')}</div>`).join('')}
       <h3 style="margin-top:14px">מתי להתחיל?</h3>
       <div class="opts" data-opts="start"><button type="button" class="opt ${w.start === today() ? 'on' : ''}" data-v="${today()}"><b>היום</b><small>מה שכבר אכלת היום נשמר, והיתרה תחושב לפי היעד החדש</small></button>
         <button type="button" class="opt ${w.start === addDays(today(), 1) ? 'on' : ''}" data-v="${addDays(today(), 1)}"><b>מחר</b></button>
@@ -167,7 +167,7 @@ route('plan-change', async (el, [mode, baseId]) => {
     const others = w.sample.filter((_, j) => j !== i).reduce((a, y) => { a.k += y.option.totals.kcal; a.p += y.option.totals.protein; return a; }, { k: 0, p: 0 });
     const budget = { kcal: Math.max(150, n.kcal - others.k), protein: Math.max(0, n.protein - others.p) };
     const opts = suggestMeals({ foods: D.foods, slot: x.slot, profile: p, maxPrep: +p.prepMinutes || 0, recent: new Map([[x.option.items[0]?.comp, 5]]) }, budget, 3);
-    const s = openSheet({ title: 'בחר ארוחה אחרת', body: opts.map((o, k) => suggestionHtml(o, k).replace('הוסף לתכנון', 'בחר את זו') + `<div class="tiny muted">הסיכום היומי יהיה: ${n0(others.k + o.totals.kcal)} קק״ל · ${n0(others.p + o.totals.protein)} ג׳ חלבון</div>`).join('') });
+    const s = openSheet({ title: 'בחר ארוחה אחרת', body: opts.map((o, k) => suggestionHtml(o, k, {}, { swap: false }).replace('הוסף לתכנון', 'בחר את זו') + `<div class="tiny muted">הסיכום היומי יהיה: ${n0(others.k + o.totals.kcal)} קק״ל · ${n0(others.p + o.totals.protein)} ג׳ חלבון</div>`).join('') });
     on(s.el, '[data-addopt]', 'click', (e, b) => { w.sample[i] = { slot: x.slot, option: opts[+b.dataset.addopt] }; s.close(); show(); });
   }
   async function activate() {
