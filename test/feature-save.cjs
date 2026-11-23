@@ -59,7 +59,7 @@ const SAVED = /נשמר בשעה \d\d:\d\d/;
   await step('פיצול: בגלילה למטה (אזור ״שעות, גובים ופיצול סכום״) ״שמור שינויים״ נשאר בראש המסך', async () => {
     const m = await b.newContext({ ...devices['iPhone 13'], locale: 'he-IL' }); const q = await login(m);
     await q.goto(URL + '/#/acc/' + SP); await q.waitForSelector('#hsave');
-    await q.locator('#spt-lists').scrollIntoViewIfNeeded(); await q.evaluate(() => scrollBy(0, 300)); await q.waitForTimeout(300);
+    await q.waitForLoadState('networkidle'); await q.waitForTimeout(300); await q.evaluate(() => document.querySelector('#spt-lists').scrollIntoView()); await q.evaluate(() => scrollBy(0, 300)); await q.waitForTimeout(300);
     const bx = await q.locator('#ssave').boundingBox(); assert.ok(bx && bx.y >= 0 && bx.y < 120 && bx.height >= 40, 'הכפתור נשאר בראש המסך: ' + JSON.stringify(bx));
     await q.screenshot({ path: path.join(OUT, 'split-float-iphone.png') });
     assert.deepStrictEqual(q.errs, []); await m.close();

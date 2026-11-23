@@ -2,7 +2,7 @@
 import { get, save, uid } from './api.js';
 import { $, $$, esc, fmt, money, dmy, weekday, todayISO, when, toast, openSheet, viewState } from './ui.js';
 import { App, onLive } from './app.js';
-import { calcMorning, calcCollectors, calcSplit, workGroups, calcWork, wExpList, normName, num, r2, sum, collKey, cleanColl, normStatus, CHANGE, NOC_SP } from './calc.js';
+import { calcMorning, calcCollectors, calcSplit, workGroups, calcWork, wExpList, normName, num, r2, sum, collKey, cleanColl, normStatus, normTime, CHANGE, NOC_SP } from './calc.js';
 import { normPhone, phoneProblem, fmtPhone } from './phone.js';
 import { openSendSheet } from './wa-ui.js';
 import { openPrivate } from './features/wa-private.js';
@@ -428,6 +428,62 @@ document.addEventListener('click', async (e) => {
   openSheet(`<div class="hd"><h2>היסטוריית סימונים</h2><button class="x" data-close>×</button></div>${h.length ? `<div class="list">${h.map(x => { const b = JSON.parse(x.before || '{}'), af = JSON.parse(x.after || '{}'); return `<div class="li noc"><div class="t">${esc(x.note || '')}: ${esc(b.s || 'ממתין')} ← ${esc(af.s || 'ממתין')}</div><div class="a small">${when(x.at)}</div><div class="m"><span>${esc(x.user_name)}</span>${af.by ? `<span>אסף: ${esc(af.by === '@' ? 'הגובה' : af.by)}</span>` : ''}</div></div>`; }).join('')}</div>` : '<div class="empty">אין עדיין סימונים</div>'}`);
 });
 
+// ---------- ״פצל חוב״ (עריכת הפיצול) ----------
+// מפצל חוב אחד לכמה חלקים, כל אחד עם סכום, גובה, שעה והערה. שם הלקוח, הטלפון והקושי מועתקים לכל חלק.
+// החלקים מסומנים בקבוצת פיצול (pg, ״חלק 1/2״) — כל גובה רואה רק את חלקו, הלקוח נספר פעם אחת, הסכום הכולל לא משתנה.
+async function splitDebtSheet(r, done) {
+  if (!r) return;
+  const total = r2(num(r.a)); if (!(total > 0)) return toast('אין סכום לפצל בשורה הזו');
+  let known = []; try { const { collectorsList } = await import('./expense-form.js'); known = await collectorsList(); } catch { /* */ }
+  const parts = [{ a: '', c: String(r.c || '').trim(), t: r.t || '', note: r.note || '', touched: false }, { a: '', c: '', t: r.t || '', note: '', touched: false }];
+  const s = openSheet(`<div class="hd"><h2>פצל חוב</h2><button class="x" data-close>×</button></div>
+    <div class="note info"><b>${esc(String(r.n || '').trim())}</b>${r.ph ? ' · ' + esc(r.ph) : ''}<br>יתרת החוב: <b>${money(total)}</b>${r.c ? ' · כרגע אצל ' + esc(r.c) : ''}</div>
+    <datalist id="spl-colls">${known.map(c => `<option value="${esc(c)}"></option>`).join('')}</datalist>
+    <div id="spl-parts"></div>
+    <button type="button" class="btn ghost sm" id="spl-add">+ חלק נוסף</button>
+    <div id="spl-st" class="note" role="status" aria-live="polite" style="margin-top:8px"></div>
+    <div class="row"><button class="btn xl" id="spl-ok" style="flex:2" disabled>אשר פיצול</button><button class="btn ghost xl" data-close style="flex:1">ביטול</button></div>`);
+  const box = $('#spl-parts', s.el);
+  const drawP = () => {
+    box.innerHTML = parts.map((p, i) => `<div class="card spl-p" style="padding:10px;margin:8px 0"><div class="row sp"><b>חלק ${i + 1}</b>${parts.length > 2 ? `<button type="button" class="btn plain sm" data-pdel="${i}">הסר חלק</button>` : ''}</div>
+      <div class="grid"><label class="f">סכום (₪)<input class="in n" data-pa="${i}" inputmode="decimal" value="${esc(p.a)}" placeholder="0"></label>
+      <label class="f">גובה<input class="in" data-pc="${i}" list="spl-colls" value="${esc(p.c)}" placeholder="בחר גובה" autocomplete="off"></label>
+      <label class="f">שעה<input class="in num" data-pt="${i}" inputmode="numeric" value="${esc(p.t)}" placeholder="שעה"></label>
+      <label class="f">הערה<input class="in" data-pn="${i}" value="${esc(p.note)}" placeholder="הערה"></label></div></div>`).join('');
+  };
+  const status = () => {
+    const amts = parts.map(p => num(p.a)), dealt = r2(sum(amts)), left = r2(total - dealt);
+    const bad = parts.some(p => !(num(p.a) > 0)) || Math.abs(left) > 0.004 || parts.some(p => p.t && !normTime(p.t));
+    $('#spl-st', s.el).className = 'note ' + (Math.abs(left) <= 0.004 && !bad ? 'ok' : 'warn');
+    $('#spl-st', s.el).innerHTML = `חולק: <b>${money(dealt)}</b> · נותר לחלוקה: <b>${money(left)}</b>${left < -0.004 ? ' — הסכומים גבוהים מהחוב' : ''}${parts.some(p => p.t && !normTime(p.t)) ? ' · שעה לא תקינה' : ''}`;
+    $('#spl-ok', s.el).disabled = bad;
+  };
+  // ההצעה: היתרה שנותרה נכנסת לחלק שעוד לא נערך (כשנשאר בדיוק אחד כזה)
+  const suggest = (from) => {
+    const open = parts.filter((p, i) => i !== from && !p.touched); if (open.length !== 1) return;
+    const others = r2(sum(parts.filter(p => p !== open[0]).map(p => num(p.a)))); const left = r2(total - others);
+    open[0].a = left > 0 ? String(left) : ''; const inp = box.querySelector(`[data-pa="${parts.indexOf(open[0])}"]`); if (inp) inp.value = open[0].a;
+  };
+  box.addEventListener('input', (e) => {
+    const t = e.target; const i = +(t.dataset.pa ?? t.dataset.pc ?? t.dataset.pt ?? t.dataset.pn); if (!(i >= 0)) return;
+    if (t.dataset.pa != null) { parts[i].a = t.value; parts[i].touched = true; suggest(i); }
+    else if (t.dataset.pc != null) parts[i].c = t.value; else if (t.dataset.pt != null) parts[i].t = t.value; else parts[i].note = t.value;
+    status();
+  });
+  box.addEventListener('click', (e) => { const d = e.target.closest('[data-pdel]'); if (!d) return; parts.splice(+d.dataset.pdel, 1); drawP(); status(); });
+  $('#spl-add', s.el).onclick = () => { parts.push({ a: '', c: '', t: r.t || '', note: '', touched: false }); drawP(); suggest(-1); status(); box.querySelector(`[data-pc="${parts.length - 1}"]`)?.focus(); };
+  $('#spl-ok', s.el).onclick = () => {
+    const pg = r.pg || ('p' + uid().replace(/-/g, '').slice(0, 10));
+    const news = parts.map((p, i) => {
+      const o = { ...r, a: r2(num(p.a)), c: String(p.c || '').trim(), t: p.t ? normTime(p.t) : '', note: String(p.note || '').trim(), pg, pp: `${i + 1}/${parts.length}` };
+      if (i > 0) delete o._k; if (o.t) o.na = false; delete o.xd; return o;
+    });
+    s.close(); done(news);
+    toast(`החוב של ${String(r.n || '').trim()} (${fmt(total)} ₪) פוצל ל-${news.length} חלקים: ${news.map(x => (x.c || 'ללא גובה') + ' ' + fmt(x.a) + ' ₪').join(' · ')}. לחץ ״שמור שינויים״ כדי לשמור.`);
+  };
+  drawP(); status();
+}
+
 // ---------- עריכה ----------
 const COLS = {
   morning: { rows: [['n', 'לקוח'], ['i', 'ריבית', 'n'], ['p', 'קרן', 'n']], loans: [['n', 'הלוואה'], ['a', 'סכום', 'n']] },
@@ -493,7 +549,7 @@ function renderEditor(ctx) {
     else if (a.kind === 'collectors') { const c = calcCollectors(a.entries || []); el.innerHTML = `<div class="note info">חובות ${money(c.totalDebts)} · הוצאות ${money(c.totalExp)} · נטו ${money(c.totalNet)}</div>`; }
   };
   // פיצול: חובות מאוחדים (mg) מוצגים כשורה אחת של הלקוח עם ״פירוט חובות״; כל חוב נשאר שורה עם הגובה שלו
-  const rowTr = (r, ri, li, cols, cls = '') => `<tr class="${cls}"><td>${ri + 1}</td>${cols.map(c => `<td>${cell(r, c, li, ri)}</td>`).join('')}<td><button class="x" data-del="${li}|${ri}" aria-label="מחק">×</button></td></tr>`;
+  const rowTr = (r, ri, li, cols, cls = '') => `<tr class="${cls}"><td>${ri + 1}${r.pp ? `<div class="pill acc" title="חלק של חוב שפוצל">חלק ${esc(r.pp)}</div>` : ''}</td>${cols.map(c => `<td>${cell(r, c, li, ri)}</td>`).join('')}<td class="rowacts">${a.kind === 'split' && li === 'records' ? `<button type="button" class="btn ghost sm" data-spl="${ri}">פצל חוב</button>` : ''}<button class="x" data-del="${li}|${ri}" aria-label="מחק">×</button></td></tr>`;
   const tbody = (li, cols) => {
     const list = a[li] || [];
     if (!(a.kind === 'split' && li === 'records')) return list.map((r, ri) => rowTr(r, ri, li, cols)).join('');
@@ -503,7 +559,7 @@ function renderEditor(ctx) {
       if (!g) { out += rowTr(r, ri, li, cols); return; }
       if (shown.has(r.mg)) return; shown.add(r.mg);
       const open = openMg.has(r.mg);
-      out += `<tr class="mghead" data-mg="${esc(r.mg)}"><td>${ri + 1}</td><td colspan="${cols.length}"><div class="row" style="flex-wrap:wrap;gap:6px 14px;justify-content:flex-start;max-width:min(78vw,640px)"><span><b>${esc(String(r.n || '').trim())}</b> <span class="pill acc">${g.length} חובות</span></span><span>יתרה <b class="mgsum">${money(mgTotal(g))}</b></span><button class="btn ghost sm" data-mgd="${esc(r.mg)}" aria-expanded="${open}">${open ? 'סגור פירוט' : 'פירוט חובות'}</button></div></td><td></td></tr>`;
+      out += `<tr class="mghead" data-mg="${esc(r.mg)}"><td>${ri + 1}</td><td colspan="${cols.length}"><div class="row" style="flex-wrap:wrap;gap:6px 14px;justify-content:flex-start;max-width:min(78vw,640px)"><span><b>${esc(String(r.n || '').trim())}</b> <span class="pill acc">${g.length} חובות</span></span><span>יתרה <b class="mgsum">${money(mgTotal(g))}</b></span><button class="btn ghost sm" data-mgd="${esc(r.mg)}" aria-expanded="${open}">${open ? 'סגור פירוט' : 'פירוט חובות'}</button><button class="btn ghost sm" data-mgsep="${esc(r.mg)}">הפרד לשורות</button></div></td><td></td></tr>`;
       if (open) {
         out += `<tr class="mgdet"><td></td><td colspan="${cols.length}"><div class="mglines">${g.map(x => `<div>${esc(String(x.c || '').trim() || 'ללא גובה')} — ${money(num(x.a))}${x.t ? ' · ' + esc(x.t) : ''}${x.note ? ' · ' + esc(x.note) : ''}</div>`).join('')}</div><button class="btn plain sm" data-mgu="${esc(r.mg)}">ביטול האיחוד של ${esc(String(r.n || '').trim())}</button></td><td></td></tr>`;
         g.forEach(x => { out += rowTr(x, list.indexOf(x), li, cols, 'mgpart'); });
@@ -542,6 +598,8 @@ function renderEditor(ctx) {
       $('#pok', s.el).onclick = () => { const lines = $('#pt', s.el).value.split(/\r?\n/).filter(l => l.trim()); for (const l of lines) { const parts = l.split('\t'); const r = {}; cols.forEach(([k, , t], i) => { const v = (parts[i] || '').trim(); r[k] = t === 'n' ? num(v) : t === 'b' ? !!v : t === 'k' ? (/הוצ|^e$/.test(v) ? 'e' : 'd') : v; }); if (a.kind === 'work' && li === 'entries') r.s = ''; if (a.kind === 'split') r.man = 1; (a[li] ||= []).push(r); } s.close(); touch(); drawE(); toast(lines.length + ' שורות נוספו'); };
     });
     $$('[data-eact]', view).forEach(b => b.onclick = () => R.editorActions[a.kind][+b.dataset.eact].run(a, () => { touch(); drawE(); }, ctx));
+    $$('[data-mgsep]', view).forEach(b => b.onclick = () => { const g = (a.records || []).filter(x => x && x.mg === b.dataset.mgsep); touch(); unmerge(a, b.dataset.mgsep); openMg.delete(b.dataset.mgsep); drawE(); toast(`החובות של ${String((g[0] || {}).n || '').trim()} מוצגים כ-${g.length} שורות נפרדות (סה״כ ${fmt(mgTotal(g))} ₪). לחץ ״שמור שינויים״ כדי לשמור.`); });
+    $$('[data-spl]', view).forEach(b => b.onclick = () => splitDebtSheet(a.records[+b.dataset.spl], (news) => { const i = a.records.indexOf(a.records[+b.dataset.spl]); a.records.splice(i, 1, ...news); touch(); drawE(); }));
     $$('[data-mgd]', view).forEach(b => b.onclick = () => { const k = b.dataset.mgd; openMg.has(k) ? openMg.delete(k) : openMg.add(k); drawE(); });
     $$('[data-mgu]', view).forEach(b => b.onclick = () => { touch(); unmerge(a, b.dataset.mgu); openMg.delete(b.dataset.mgu); drawE(); toast('האיחוד בוטל — החובות חזרו להיות שורות נפרדות. לחץ ״שמור״ כדי לשמור.'); });
     $('#ed-save', view).onclick = async (ev) => {

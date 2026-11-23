@@ -57,7 +57,8 @@ export function unmerge(state, mg) { (state.records || []).forEach(r => { if (r 
 // מספר הלקוחות = שורות מאוחדות (קבוצה = לקוח אחד)
 export function customerCount(records) {
   const seen = new Set(); let n = 0;
-  for (const r of records || []) { if (!r || !(r.n || r.a)) continue; if (r.mg) { if (seen.has(r.mg)) continue; seen.add(r.mg); } n++; }
+  // חובות מאוחדים (mg) וחלקים של חוב שפוצל (pg) נספרים כלקוח אחד
+  for (const r of records || []) { if (!r || !(r.n || r.a)) continue; const g = r.mg ? 'm:' + r.mg : r.pg ? 'p:' + r.pg : ''; if (g) { if (seen.has(g)) continue; seen.add(g); } n++; }
   return n;
 }
 // קבוצות פעילות (2 חובות ומעלה) לפי mg

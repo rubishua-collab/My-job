@@ -262,3 +262,7 @@ tr[hidden]{display:none}
 .sendbar.wa-opening .wa-body{animation:waUp .2s ease-out}
 .sendbar.wa-closing .wa-tab{animation:waTab .2s ease-out}
 @media (prefers-reduced-motion:reduce){.sendbar.wa-opening .wa-body,.sendbar.wa-closing .wa-tab{animation:none}}
+
+/* פצל חוב */
+.rowacts{white-space:nowrap}
+.rowacts .btn{margin-inline-end:6px}
