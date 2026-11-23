@@ -48,6 +48,21 @@ export function mainGroupsFor(profile, foods) {
   const filt = profileFilter(profile);
   return MAIN_GROUPS.filter(g => Object.keys(COMPONENTS).some(k => COMPONENTS[k].role === 'protein' && !COMPONENTS[k].noSwap && famGroup(COMPONENTS[k].fam) === g && filt.allowed(k) && foods.get(COMPONENTS[k].id)));
 }
+/** למה עוף/דג/בקר לא מוצעים: סוג תזונה, אלרגיה או מילה ברשימת ההימנעות (בלי העדפות התפריט) */
+export function mainBlockers(profile = {}) {
+  const base = { ...profile, menuPrefs: { ...(profile.menuPrefs || {}), dailyMain: [] } };
+  const f = profileFilter(base); const out = {};
+  const DIET = { vegetarian: 'צמחוני', vegan: 'טבעוני', pescatarian: 'בלי בשר' };
+  for (const g of MAIN_GROUPS) {
+    const keys = Object.keys(COMPONENTS).filter(k => COMPONENTS[k].role === 'protein' && !COMPONENTS[k].noSwap && famGroup(COMPONENTS[k].fam) === g);
+    if (keys.some(k => f.allowed(k))) continue;
+    const c = COMPONENTS[keys[0]];
+    if ((profile.allergies || []).some(a => c.allergens.includes(a))) out[g] = 'אלרגיה';
+    else if (DIET[profile.diet]) out[g] = `סוג תזונה: ${DIET[profile.diet]}`;
+    else out[g] = `רשימת "להימנע מ-": ${(profile.avoid || []).join(', ')}`;
+  }
+  return out;
+}
 /** העדפת "בכל יום לפחות מנה עיקרית אחת של…" (ברירת מחדל: עוף או דג), רק מה שמותר לפרופיל */
 export function requiredGroups(profile, foods) {
   const want = profile?.menuPrefs?.dailyMain ?? ['poultry', 'fish'];
@@ -109,11 +124,16 @@ export function profileFilter(profile = {}) {
   const diet = profile.diet || 'none';
   const noAuto = new Set(profile.menuPrefs?.noAuto || []);
   const has = (c, words) => words.some(w => c.name.replace(/[׳'"״]/g, '').includes(w) || c.words.some(x => x.replace(/[׳'"״]/g, '').includes(w) || w.includes(x.replace(/[׳'"״]/g, ''))));
+  // "להימנע מ-": רק אם המילה מופיעה בשם הרכיב ("דג מלוח" לא חוסם סלמון, "עוף שמן" לא חוסם חזה עוף)
+  const avoids = c => avoidWords.some(w => c.name.replace(/[׳'"״]/g, '').includes(w) || c.words.some(x => x.replace(/[׳'"״]/g, '') === w));
+  // מה שהמשתמש בחר במפורש ב"העדפות התפריט" (בכל יום עוף/דג/בקר) גובר על סוג התזונה ועל רשימת ההימנעות — לא על אלרגיה
+  const forced = new Set(profile.menuPrefs?.dailyMain || []);
   return {
     allowed(key) {
       const c = COMPONENTS[key];
       if (c.allergens.some(a => allergies.has(a))) return false;
-      if (has(c, avoidWords)) return false;
+      if (c.role === 'protein' && c.fam && forced.has(famGroup(c.fam))) return true;
+      if (avoids(c)) return false;
       if (diet === 'vegan' && (c.kosher === 'meat' || c.kosher === 'dairy' || c.allergens.includes('fish') || c.allergens.includes('egg'))) return false;
       if (diet === 'vegetarian' && (c.kosher === 'meat' || c.allergens.includes('fish'))) return false;
       if (diet === 'pescatarian' && c.kosher === 'meat') return false;

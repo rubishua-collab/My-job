@@ -5,7 +5,7 @@ import { TRAIN_BONUS } from '/shared/nutrition.js';
 import { save, del, get } from '../api.js';
 import { $, $$, esc, n0, n1, kg, toast, openSheet, meter, on, confirmSheet } from '../ui.js';
 import { nutrients, qtyText, unitsFor, STATE, isVegFruit } from '/shared/foods.js';
-import { suggestMeals, budgetForSlot, planDay, nextSlot, swapItem, swapCandidates, familyContext, PLANNER_SOURCES, SWAP_LABEL, swapChoices, applySwap, substituteFood, famGroup, otherMeal, recipeContext, requiredGroups } from '/shared/planner.js';
+import { suggestMeals, budgetForSlot, planDay, nextSlot, swapItem, swapCandidates, familyContext, PLANNER_SOURCES, SWAP_LABEL, swapChoices, applySwap, substituteFood, famGroup, otherMeal, recipeContext, requiredGroups, mainBlockers } from '/shared/planner.js';
 import { COMPONENTS, componentsInText } from '/shared/catalog.js';
 import { addDays, dmy, hebDay, israelMinutes, savedAt } from '/shared/dates.js';
 import { GOALS } from '/shared/nutrition.js';
@@ -279,9 +279,17 @@ function keepGroup(opt, otherFams, p) {
 const PREF_MAIN = [['poultry', '🍗 עוף'], ['fish', '🐟 דג'], ['beef', '🥩 בקר רזה']];
 const PREF_NO = [['tofu', 'טופו'], ['legumes', 'קטניות כמנה עיקרית'], ['egg', 'ביצים כמנה עיקרית'], ['turkeyDeli', 'נקניק ופסטרמה']];
 /** העדפות התפריט — נשמרות בפרופיל: "בכל יום לפחות מנה אחת של…" ו"לא להציע לי" */
-function menuPrefsHtml() {
-  const mp = baseProfile()?.menuPrefs || {}; const dm = mp.dailyMain ?? ['poultry', 'fish']; const no = mp.noAuto || [];
-  return `<details class="how" id="mprefs"><summary>⚙️ העדפות התפריט שלי</summary>
+function menuPrefsHtml(date) {
+  const mp = baseProfile()?.menuPrefs || {}; const no = mp.noAuto || [];
+  const bl = mainBlockers(profile(date));
+  const dm = mp.dailyMain ?? ['poultry', 'fish'].filter(g => !bl[g]); // ברירת מחדל: רק מה שהפרופיל מאפשר (צמחוני לא יקבל עוף מסומן)
+  const LBL = { poultry: 'עוף', fish: 'דג', beef: 'בקר' };
+  const blocked = Object.entries(bl).filter(([g, why]) => why !== 'אלרגיה');
+  const saved = new Set(mp.dailyMain || []);
+  const warn = blocked.length ? `<div class="note ${blocked.every(([g]) => saved.has(g)) ? 'ok' : 'warn'}" style="margin:8px 0">${blocked.every(([g]) => saved.has(g))
+    ? `בפרופיל מוגדר ${esc(blocked[0][1])}, אבל בחרת כאן ${blocked.map(([g]) => LBL[g]).join(', ')} — הבחירה שלך גוברת, והמנות האלה מוצעות.`
+    : `${blocked.map(([g]) => LBL[g]).join(', ')} לא מוצעים כי בפרופיל מוגדר ${esc(blocked[0][1])}. סמן אותם כאן ולחץ "שמור ובנה מחדש" — הבחירה שלך תגבר.`}</div>` : '';
+  return `<details class="how" id="mprefs" ${blocked.some(([g]) => !saved.has(g)) ? 'open' : ''}><summary>⚙️ העדפות התפריט שלי</summary>${warn}
     <p class="small" style="margin:8px 0 4px">בכל יום לפחות מנה עיקרית אחת של:</p><div class="chips">${PREF_MAIN.map(([k, l]) => `<button type="button" class="chip ${dm.includes(k) ? 'on' : ''}" data-dm="${k}">${l}</button>`).join('')}</div>
     <p class="small" style="margin:10px 0 4px">לא להציע לי אוטומטית:</p><div class="chips">${PREF_NO.map(([k, l]) => `<button type="button" class="chip ${no.includes(k) ? 'on' : ''}" data-no="${k}">${l}</button>`).join('')}</div>
     <button type="button" class="btn sm" style="margin-top:10px" data-saveprefs>שמור ובנה מחדש</button></details>`;
@@ -363,7 +371,7 @@ async function openPlanDay(date, done) {
   const added = new Set();
   const draw = () => {
     const sum = [...cards.values()].reduce((a, c) => { a.k += c.opt.totals.kcal; a.p += c.opt.totals.protein; a.c += c.opt.totals.carbs; a.f += c.opt.totals.fat; return a; }, { ...kept });
-    $('#pdb', s.el).innerHTML = `${menuPrefsHtml()}${keep.length ? `<div class="note">נשארות כמו שהן (נעולות או נאכלו): ${keep.map(k => esc(k.label)).join(', ')}</div>` : ''}
+    $('#pdb', s.el).innerHTML = `${menuPrefsHtml(date)}${keep.length ? `<div class="note">נשארות כמו שהן (נעולות או נאכלו): ${keep.map(k => esc(k.label)).join(', ')}</div>` : ''}
       ${plan.length ? [...cards.entries()].map(([key, c]) => `<h3 style="margin-top:14px">${esc(slots(date).find(x => x.id === c.slot)?.label)}</h3>${c.alts ? '<div class="small muted">יש ארוחה עיקרית אחת היום — בחר מה מתחשק:</div>' : ''}${suggestionHtml(c.opt, key, ui.get(key), { alts: c.alts, altIdx: c.altIdx, addLabel: added.has(key) ? 'נוסף ✓ — לחץ שוב לעדכון' : 'הוסף לתכנון' })}`).join('') : '<div class="empty-state">כל הארוחות נעולות או נאכלו.</div>'}
       <div class="card tight" style="margin-top:12px" id="daysum">סה״כ ביום: <b>${n0(sum.k)}</b> / ${tgt.kcal} קק״ל · <b>${n0(sum.p)}</b> / ${tgt.protein} ג׳ חלבון · ${n0(sum.c)} ג׳ פחמימה · ${n0(sum.f)} ג׳ שומן</div>`;
   };

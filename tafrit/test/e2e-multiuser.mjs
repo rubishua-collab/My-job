@@ -268,7 +268,7 @@ try {
   ok('בנייה מחדש של תפריט בלי החלפת מטרה (4 → 3 ארוחות, תפריט חדש מהמאגר, החלפת ארוחה עם סיכום יומי מיידי), החל ממחר', 'Android');
   // מסך הבית ביום עתידי מציג את התוכנית הנכונה; הדוח השבועי לפי המטרה; פרטיות נשמרת
   await pB.goto(BASE + '/#/today/' + addDays(T, 1)); await pB.waitForFunction(() => location.hash.includes('/today/') && document.querySelectorAll('[data-meal]').length === 3, null, { timeout: 8000 });
-  await pB.goto(BASE + '/#/today'); await pB.waitForFunction(() => document.querySelectorAll('[data-meal]').length === 4 && !document.querySelector('.sub')?.textContent.includes('24.11'), null, { timeout: 8000 });
+  await pB.goto(BASE + '/#/today'); await pB.waitForFunction(() => document.querySelectorAll('[data-meal]').length === 4 && !location.hash.includes('/today/'), null, { timeout: 8000 });
   const stat1 = await api('POST', '/api/chat', { message: 'כמה נשאר לי היום?' }, t1);
   assert.match(stat1.text, new RegExp(String(today1.target.kcal)));
   assert.equal((await api('GET', '/api/state', null, u2.token)).plans.every(p => p.goal === 'gain'), true, 'התוכניות של משתמש 1 לא השפיעו על משתמש 2');
