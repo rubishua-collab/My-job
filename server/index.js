@@ -44,6 +44,14 @@ r.get('/api/accounts/:id', (req, res, { user, params }) => {
   const extra = {};
   if (a.kind === 'morning') { const p = prevMorning(listDocs('accounts').map(x => ({ id: x.id, ...x.data })), a.date, a.id); extra.prev = p; }
   if (a.kind === 'split' && can.finance(user)) extra._day = dayInfo(listDocs, a.date); // הוצאות הגובים ו״נגבה בפועל״ מאיסוף היום של אותו תאריך
+  if (a.kind === 'split' && can.finance(user)) {
+    // שורה שהיא העתק זהה (אותו מזהה שנוצר באפליקציה, אותו שם וסכום) של שורה בחשבון פיצול אחר — הגיעה לכאן בטעות
+    const long = (k) => typeof k === 'string' && k.length > 6;
+    const others = new Map();
+    for (const x of listDocs('accounts')) if (x.id !== a.id && x.data.kind === 'split') for (const r of x.data.records || []) if (r && long(r._k)) others.set(r._k, { date: x.data.date, n: r.n, a: r.a });
+    const fx = (a.records || []).filter(r => r && long(r._k) && others.has(r._k) && others.get(r._k).n === r.n && +others.get(r._k).a === +r.a).map(r => ({ _k: r._k, n: r.n, a: r.a, c: r.c, from: others.get(r._k).date }));
+    if (fx.length) extra._foreign = fx;
+  }
   return { ...a, _version: d.version, _updatedAt: d.updated_at, _updatedBy: d.updated_by, _times: accTimes(d, d.data), ...extra };
 });
 // ״שמור״ בלי שינוי: מעדכן רק את מועד השמירה (בלי גרסה חדשה, בלי לגעת בנתונים)

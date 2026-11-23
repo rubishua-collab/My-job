@@ -71,8 +71,10 @@ export async function renderNew(view, [kind], q) {
 }
 
 // ---------- מסך חשבון ----------
+let LAST_ACC = null;
 export async function renderAccount(view, [id], q) {
   const my = App.nav;
+  if (LAST_ACC !== id) { const v = viewState.get('acc:' + id); if (v.sel && v.sel.length) viewState.set('acc:' + id, { sel: [] }); } LAST_ACC = id;
   const a = await get('/api/accounts/' + id);
   if (App.nav !== my) return; // בינתיים עברו למסך אחר (למשל לעריכה) — לא מציירים מעליו
   const st = viewState.get('acc:' + id);
@@ -301,7 +303,9 @@ function splitView(ctx, vis) {
     <div class="list" style="margin-top:8px">${b.sections.map(s => { const rs = s.rows.filter(r => visSet.has(r._k)); return (s.t ? `<div class="grp"><span>${esc(s.t)}</span><span class="s">${money(s.total)}</span></div>` : '') + rs.map(rec).join(''); }).join('')}</div>${dayBox(b.c)}</div>`; }).join('') + xOnlyCards;
   const sides = c.sides.filter(r => visSet.has(r._k));
   const mcard = merged.length ? `<div class="card mgcard"><div class="row sp"><h2>לווים מאוחדים</h2><b>${money(r2(sum(merged.map(m => m.amount))))}</b></div><div class="muted small">שורה אחת לכל לווה, עם הסכום הכולל לתשלום היום. החשבון של כל גובה נשאר בכרטיס שלו (בחר את הגובה למעלה).</div><div class="list" style="margin-top:8px">${merged.map(mrow).join('')}</div></div>` : '';
-  return `${mcard}${blocks}${sides.length ? `<div class="card"><div class="row sp"><h2>לא נגבה היום</h2><b>${money(c.sideTotal)}</b></div><div class="list">${sides.map(rec).join('')}</div></div>` : ''}
+  const fx = (a._foreign || []);
+  const fwarn = fx.length && App.can.finance ? `<div class="note warn no-print" id="fornote"><b>נמצאו ${fx.length} שורות שהגיעו מחשבון של יום אחר</b> (העתק זהה של שורות מ־${[...new Set(fx.map(x => dmy(x.from)))].join(', ')}): ${fx.slice(0, 6).map(x => esc(x.n) + ' ' + money(num(x.a))).join(' · ')}${fx.length > 6 ? ' …' : ''}<br><button class="btn danger sm" id="forrm" style="margin-top:6px">הסר אותן מהחשבון הזה בלבד</button> <span class="small">החשבון של היום הקודם לא משתנה. אפשר גם לייבא שוב את האקסל של היום.</span></div>` : '';
+  return `${fwarn}${mcard}${blocks}${sides.length ? `<div class="card"><div class="row sp"><h2>לא נגבה היום</h2><b>${money(c.sideTotal)}</b></div><div class="list">${sides.map(rec).join('')}</div></div>` : ''}
   <div class="card"><h2>סיכום</h2><dl class="kv"><dt>לקוחות</dt><dd>${customerCount(a.records)}</dd><dt>סה״כ גובים</dt><dd>${money(c.grand)}</dd>${c.specialTotal ? `<dt>לשנות / ללא גובה</dt><dd>${money(c.specialTotal)}</dd>` : ''}${c.sideTotal ? `<dt>לא נגבה היום</dt><dd>${money(c.sideTotal)}</dd>` : ''}<dt>סה״כ הכול</dt><dd>${money(c.all)}</dd></dl>
   ${MG.size && ctx.coll ? `<details class="mgview" style="margin-top:8px"><summary>לקוחות עם כמה חובות (${MG.size})</summary><div class="list">${[...MG.values()].map(g => `<div class="li noc"><div class="t">${esc(String(g[0].n || '').trim())}</div><div class="a">${money(mgTotal(g))}</div><div class="m">${g.map(x => `<span>${esc(String(x.c || '').trim() || 'ללא גובה')} — ${money(num(x.a))}</span>`).join('')}</div></div>`).join('')}</div></details>` : ''}
   ${c.dups.filter(d => !MG.size || !(a.records || []).some(r => r.mg && normName(r.n) === normName(d.n))).length ? `<div class="note warn">אותו שם אצל כמה גובים: ${c.dups.filter(d => !(a.records || []).some(r => r.mg && normName(r.n) === normName(d.n))).map(d => esc(d.n) + ' (' + d.cs.map(esc).join(', ') + ')').join(' · ')}</div>` : ''}</div>`;
@@ -530,12 +534,12 @@ function renderEditor(ctx) {
       summary();
     });
     ['date', 'title', 'keren', 'courier'].forEach(k => { const el = $('#ed-' + k, view); if (el) el.onchange = () => { touch(true); a[k] = ['keren', 'courier'].includes(k) ? num(el.value) : el.value; summary(); }; });
-    $$('[data-add]', view).forEach(b => b.onclick = () => { touch(); const li = b.dataset.add; const r = {}; spec[li].forEach(([k, , t]) => { if (t === 'n') r[k] = 0; else if (t === 'k') r[k] = 'd'; else if (t !== 'b') r[k] = ''; }); if (a.kind === 'split') Object.assign(r, { fn: '', ln: '', cnt: 1, side: false }); if (a.kind === 'work' && li === 'entries') r.s = ''; (a[li] ||= []).push(r); drawE(); const ins = $$(`[data-l="${li}"][data-k="n"]`, view); ins[ins.length - 1]?.focus(); });
+    $$('[data-add]', view).forEach(b => b.onclick = () => { touch(); const li = b.dataset.add; const r = {}; spec[li].forEach(([k, , t]) => { if (t === 'n') r[k] = 0; else if (t === 'k') r[k] = 'd'; else if (t !== 'b') r[k] = ''; }); if (a.kind === 'split') Object.assign(r, { fn: '', ln: '', cnt: 1, side: false, man: 1 }); if (a.kind === 'work' && li === 'entries') r.s = ''; (a[li] ||= []).push(r); drawE(); const ins = $$(`[data-l="${li}"][data-k="n"]`, view); ins[ins.length - 1]?.focus(); });
     $$('[data-del]', view).forEach(b => b.onclick = () => { const [li, ri] = b.dataset.del.split('|'); const r = a[li][+ri]; if (confirm(`למחוק את השורה ״${r.n || ''}״?`)) { a[li].splice(+ri, 1); touch(); drawE(); } });
     $$('[data-paste]', view).forEach(b => b.onclick = () => {
       const li = b.dataset.paste; const cols = spec[li];
       const s = openSheet(`<div class="hd"><h2>הדבקה מאקסל</h2><button class="x" data-close>×</button></div><p class="small muted">העתק מאקסל עמודות בסדר הזה: ${cols.map(c => c[1]).join(' · ')}. כל שורה תתווסף לסוף הרשימה.</p><textarea class="in" id="pt" style="min-height:200px"></textarea><button class="btn xl" id="pok" style="margin-top:10px">הוסף</button>`);
-      $('#pok', s.el).onclick = () => { const lines = $('#pt', s.el).value.split(/\r?\n/).filter(l => l.trim()); for (const l of lines) { const parts = l.split('\t'); const r = {}; cols.forEach(([k, , t], i) => { const v = (parts[i] || '').trim(); r[k] = t === 'n' ? num(v) : t === 'b' ? !!v : t === 'k' ? (/הוצ|^e$/.test(v) ? 'e' : 'd') : v; }); if (a.kind === 'work' && li === 'entries') r.s = ''; (a[li] ||= []).push(r); } s.close(); touch(); drawE(); toast(lines.length + ' שורות נוספו'); };
+      $('#pok', s.el).onclick = () => { const lines = $('#pt', s.el).value.split(/\r?\n/).filter(l => l.trim()); for (const l of lines) { const parts = l.split('\t'); const r = {}; cols.forEach(([k, , t], i) => { const v = (parts[i] || '').trim(); r[k] = t === 'n' ? num(v) : t === 'b' ? !!v : t === 'k' ? (/הוצ|^e$/.test(v) ? 'e' : 'd') : v; }); if (a.kind === 'work' && li === 'entries') r.s = ''; if (a.kind === 'split') r.man = 1; (a[li] ||= []).push(r); } s.close(); touch(); drawE(); toast(lines.length + ' שורות נוספו'); };
     });
     $$('[data-eact]', view).forEach(b => b.onclick = () => R.editorActions[a.kind][+b.dataset.eact].run(a, () => { touch(); drawE(); }, ctx));
     $$('[data-mgd]', view).forEach(b => b.onclick = () => { const k = b.dataset.mgd; openMg.has(k) ? openMg.delete(k) : openMg.add(k); drawE(); });

@@ -851,6 +851,13 @@ function panelBind(ctx) {
     $('#mgall', s.el).onclick = () => run(groups.filter((g, i) => $(`[data-same="${i}"]`, s.el).checked));
     sync();
   };
+  const frm = $('#forrm', ctx.view);
+  if (frm) frm.onclick = () => {
+    const ks = new Set((ctx.a._foreign || []).map(x => x._k)); const a = A(); const before = (a.records || []).length;
+    if (!confirm(`להסיר ${ks.size} שורות שהועתקו מחשבון של יום אחר? הן יוסרו רק מהחשבון של ${dmy(a.date)}.`)) return;
+    a.records = (a.records || []).filter(r => !(r && ks.has(r._k))); delete a._foreign; delete ctx.a._foreign;
+    commit(ctx, H, 'הסרת שורות מחשבון אחר', `הוסרו ${before - a.records.length} שורות שהגיעו מחשבון אחר`);
+  };
   ctx.view.querySelectorAll('[data-mgun]').forEach(b => b.onclick = () => { const a = A(); const g = (a.records || []).find(r => r.mg === b.dataset.mgun); unmerge(a, b.dataset.mgun); commit(ctx, H, 'ביטול איחוד', 'האיחוד בוטל' + (g ? ' — ' + g.n + ' מוצג שוב בשורות נפרדות' : '')); });
   const sm = $('#spt-smerge', root);
   if (sm) sm.onclick = () => doMergeDebts([...(ctx.visible || [])]);
@@ -860,7 +867,7 @@ function panelBind(ctx) {
   const doMergeDebts = (ids) => { const m = mergeDebts(A(), ids); if (!m.removed) return toast('אין חובות כפולים לאיחוד'); commit(ctx, H, 'איחוד חובות', 'אוחדו ' + m.removed + ' שורות ל' + (m.people > 1 ? m.people + ' לווים' : 'שורה אחת') + ', ההערות נשמרו' + (m.split.length ? ' · ' + m.split.join(' · ') + ' (אפשר לשנות בשדה גובה)' : '')); };
   $('#spt-mergedebts', root).onclick = () => doMergeDebts(null);
   $('#spt-merge', root).onclick = () => { const a = A(); const before = a.records.length, m = mergeRecords(a.records); a.records = m.recs; if (before === m.recs.length) return toast('אין שורות לאיחוד'); commit(ctx, H, 'איחוד כפולים', 'אוחדו ' + (before - m.recs.length) + ' שורות'); };
-  $('#spt-add', root).onclick = () => { const a = A(); const k = kid(); a.records.push({ _k: k, fn: '', ln: '', n: '', note: '', ph: '', a: 0, c: ctx.coll || '', side: false, h: '', cnt: 1 }); X.rowsOpen = true; commit(ctx, H, 'שורה חדשה').then(() => { const el = $('[data-fk="rw|' + k + '|n"]'); if (el) el.focus(); }); };
+  $('#spt-add', root).onclick = () => { const a = A(); const k = kid(); a.records.push({ _k: k, man: 1, fn: '', ln: '', n: '', note: '', ph: '', a: 0, c: ctx.coll || '', side: false, h: '', cnt: 1 }); X.rowsOpen = true; commit(ctx, H, 'שורה חדשה').then(() => { const el = $('[data-fk="rw|' + k + '|n"]'); if (el) el.focus(); }); };
   $('#spt-carry', root).onclick = async () => { try { const cy = await carrySpNotes(A()); if (!cy.n) return toast('אין הערות פתוחות להעברה'); commit(ctx, H, 'העברת הערות פתוחות', 'הועברו ' + cy.n + ' הערות מהחשבון של ' + dmy(cy.from)); } catch (e) { toast(e.message); } };
   const tb = $('table.ed', det);
   if (tb) {

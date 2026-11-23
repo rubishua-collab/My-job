@@ -4,7 +4,7 @@ import { editorAction, accountAction, more, route } from '../registry.js';
 import { get, save } from '../api.js';
 import { $, $$, esc, fmt, money, toast, openSheet } from '../ui.js';
 import { App } from '../app.js';
-import { calcSplit, sum, num, r2 } from '../calc.js';
+import { calcSplit, sum, num, r2, normName } from '../calc.js';
 import { mergeSplit, findGroups } from '../split-merge.js';
 import {
   readTables, readCsvText, cell, morningFromTables, morningStatus, extractRows, mCheckMsg, mRowsOf,
@@ -190,11 +190,22 @@ editorAction('split', {
         <button class="btn xl" id="sp-imp-ok" style="margin-top:10px" ${m.recs.length ? '' : 'disabled'}>החלף את שורות הפיצול (${m.recs.length})</button>`;
       bindMap(body, P.map, (k) => { if (k === 'ag') P.agByContent = false; draw(); });
       $('#sp-imp-ok', body).onclick = () => {
-        const cur = (state.records || []).filter(r => r.n || r.a).length;
-        if (cur && !confirm(`בפיצול כבר יש ${cur} שורות. להחליף אותן בשורות מהקובץ?`)) return;
+        // השורות שייכות לחשבון הפתוח בלבד. ייבוא חוזר: מחליף את שורות הייבוא הקודם (בלי כפילות),
+        // שומר שורות שהוספת ידנית, ומעביר לשורה התואמת (שם + גובה) שעה, ״לא ענו״, הערה, קושי, טלפון ואיחוד
+        const cur = (state.records || []).filter(r => r && (r.n || r.a));
+        const manual = cur.filter(r => r.man), old = cur.filter(r => !r.man);
+        if (old.length && !confirm(`בפיצול כבר יש ${old.length} שורות מייבוא קודם — הן יוחלפו בשורות מהקובץ.${manual.length ? ` ${manual.length} שורות שהוספת ידנית יישמרו.` : ''} עריכות (שעה, הערה, איחוד) יועברו לשורות התואמות. להמשיך?`)) return;
         const { m: mm } = compute();
-        state.records = mm.recs.map(compactRec).filter(r => r.n || r.a);
-        s.close(); redraw(); toast(`נקראו ${state.records.length} שורות. לחץ ״שמור״ כדי לשמור את הפיצול.`);
+        const key = (r) => normName(r.n) + '|' + String(r.c || '').trim();
+        const oldBy = new Map(); old.forEach(r => { const k = key(r); if (!oldBy.has(k)) oldBy.set(k, []); oldBy.get(k).push(r); });
+        const impId = 'i' + Date.now().toString(36);
+        const fresh = mm.recs.map(compactRec).filter(r => r.n || r.a).map(r => {
+          const o = (oldBy.get(key(r)) || []).shift();
+          if (o) { if (o._k) r._k = o._k; if (o.t && !r.t) r.t = o.t; if (o.na) r.na = true; if (o.note && !r.note) r.note = o.note; if (o.done) r.done = true; if (o.h && !r.h) r.h = o.h; if (o.ph && !r.ph) r.ph = o.ph; if (o.side) r.side = true; if (o.mg) r.mg = o.mg; }
+          r.imp = impId; return r;
+        });
+        state.records = fresh.concat(manual);
+        s.close(); redraw(); toast(`נקראו ${fresh.length} שורות מהקובץ${manual.length ? ` · נשמרו ${manual.length} שורות ידניות` : ''}. לחץ ״שמור״ כדי לשמור את הפיצול.`);
       };
     };
     const setSt = bindDrop(el, async (tables, name) => {

@@ -87,7 +87,7 @@ const canon = (v) => Array.isArray(v) ? '[' + v.map(canon).join(',') + ']' : (v 
 const body = (d) => canon(Object.fromEntries(Object.entries(d || {}).filter(([k]) => !META.has(k))));
 function stampAccount(cur, data, user, t) {
   const old = cur ? JSON.parse(cur.data) : null;
-  const hint = +data._editedAt; delete data._editedAt; delete data._times; delete data._day; // _times ו-_day מוחזרים למסך בלבד
+  const hint = +data._editedAt; delete data._editedAt; delete data._times; delete data._day; delete data._foreign; // _times ו-_day מוחזרים למסך בלבד
   if (!old || body(old) !== body(data)) {
     data.changedAt = hint > 0 && hint <= t && (!old || !old.savedAt || hint >= old.savedAt - 864e5) ? hint : t;
     data.changedBy = user?.name || null;
