@@ -106,36 +106,6 @@ try {
   ok(`"הצע" לערב אחרי בקר בצהריים: רק עוף ודג — ${sn.join(' | ')}`);
 
   await sg.locator('.sh button').first().click(); await noSheet(p2);
-  // ---- 4. העדפות התפריט נשמרות בפרופיל ----
-  const s4 = await openDay(p2, T); await click(s4.locator('#mprefs summary'));
-  assert.equal(await s4.locator('[data-dm="poultry"].on').count(), 1); assert.equal(await s4.locator('[data-no="tofu"].on').count(), 1);
-  ok('העדפות התפריט בפרופיל: עוף/דג כל יום, בלי טופו');
-
-  // ---- 5. המקרה מהטלפון: פרופיל שמוגדר "צמחוני" אבל בהעדפות התפריט נבחרו עוף, דג ובקר ----
-  const tok5 = await user('veg-but-chicken@test.local', { ...ROBI, diet: 'vegetarian', menuPrefs: undefined }, 118);
-  const p5 = await page(tok5);
-  let s5 = await openDay(p5, T);
-  const before = await s5.locator('.sugg [data-name]').allInnerTexts();
-  assert.ok(before.every(n => !['עוף', 'דג'].includes(grp(n))), 'לפני: צמחוני');
-  assert.match(await s5.locator('#mprefs').innerText(), /לא מוצעים כי בפרופיל מוגדר סוג תזונה: צמחוני/);
-  await shot(p5, 'r04-veg-warning');
-  for (const g of ['poultry', 'fish', 'beef']) { const c = s5.locator(`[data-dm="${g}"]`); if (!(await c.getAttribute('class')).includes('on')) await click(c); }
-  await click(s5.locator('[data-no="tofu"]'));
-  await click(s5.locator('[data-saveprefs]'));
-  await p5.locator('.sheet-wrap h2', { hasText: 'יום שלם' }).waitFor(); await p5.waitForTimeout(400);
-  s5 = p5.locator('.sheet-wrap').last();
-  const after = await s5.locator('.sugg [data-name]').allInnerTexts();
-  const labels5 = await s5.locator('h3').allInnerTexts();
-  const mains5 = labels5.map((l, i) => ({ l, n: after[i] })).filter(x => /צהריים|ערב/.test(x.l));
-  assert.ok(mains5.some(m => ['עוף', 'דג'].includes(grp(m.n))), 'אחרי: ' + after.join(' | '));
-  const l5 = s5.locator('.sugg').nth(labels5.findIndex(l => l.includes('צהריים')));
-  await click(l5.locator('[data-sw]').first());
-  const g5 = await l5.locator('.swp [data-group]').evaluateAll(xs => xs.map(x => x.dataset.group));
-  assert.deepEqual(g5.slice(0, 3).sort(), ['beef', 'fish', 'poultry'], g5.join(','));
-  assert.ok(!/טופו/.test(await s5.innerText()));
-  await shot(p5, 'r05-veg-fixed');
-  ok(`פרופיל "צמחוני" + בחירה בהעדפות: לפני — ${before.join(' | ')}; אחרי — ${mains5.map(m => m.n).join(' | ')}; "החלף חלבון": עוף, דג ובקר ראשונים`);
-
   assert.deepEqual(errs, []); ok('אין שגיאות JavaScript');
   console.log(`\nכל ${step} הבדיקות עברו. צילומי מסך: ${SHOTS}`);
 } catch (e) { console.error('✗', e.message, errs); process.exitCode = 1; }

@@ -7,6 +7,7 @@ import { get, save, del } from '../api.js';
 import { $, esc, n0, toast, on, openSheet, confirmSheet } from '../ui.js';
 import { openRecipe, openCustomForm, openUsda, openFoodDetail, foodRow, openFixedMeal } from './food.js';
 import { sourcesHtml } from './targets.js';
+import { openEatingProfile } from './eating.js';
 import { SOURCES } from '/shared/sources.js';
 import { nutrients, manualFood } from '/shared/foods.js';
 import { savedAt } from '/shared/dates.js';
@@ -17,6 +18,7 @@ route('more', async (el) => {
     <div class="card"><ul class="list">
       <li class="li" data-go="#/plan"><div class="m"><b>התוכנית שלי</b><small>מטרה, יעדים, שינוי מטרה ותוכנית, היסטוריית תוכניות</small></div><div class="a">›</div></li>
       <li class="li" data-go="#/targets"><div class="m"><b>היעדים שלי</b><small>כמה אני שורף, כמה לאכול, איך חושב, היסטוריה</small></div><div class="a">›</div></li>
+      <li class="li" data-sec="eating"><div class="m"><b>🍽️ בנה מחדש את פרופיל האכילה שלי</b><small>סגנון אכילה, מקורות חלבון ועוף/דג כל יום</small></div><div class="a">›</div></li>
       <li class="li" data-go="#/onboarding"><div class="m"><b>הפרופיל שלי</b><small>עודכן ${esc(savedAt(st.profile?.updatedAt))}</small></div><div class="a">›</div></li>
       <li class="li" data-sec="fav"><div class="m"><b>מועדפים</b><small>${st.favorites.length} פריטים</small></div><div class="a">›</div></li>
       <li class="li" data-sec="recipes"><div class="m"><b>מתכונים ביתיים</b><small>${st.recipes.length} מתכונים · כולל שמן ורטבים</small></div><div class="a">›</div></li>
@@ -40,6 +42,7 @@ route('more', async (el) => {
 });
 
 const SECTIONS = {
+  eating() { openEatingProfile({ date: today() }); },
   ai() { openAiConsent(); },
   password() {
     const s = openSheet({ title: 'שינוי סיסמה', body: `<label class="field"><span>סיסמה נוכחית</span><input class="in" id="c" type="password" autocomplete="current-password" dir="ltr"></label><label class="field"><span>סיסמה חדשה</span><input class="in" id="n" type="password" autocomplete="new-password" dir="ltr"></label>`, foot: '<button class="btn" data-ok>שמירה</button>' });

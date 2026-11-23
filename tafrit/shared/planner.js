@@ -46,8 +46,40 @@ const MAIN_GROUPS = ['poultry', 'fish', 'beef'];
 /** אילו מבין עוף/דג/בקר רזה מותרים לפרופיל (אלרגיות, צמחונות, מה שלא אוכל) */
 export function mainGroupsFor(profile, foods) {
   const filt = profileFilter(profile);
-  return MAIN_GROUPS.filter(g => Object.keys(COMPONENTS).some(k => COMPONENTS[k].role === 'protein' && !COMPONENTS[k].noSwap && famGroup(COMPONENTS[k].fam) === g && filt.allowed(k) && foods.get(COMPONENTS[k].id)));
+  return MAIN_GROUPS.filter(g => Object.keys(COMPONENTS).some(k => COMPONENTS[k].role === 'protein' && !COMPONENTS[k].noSwap && famGroup(COMPONENTS[k].fam) === g && filt.allowed(k) && filt.auto(k) && foods.get(COMPONENTS[k].id)));
 }
+// ---- פרופיל אכילה: סוג תזונה, מקורות חלבון שרוצים לקבל וכלל "עוף או דג כל יום" ----
+export const DIETS = [['none', 'תזונה רגילה', 'הכול: עוף, בשר, דגים, ביצים וחלב'], ['pescatarian', 'דגים בלי בשר ועוף', 'דגים, ביצים, חלב וצמחי'], ['vegetarian', 'צמחונית', 'בלי בשר, עוף ודגים'], ['vegan', 'טבעונית', 'רק מהצומח']];
+export const PROTEIN_SOURCES = [['poultry', '🍗 עוף'], ['fish', '🐟 דגים'], ['beef', '🥩 בקר רזה'], ['egg', '🥚 ביצים'], ['dairy', '🥛 מוצרי חלב'], ['legumes', '🫘 קטניות'], ['tofu', 'טופו'], ['turkeyDeli', 'נקניק ופסטרמה']];
+/** אילו מקורות חלבון סוג התזונה מאפשר */
+export function dietAllows(diet, src) {
+  if (diet === 'vegan') return ['legumes', 'tofu'].includes(src);
+  if (diet === 'vegetarian') return !['poultry', 'fish', 'beef', 'turkeyDeli'].includes(src);
+  if (diet === 'pescatarian') return !['poultry', 'beef', 'turkeyDeli'].includes(src);
+  return true;
+}
+/** הכלל היומי לפי סוג התזונה והבחירה: רגיל — עוף או דג (מה שנבחר), דגים בלבד — דג, צמחוני/טבעוני — אין */
+export function dailyRuleGroups(diet, sources, on) {
+  if (!on) return [];
+  return ['poultry', 'fish'].filter(g => dietAllows(diet, g) && sources.includes(g));
+}
+/** בונה את menuPrefs ואת diet מתוך הבחירות במסך. noAuto = מה שלא נבחר (או שסוג התזונה לא מאפשר); אלרגיות והימנעויות לא נוגעים */
+export function eatingProfileFrom({ diet, sources, daily }) {
+  const all = PROTEIN_SOURCES.map(([k]) => k);
+  const chosen = sources.filter(k => dietAllows(diet, k));
+  return { diet, menuPrefs: { noAuto: all.filter(k => !chosen.includes(k)), dailyMain: dailyRuleGroups(diet, chosen, daily), sources: chosen, dailyRule: !!daily } };
+}
+/** מקור חלבון שאלרגיה חוסמת (נשמרת תמיד, בכל סוג תזונה) */
+const SRC_ALLERGEN = { fish: 'fish', egg: 'egg', dairy: 'milk', tofu: 'soy' };
+export const allergyBlocks = (profile, src) => (profile?.allergies || []).includes(SRC_ALLERGEN[src]);
+/** הבחירות הנוכחיות מתוך הפרופיל */
+export function eatingProfileOf(profile = {}) {
+  const diet = profile.diet || 'none'; const mp = profile.menuPrefs || {}; const no = new Set(mp.noAuto || []);
+  const sources = PROTEIN_SOURCES.map(([k]) => k).filter(k => dietAllows(diet, k) && !no.has(k) && !allergyBlocks(profile, k));
+  const daily = mp.dailyRule ?? ((mp.dailyMain ?? ['poultry', 'fish']).length > 0);
+  return { diet, sources, daily };
+}
+
 /** למה עוף/דג/בקר לא מוצעים: סוג תזונה, אלרגיה או מילה ברשימת ההימנעות (בלי העדפות התפריט) */
 export function mainBlockers(profile = {}) {
   const base = { ...profile, menuPrefs: { ...(profile.menuPrefs || {}), dailyMain: [] } };
@@ -132,6 +164,7 @@ export function profileFilter(profile = {}) {
     allowed(key) {
       const c = COMPONENTS[key];
       if (c.allergens.some(a => allergies.has(a))) return false;
+      if (c.role === 'protein' && c.fam && (noAuto.has(famGroup(c.fam)) && MAIN_GROUPS.includes(famGroup(c.fam)))) return false; // "לא רוצה לקבל" עוף/דג/בקר
       if (c.role === 'protein' && c.fam && forced.has(famGroup(c.fam))) return true;
       if (avoids(c)) return false;
       if (diet === 'vegan' && (c.kosher === 'meat' || c.kosher === 'dairy' || c.allergens.includes('fish') || c.allergens.includes('egg'))) return false;
@@ -143,7 +176,7 @@ export function profileFilter(profile = {}) {
     liked(key) { const c = COMPONENTS[key]; return (has(c, likeWords) ? 1 : 0) + (fav.has(key) ? 1 : 0); },
     likedFams() { return new Set(Object.keys(COMPONENTS).filter(k => COMPONENTS[k].fam && has(COMPONENTS[k], likeWords)).map(k => COMPONENTS[k].fam)); },
     /** מותר בהצעות אוטומטיות (העדפות התפריט: "לא להציע לי" — למשל טופו) */
-    auto(key) { const c = COMPONENTS[key]; return !(c.role === 'protein' && c.fam && noAuto.has(c.fam)); },
+    auto(key) { const c = COMPONENTS[key]; return !(c.role === 'protein' && c.fam && (noAuto.has(c.fam) || noAuto.has(famGroup(c.fam)) || noAuto.has(protGroup(c.fam)))); },
     kosher: !!profile.kosher, budget: profile.budget || 'mid',
   };
 }
@@ -314,7 +347,7 @@ export function suggestMeals(ctx, budget, n = 3) {
       const items = sizeMeal(keys, budget, foods);
       if (items.length !== keys.length) continue;
       // לכל היותר ארוחה אחת ביום שמבוססת על ביצים (אלא אם המשתמש מחפש במפורש לפי מה שיש בבית)
-      if (!pantry && ctx.dayFams?.get?.('egg') && mainFamily(items) === 'egg') continue;
+      if (!pantry && ctx.dayFams?.get?.('egg') && (mainFamily(items) === 'egg' || eggCount(items) >= 2)) continue; // ביצים כבר היו היום — רעיון אחר
       if (!pantry && ctx.dayEggs && ctx.dayEggs + eggCount(items) > 4) continue; // לא יותר מ-4 ביצים ביום
       const sc = scoreOption(items, keys, tpl, budget, ctx, filt);
       cands.push({ key: tpl.id + ':' + keys.join('+'), templateId: tpl.id, title: tpl.title || null, tpl, name: mealName(tpl, keys, items), slot, items, keys, ...sc });
