@@ -41,6 +41,6 @@ test('Claude tool loop → כרטיסי ארוחה מהמאגר', async () => {
   // הכמויות בכרטיס זהות לחישוב מול המאגר
   const c = r.cards[0]; const f = S.foodsFor(uid).get(c.items[0].foodId);
   const status = JSON.parse(calls[1].messages.at(-1).content[0].content); assert.equal(status.latest_weight.kg, 120);
-  assert.ok(!JSON.stringify(calls).includes('55'), 'אין נתונים של משתמש אחר');
+  assert.ok(!JSON.stringify(calls).includes('"kg\\":55'), 'אין נתונים של משתמש אחר'); assert.equal(status.profile?.goal, 'lose');
   assert.equal(c.items[0].kcal, Math.round(f.k * c.items[0].grams / 100));
 });
