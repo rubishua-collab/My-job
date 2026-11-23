@@ -46,6 +46,12 @@ export async function logout({ all = false } = {}) {
 
 function tabbar() { $('#tabbar').innerHTML = TABS.map(([r, l, i]) => `<a href="#/${r}" data-r="${r}"><span class="i" aria-hidden="true">${i}</span>${esc(l)}</a>`).join(''); }
 
+// שדות קוד (אימות דוא״ל / אימות דו-שלבי): מדביקים גם "123 456" או "123-456" — נשארות רק 6 ספרות
+document.addEventListener('input', e => {
+  const i = e.target; if (!(i instanceof HTMLInputElement) || i.autocomplete !== 'one-time-code') return;
+  const v = i.value.replace(/\D/g, '').slice(0, 6); if (v !== i.value) i.value = v;
+});
+
 async function boot() {
   tabbar();
   setUnauthorizedHandler(async () => { if (D.session?.user) { await wipeLocal(); go('#/login'); } });

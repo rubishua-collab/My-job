@@ -51,7 +51,7 @@ route('signup', async (el) => {
 route('verify', async (el) => {
   el.innerHTML = shell('אימות כתובת הדוא״ל', `<p>שלחנו קוד בן 6 ספרות אל <b dir="ltr">${esc(pendingEmail || '…')}</b>. הקוד תקף ל-15 דקות.</p>
     <form id="f" class="stack" novalidate>${pendingEmail ? '' : '<label class="field"><span>דוא״ל</span><input class="in" id="em" type="email" dir="ltr" autocomplete="email"></label>'}
-    <input class="in big" id="cd" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="קוד אימות">
+    <input class="in big" id="cd" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="000000" aria-label="קוד אימות">
     <div id="er"></div><button class="btn block xl">אימות וכניסה</button></form>
     <button class="btn block plain" id="rs">שלחו לי קוד חדש</button>`);
   const email = () => pendingEmail || $('#em', el).value.trim();
@@ -85,7 +85,7 @@ route('login', async (el) => {
 route('forgot', async (el) => {
   el.innerHTML = shell('שחזור סיסמה', `<form id="f1" class="stack" novalidate><label class="field"><span>דוא״ל</span><input class="in" id="em" type="email" dir="ltr" autocomplete="email" value="${esc(pendingEmail)}"></label><button class="btn block">שלחו לי קוד</button></form>
     <form id="f2" class="stack hidden" novalidate><p class="small">אם יש חשבון עם הכתובת הזו, נשלח אליה קוד.</p>
-      <input class="in big" id="cd" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="קוד">
+      <input class="in big" id="cd" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="000000" aria-label="קוד">
       <label class="field"><span>סיסמה חדשה</span><input class="in" id="pw" type="password" autocomplete="new-password" dir="ltr"></label>
       <div id="er"></div><button class="btn block xl">שמירת סיסמה חדשה</button></form>
     <a class="btn block plain" href="#/login">חזרה לכניסה</a>`);

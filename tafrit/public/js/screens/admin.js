@@ -20,13 +20,13 @@ async function gate(el) {
       <div class="note">כדי להיכנס לניהול צריך אפליקציית אימות (סיסמאות של iPhone, Google Authenticator או Microsoft Authenticator).</div>
       <a class="btn block" href="${esc(r.otpauth)}">פתיחה באפליקציית האימות</a>
       <div class="card small">או הוספה ידנית של המפתח:<div class="num" style="font-size:18px;letter-spacing:2px;margin-top:6px;word-break:break-all" dir="ltr">${esc(r.secret.replace(/(.{4})/g, '$1 ').trim())}</div></div>
-      <input class="in big" id="cd" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="קוד מהאפליקציה">
+      <input class="in big" id="cd" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="000000" aria-label="קוד מהאפליקציה">
       <button class="btn block xl" id="ok">הפעלה</button></div>`;
     $('#ok', el).onclick = async () => { try { await save('POST', '/api/admin/2fa/enable', { code: $('#cd', el).value }); toast('אימות דו-שלבי הופעל'); render(); } catch {} };
     return false;
   }
   el.innerHTML = `<div class="stack" style="padding-top:8vh"><h1>כניסה לניהול</h1><p>הזן את הקוד מאפליקציית האימות.</p>
-    <input class="in big" id="cd" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="קוד אימות"><button class="btn block xl" id="ok">אימות</button></div>`;
+    <input class="in big" id="cd" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="000000" aria-label="קוד אימות"><button class="btn block xl" id="ok">אימות</button></div>`;
   $('#ok', el).onclick = async () => { try { await save('POST', '/api/admin/2fa/verify', { code: $('#cd', el).value }); render(); } catch {} };
   return false;
 }
