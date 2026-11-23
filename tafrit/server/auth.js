@@ -165,11 +165,13 @@ export function confirmDeletion({ email, code }) {
 }
 
 // ---- אימות דו-שלבי (TOTP) למנהל ----
-export function totpSetup(user) {
+/** מפתח ממתין נשמר עד ההפעלה (חזרה מאפליקציית הסיסמאות / רענון לא מחליפים אותו). fresh=true יוצר מפתח חדש */
+export function totpSetup(user, fresh = false) {
   if (!isAdmin(user)) throw err(403, 'אין הרשאה');
   if (user.totp_enabled) throw err(400, 'אימות דו-שלבי כבר מופעל');
-  const secret = newTotpSecret();
-  db.prepare('UPDATE users SET totp_secret = ? WHERE id = ?').run(encrypt(secret), user.id);
+  const cur = db.prepare('SELECT totp_secret FROM users WHERE id = ?').get(user.id)?.totp_secret;
+  let secret = !fresh && cur ? decrypt(cur) : null;
+  if (!secret) { secret = newTotpSecret(); db.prepare('UPDATE users SET totp_secret = ?, totp_last_step = NULL WHERE id = ?').run(encrypt(secret), user.id); }
   const label = encodeURIComponent(`תפריט יומי רובי:${user.email}`);
   return { secret, otpauth: `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent('תפריט יומי רובי')}&digits=6&period=30` };
 }

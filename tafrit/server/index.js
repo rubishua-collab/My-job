@@ -150,7 +150,7 @@ route('POST', '/api/import', (req, res, { user, body }) => S.importAll(user.id, 
 // ---- מנהל: רק החשבון שננעל בשרת, ורק אחרי אימות דו-שלבי בסשן הנוכחי ----
 const needAdmin = ctx => { if (!A.isAdmin(ctx.user)) throw err(403, 'אין הרשאה'); };
 const needAdminMfa = ctx => { needAdmin(ctx); if (!A.adminReady(ctx)) throw err(403, 'נדרש אימות דו-שלבי'); };
-route('POST', '/api/admin/2fa/setup', (req, res, ctx) => { needAdmin(ctx); return A.totpSetup(ctx.user); });
+route('POST', '/api/admin/2fa/setup', (req, res, ctx) => { needAdmin(ctx); return A.totpSetup(ctx.user, !!ctx.body?.fresh); });
 route('POST', '/api/admin/2fa/enable', (req, res, ctx) => { needAdmin(ctx); return A.totpEnable(ctx.user, ctx.session, ctx.body.code); });
 route('POST', '/api/admin/2fa/verify', (req, res, ctx) => { needAdmin(ctx); return A.totpVerify(ctx.user, ctx.session, ctx.body.code, ctx.ip); });
 route('GET', '/api/admin/users', (req, res, ctx) => {

@@ -15,13 +15,17 @@ async function gate(el) {
   const s = await get('/api/session'); D.session = { ...D.session, ...s };
   if (s.adminReady) return true;
   if (!s.user.totpEnabled) {
-    const r = await save('POST', '/api/admin/2fa/setup', {});
+    const r = await save('POST', '/api/admin/2fa/setup', { fresh: sessionStorage.getItem('tafrit-totp-fresh') === '1' });
+    sessionStorage.removeItem('tafrit-totp-fresh');
     el.innerHTML = `<div class="stack"><div class="top"><h1>אימות דו-שלבי</h1></div>
       <div class="note">כדי להיכנס לניהול צריך אפליקציית אימות (סיסמאות של iPhone, Google Authenticator או Microsoft Authenticator).</div>
       <a class="btn block" href="${esc(r.otpauth)}">פתיחה באפליקציית האימות</a>
       <div class="card small">או הוספה ידנית של המפתח:<div class="num" style="font-size:18px;letter-spacing:2px;margin-top:6px;word-break:break-all" dir="ltr">${esc(r.secret.replace(/(.{4})/g, '$1 ').trim())}</div></div>
       <input class="in big" id="cd" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="000000" aria-label="קוד מהאפליקציה">
-      <button class="btn block xl" id="ok">הפעלה</button></div>`;
+      <button class="btn block xl" id="ok">הפעלה</button>
+      <div class="small muted">המפתח נשאר קבוע עד ההפעלה. אם המפתח נחשף (למשל בצילום מסך) — אפשר ליצור חדש:</div>
+      <button class="btn block plain" id="nk">יצירת מפתח חדש</button></div>`;
+    $('#nk', el).onclick = () => { if (confirm('ליצור מפתח חדש? המפתח הקודם יפסיק לעבוד, וצריך להזין את החדש באפליקציית האימות.')) { sessionStorage.setItem('tafrit-totp-fresh', '1'); render(); } };
     $('#ok', el).onclick = async () => { try { await save('POST', '/api/admin/2fa/enable', { code: $('#cd', el).value }); toast('אימות דו-שלבי הופעל'); render(); } catch {} };
     return false;
   }
