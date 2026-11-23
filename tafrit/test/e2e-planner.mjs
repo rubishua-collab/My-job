@@ -49,7 +49,7 @@ try {
   await p.click('[data-act="day"]'); await p.locator('.sheet-wrap h2', { hasText: 'יום שלם' }).waitFor();
   const sheet = await p.locator('.sheet-wrap').last().innerText();
   console.log(sheet.split('\n').filter(l => l.trim()).slice(0, 40).join(' / '));
-  assert.match(sheet, /מספק \d+ ג׳ חלבון למנה/); assert.match(sheet, /על מה מבוססת הבחירה/);
+  assert.match(sheet, /איך מכינים/); assert.doesNotMatch(sheet, /על מה מבוססת הבחירה/); // כרטיס כמו בתפריט: תיאור והוראות, בלי הסבר מחקרי
   await shot(p, 'p01-day-sheet');
   await p.click('[data-all]'); await noSheet(p);
   let s = await st(p); let es = s.entries.filter(e => e.date === T);
@@ -58,7 +58,7 @@ try {
   assert.ok(eggMeals <= 1, `ארוחות עם ביצים: ${eggMeals}`);
   assert.ok(lunch.some(e => ['chicken', 'pargit', 'turkey', 'beef'].includes(FAM[e.foodId])), 'מנה בשרית בצהריים: ' + lunch.map(e => e.snapshot.n).join(', '));
   await shot(p, 'p02-today-built');
-  ok(`אוכל-כול: יום שלם — ${eggMeals} ארוחת ביצים, צהריים: ${lunch.map(e => e.snapshot.n.split(',')[0]).join(' + ')}; בכרטיס: "מספק X ג׳ חלבון למנה" ומקורות`);
+  ok(`אוכל-כול: יום שלם — ${eggMeals} ארוחת ביצים, צהריים: ${lunch.map(e => e.snapshot.n.split(',')[0]).join(' + ')}; בכרטיס: תיאור, זמן והוראות הכנה`);
 
   // ---- החלפת הצהריים בשווארמה בפיתה עם טחינה ----
   const before = await p.evaluate(() => [...document.querySelectorAll('.card.sum .meter')].slice(0, 2).map(x => x.innerText.replace(/\s+/g, ' ')));

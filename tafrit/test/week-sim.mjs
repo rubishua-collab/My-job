@@ -21,8 +21,8 @@ export function simulateWeek(profile, weightKg, start = '2026-11-22', foods = lo
     const date = addDays(start, i);
     const recent = new Map(); for (const e of history.filter(e => e.date >= addDays(date, -6))) if (e.comp) recent.set(e.comp, (recent.get(e.comp) || 0) + 1);
     const plan = planDay({ profile, target, foods, entries: [], history, date, locked: [], recent, maxPrep: +profile.prepMinutes || 0 });
-    const meals = plan.map(p => ({ slot: p.slot, name: p.option.name, fam: p.option.fam || mainFamily(p.option.items), items: p.option.items, totals: p.option.totals, why: p.option.why }));
-    for (const p of plan) p.option.items.forEach(it => history.push({ date, meal: p.slot, foodId: it.foodId, comp: it.comp, grams: it.grams, status: 'planned' }));
+    const meals = plan.map(p => ({ slot: p.slot, name: p.option.name, templateId: p.option.templateId, desc: p.option.desc, alts: p.alts, fam: p.option.fam || mainFamily(p.option.items), items: p.option.items, totals: p.option.totals, why: p.option.why }));
+    for (const p of plan) p.option.items.forEach(it => history.push({ date, meal: p.slot, foodId: it.foodId, comp: it.comp, grams: it.grams, status: 'planned', recipe: p.option.templateId }));
     const tot = meals.reduce((a, m) => { a.kcal += m.totals.kcal; a.protein += m.totals.protein; return a; }, { kcal: 0, protein: 0 });
     days.push({ date, meals, tot, target });
   }
@@ -30,10 +30,13 @@ export function simulateWeek(profile, weightKg, start = '2026-11-22', foods = lo
 }
 
 export const OMNI = { sex: 'male', age: 36, heightCm: 186, goal: 'lose', rate: 'moderate', job: 'sitting', steps: 6000, strength: { perWeek: 3, minutes: 60 }, meals: 4, prepMinutes: 15, kosher: true, diet: 'none', allergies: [], likes: ['ביצים', 'עוף', 'הודו', 'בשר בקר', 'אורז', 'סלט ירקות', 'יוגורט', 'שיבולת שועל', 'פירות', 'לחם'] };
+// הפרופיל של רובי: אוכל הכול, אוהב אוכל ישראלי וביתי, על האש, אוכל רחוב ודגים; כל יום עוף או דג; בלי טופו בהצעות
+export const ROBI = { ...OMNI_BASE(), likes: ['עוף', 'פרגית', 'שווארמה', 'שניצל', 'דגים', 'סלמון', 'על האש', 'בקר', 'אורז', 'סלט ירקות', 'ביצים', 'יוגורט', 'פיתה'], menuPrefs: { dailyMain: ['poultry', 'fish'], noAuto: ['tofu'] } };
+function OMNI_BASE() { return { sex: 'male', age: 36, heightCm: 186, goal: 'lose', rate: 'moderate', job: 'sitting', steps: 6000, strength: { perWeek: 3, minutes: 60 }, meals: 4, prepMinutes: 30, kosher: true, diet: 'none', allergies: [] }; }
 export const VEG = { sex: 'female', age: 34, heightCm: 165, goal: 'lose', rate: 'moderate', job: 'mixed', steps: 7000, strength: { perWeek: 2, minutes: 45 }, meals: 4, prepMinutes: 15, kosher: true, diet: 'vegetarian', allergies: [], likes: ['ביצים', 'קוטג׳', 'עדשים וקטניות', 'טופו', 'יוגורט', 'סלט ירקות', 'פירות'] };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  for (const [label, prof, kg] of [['אוכל הכול (אוהב ביצים, עוף, הודו, בקר)', OMNI, 118], ['צמחוני', VEG, 72]]) {
+  for (const [label, prof, kg] of [['רובי (עוף או דג כל יום, בלי טופו)', ROBI, 118], ['אוכל הכול (אוהב ביצים, עוף, הודו, בקר)', OMNI, 118], ['צמחוני', VEG, 72]]) {
     console.log(`\n===== ${label} =====`);
     for (const d of simulateWeek(prof, kg)) {
       console.log(`${d.date}: ${Math.round(d.tot.kcal)}/${d.target.kcal} קק״ל · ${Math.round(d.tot.protein)}/${d.target.protein} ג׳ חלבון`);

@@ -139,7 +139,7 @@ export function addEntries(uid, list) {
     return putDoc(uid, 'entries', newId('e'), {
       date, meal: String(e.meal || 'breakfast').slice(0, 20), foodId: e.manual ? newId('q:') : f.id, snapshot: SNAP(f), grams, unit: e.unit || 'g', qty: e.qty ?? null,
       status, plannedGrams: status === 'planned' ? grams : (e.plannedGrams ?? null), eatenGrams: status === 'eaten' ? grams : null,
-      source: e.source || 'manual', comp: e.comp || null, order: e.order ?? now(), ...(e.label ? { label: String(e.label).slice(0, 80) } : {}), ...(e.group ? { group: String(e.group).slice(0, 40) } : {}),
+      source: e.source || 'manual', comp: e.comp || null, order: e.order ?? now(), ...(e.label ? { label: String(e.label).slice(0, 80) } : {}), ...(e.group ? { group: String(e.group).slice(0, 40) } : {}), ...(e.recipe ? { recipe: String(e.recipe).slice(0, 40) } : {}),
     });
   }));
 }

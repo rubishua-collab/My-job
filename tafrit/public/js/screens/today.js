@@ -1,11 +1,11 @@
 // "היום שלי": סיכום, שקילת בוקר, שלוש פעולות, הארוחות עם תכננתי / אכלתי / ערוך כמות
 import { route, go } from '../app.js';
-import { D, refresh, profile, planOn, today, food, foodOf, targetOn, slots, entriesOn, dayDoc, dayTotals, recentComps, waterGoalMl, CUP_ML } from '../data.js';
+import { D, refresh, profile, baseProfile, planOn, today, food, foodOf, targetOn, slots, entriesOn, dayDoc, dayTotals, recentComps, waterGoalMl, CUP_ML } from '../data.js';
 import { TRAIN_BONUS } from '/shared/nutrition.js';
 import { save, del, get } from '../api.js';
 import { $, $$, esc, n0, n1, kg, toast, openSheet, meter, on, confirmSheet } from '../ui.js';
 import { nutrients, qtyText, unitsFor, STATE, isVegFruit } from '/shared/foods.js';
-import { suggestMeals, budgetForSlot, planDay, nextSlot, swapItem, swapCandidates, familyContext, PLANNER_SOURCES, SWAP_LABEL, swapChoices, applySwap, substituteFood, famGroup, otherMeal } from '/shared/planner.js';
+import { suggestMeals, budgetForSlot, planDay, nextSlot, swapItem, swapCandidates, familyContext, PLANNER_SOURCES, SWAP_LABEL, swapChoices, applySwap, substituteFood, famGroup, otherMeal, recipeContext, requiredGroups } from '/shared/planner.js';
 import { COMPONENTS, componentsInText } from '/shared/catalog.js';
 import { addDays, dmy, hebDay, israelMinutes, savedAt } from '/shared/dates.js';
 import { GOALS } from '/shared/nutrition.js';
@@ -203,15 +203,18 @@ const amtLine = i => `${esc(amtText(i))}${stText(i) ? ` · ${esc(stText(i))}` : 
 const GROUP_TAG = { poultry: '🍗 עוף', fish: '🐟 דג', beef: '🥩 בקר רזה', egg: '🥚 ביצים', dairy: '🥛 חלבי', plant: '🌱 צמחי' };
 const ALT_LABEL = { poultry: '🍗 מנת עוף', fish: '🐟 מנת דג', beef: '🥩 מנת בקר' };
 
+const swapNotes = o => (o.why || []).filter(w => /^הוחלף|הוצא מהמנה/.test(w));
 /** כרטיס ארוחה. key — מזהה הכרטיס בחלון (למשל "d0" ביום שלם, "s1" בהצעות). ui = { open: מספר הפריט שפתוח להחלפה, more, choices } */
 export function suggestionHtml(o, key, ui = {}, { addLabel = 'הוסף לתכנון', alts = null, altIdx = 0, swap = true } = {}) {
   return `<div class="sugg" data-opt="${key}">
     ${alts ? `<div class="seg" style="margin-bottom:8px">${alts.map((a, i) => `<button type="button" data-alt="${key}|${i}" class="${i === altIdx ? 'on' : ''}">${ALT_LABEL[famGroup(a.fam)] || esc(a.name)}</button>`).join('')}</div>` : ''}
-    <div class="hd"><b data-name>${esc(o.name)}</b><span class="small muted">${o.prep ? `~${o.prep} דק׳` : ''}</span></div>
+    <div class="hd"><b data-name class="dish">${esc(o.name)}</b></div>
+    ${o.desc ? `<p class="desc">${esc(o.desc)}</p>` : ''}
     <ul class="sitems">${o.items.map((i, j) => `<li class="si"><div class="m"><b>${esc(i.name)}</b><small>${amtLine(i)}<br>${macroLine(i)}</small></div>${swap && SWAP_LABEL[i.role] ? `<button type="button" class="btn xs soft swb" data-sw="${key}|${j}" aria-expanded="${ui.open === j}">${SWAP_LABEL[i.role]}</button>` : ''}</li>
       ${ui.open === j ? swapPanel(key, j, ui, o) : ''}`).join('')}</ul>
     <div class="tot"><b class="num">${n0(o.totals.kcal)}</b> קק״ל · <b class="num">${n0(o.totals.protein)}</b> ג׳ חלבון · ${n0(o.totals.carbs)} ג׳ פחמימה · ${n0(o.totals.fat)} ג׳ שומן · ${n0(o.totals.fiber)} ג׳ סיבים</div>
-    ${o.why?.length ? `<div class="why">${o.why.map(w => `<span>${esc(w)}</span>`).join('')}</div>` : ''}
+    ${o.prep || o.steps?.length ? `<details class="howto" ${o.steps?.length ? 'open' : ''}><summary>⏱ ${o.prep ? `${o.prep} דקות` : ''}${o.steps?.length ? ' · איך מכינים' : ''}</summary>${o.steps?.length ? `<ol>${o.steps.map(x => `<li>${esc(x)}</li>`).join('')}</ol>` : ''}</details>` : ''}
+    ${swapNotes(o).length ? `<div class="why">${swapNotes(o).map(w => `<span>${esc(w)}</span>`).join('')}</div>` : ''}
     <div class="row" style="gap:8px">${swap ? `<button type="button" class="btn sm soft" data-other="${key}">🔄 הצע מנה אחרת</button>` : ''}<button class="btn block sm" style="flex:1" data-addopt="${key}">${addLabel}</button></div></div>`;
 }
 function choiceHtml(key, j, c, o) {
@@ -267,13 +270,37 @@ function bindSwaps(root, cards, { date, redraw, other, dayFams }) {
   return ui;
 }
 
+/** "הצע מנה אחרת" למנת העוף/הדג היחידה ביום: גם החלופה מאותן קבוצות (העדפת הפרופיל) */
+function keepGroup(opt, otherFams, p) {
+  const req = requiredGroups(p, D.foods); const g = famGroup(opt.fam);
+  if (!req.includes(g) || otherFams.some(f => req.includes(famGroup(f)))) return {};
+  return { wantGroup: req, strict: true };
+}
+const PREF_MAIN = [['poultry', '🍗 עוף'], ['fish', '🐟 דג'], ['beef', '🥩 בקר רזה']];
+const PREF_NO = [['tofu', 'טופו'], ['legumes', 'קטניות כמנה עיקרית'], ['egg', 'ביצים כמנה עיקרית'], ['turkeyDeli', 'נקניק ופסטרמה']];
+/** העדפות התפריט — נשמרות בפרופיל: "בכל יום לפחות מנה אחת של…" ו"לא להציע לי" */
+function menuPrefsHtml() {
+  const mp = baseProfile()?.menuPrefs || {}; const dm = mp.dailyMain ?? ['poultry', 'fish']; const no = mp.noAuto || [];
+  return `<details class="how" id="mprefs"><summary>⚙️ העדפות התפריט שלי</summary>
+    <p class="small" style="margin:8px 0 4px">בכל יום לפחות מנה עיקרית אחת של:</p><div class="chips">${PREF_MAIN.map(([k, l]) => `<button type="button" class="chip ${dm.includes(k) ? 'on' : ''}" data-dm="${k}">${l}</button>`).join('')}</div>
+    <p class="small" style="margin:10px 0 4px">לא להציע לי אוטומטית:</p><div class="chips">${PREF_NO.map(([k, l]) => `<button type="button" class="chip ${no.includes(k) ? 'on' : ''}" data-no="${k}">${l}</button>`).join('')}</div>
+    <button type="button" class="btn sm" style="margin-top:10px" data-saveprefs>שמור ובנה מחדש</button></details>`;
+}
+function bindMenuPrefs(root, onSaved) {
+  on(root, '[data-dm],[data-no]', 'click', (e, b) => b.classList.toggle('on'));
+  on(root, '[data-saveprefs]', 'click', async () => {
+    const menuPrefs = { dailyMain: $$('[data-dm].on', root).map(x => x.dataset.dm), noAuto: $$('[data-no].on', root).map(x => x.dataset.no) };
+    await save('PUT', '/api/profile', { profile: { ...(baseProfile() || {}), menuPrefs } }); await refresh(); toast('העדפות התפריט נשמרו בפרופיל'); onSaved();
+  });
+}
+
 export async function addOption(date, slot, o, { replace } = {}) {
   const existing = entriesOn(date).filter(e => e.meal === slot && e.status !== 'eaten');
   if (existing.length && replace === undefined) {
     replace = await confirmSheet('יש כבר תכנון לארוחה', `<p>בארוחה הזו כבר מתוכננים ${existing.length} פריטים. להחליף אותם בהצעה?</p>`, 'החלף', 'הוסף בנוסף');
   }
   if (replace) for (const x of existing) await del('/api/entries/' + x.id);
-  await save('POST', '/api/entries', { entries: o.items.map((i, k) => ({ date, meal: slot, foodId: i.foodId, grams: i.grams, unit: i.unit, qty: i.qty, comp: i.comp, status: 'planned', source: 'suggestion', order: Date.now() + k })) });
+  await save('POST', '/api/entries', { entries: o.items.map((i, k) => ({ date, meal: slot, foodId: i.foodId, grams: i.grams, unit: i.unit, qty: i.qty, comp: i.comp, status: 'planned', source: 'suggestion', ...(o.templateId && o.templateId !== 'pantry' ? { recipe: o.templateId } : {}), order: Date.now() + k })) });
   await refresh();
 }
 
@@ -282,34 +309,41 @@ async function openSuggest(date, slot, done) {
   const p = profile(date); const tgt = targetOn(date);
   if (!tgt) return toast('אין יעד יומי — סיים את השאלון');
   const label = slots(date).find(s => s.id === slot)?.label || '';
-  let pantry = ''; let noCook = false; let b = null; let pk = null; let fc = null; let base = null;
+  let pantry = ''; let noCook = false; let b = null; let pk = null; let fc = null; let base = null; let lastMainNote = '';
   const cards = new Map();
   const s = openSheet({ title: `הצעות ל${label}`, body: '<div id="sg"></div>' });
   const draw = () => {
     const opts = [...cards.entries()];
-    $('#sg', s.el).innerHTML = `<div class="note">נשארו להיום: <b>${n0(b.remain.kcal)}</b> קק״ל, <b>${n0(b.remain.protein)}</b> ג׳ חלבון. לארוחה הזו: כ-<b>${n0(b.kcal)}</b> קק״ל ו-<b>${n0(b.protein)}</b> ג׳ חלבון.</div>
+    $('#sg', s.el).innerHTML = `<div class="note">נשארו להיום: <b>${n0(b.remain.kcal)}</b> קק״ל, <b>${n0(b.remain.protein)}</b> ג׳ חלבון. לארוחה הזו: כ-<b>${n0(b.kcal)}</b> קק״ל ו-<b>${n0(b.protein)}</b> ג׳ חלבון.</div>${lastMainNote ? `<div class="note ok" style="margin-top:8px">${esc(lastMainNote)}</div>` : ''}
       <form id="pf" class="row" style="margin:10px 0"><input class="in grow" id="pt" value="${esc(pantry)}" placeholder="יש לי בבית… (ביצים, קוטג׳, פיתה)"><button class="btn sm">מה אפשר?</button></form>
       <label class="row small" style="gap:8px;margin-bottom:10px"><input type="checkbox" id="nc" ${noCook ? 'checked' : ''} style="width:22px;height:22px"> בלי לבשל</label>
       ${pk ? `<p class="small">זיהיתי: ${pk.map(k => esc(COMPONENTS[k].name)).join(', ') || '—'}</p>` : ''}
       ${opts.length ? opts.map(([k, c]) => suggestionHtml(c.opt, k, ui.get(k))).join('') : '<div class="empty-state">לא מצאתי הצעה שמתאימה. נסה בלי סינון או הוסף מוצרים.</div>'}
-      <p class="tiny muted">"החלף חלבון" שומר את התוספות ומחשב כמות שנותנת חלבון דומה. "הצע מנה אחרת" מחליף את כל הארוחה במנה אחרת שמתאימה ליעד.</p><div id="psrc"></div>`;
+      <p class="tiny muted">"החלף חלבון" שומר את התוספות ומחשב כמות שנותנת חלבון דומה. "הצע מנה אחרת" מחליף את כל הארוחה במתכון אחר שמתאים ליעד.</p>`;
     $('#pf', s.el).onsubmit = e => { e.preventDefault(); pantry = $('#pt', s.el).value.trim(); run(); };
     $('#nc', s.el).onchange = e => { noCook = e.target.checked; run(); };
-    plannerSourcesHtml().then(h => { const el = $('#psrc', s.el); if (el) el.innerHTML = h; });
   };
   const run = () => {
     const entries = entriesOn(date);
     b = budgetForSlot({ profile: p, target: tgt, entries, foods: D.foods, slot });
     pk = pantry ? componentsInText(pantry) : null;
     fc = familyContext({ entries: D.state.entries, foods: D.foods, date, slot });
-    base = { foods: D.foods, slot, profile: p, maxPrep: noCook ? 5 : +p.prepMinutes || 0, recent: recentComps(date), pantry: pk, noCook, anySlot: !!pk, ...fc };
+    base = { foods: D.foods, slot, profile: p, maxPrep: noCook ? 5 : +p.prepMinutes || 0, recent: recentComps(date), pantry: pk, noCook, anySlot: !!pk, ...fc, ...recipeContext({ entries: D.state.entries, date, slot }) };
+    // הארוחה העיקרית האחרונה של היום ועדיין אין עוף או דג (לא נאכל ולא מתוכנן) — מציעים אותם עכשיו
+    const req = requiredGroups(p, D.foods); const order = slots(date).map(x => x.id);
+    const laterMain = order.slice(order.indexOf(slot) + 1).some(id => ['lunch', 'dinner'].includes(id) && !entries.some(e => e.meal === id));
+    lastMainNote = '';
+    if (!pk && ['lunch', 'dinner'].includes(slot) && req.length && !laterMain && ![...fc.dayFams.keys()].some(f => req.includes(famGroup(f)))) {
+      Object.assign(base, { wantGroup: req, strict: true });
+      lastMainNote = `עוד לא היה היום ${req.map(g => g === 'poultry' ? 'עוף' : g === 'fish' ? 'דג' : 'בקר').join(' או ')} — אלה ההצעות לארוחה העיקרית האחרונה.`;
+    }
     const opts = suggestMeals({ ...base, diverse: true }, b, 3);
     cards.clear(); ui.clear(); opts.forEach((o, i) => cards.set('s' + i, { opt: o, slot, seen: new Set() }));
     draw();
   };
   const ui = bindSwaps(s.el, cards, {
     date, redraw: draw, dayFams: () => fc.dayFams,
-    other: (key, seen) => otherMeal(base, b, new Set([...seen, ...[...cards.entries()].filter(([k]) => k !== key).map(([, c]) => c.opt.templateId)])),
+    other: (key, seen) => { const c = cards.get(key); return otherMeal({ ...base, avoidMethod: c.opt.method, avoidSauce: c.opt.sauce, ...(base.strict ? {} : keepGroup(c.opt, [...fc.dayFams.keys()], p)) }, b, new Set([...seen, ...[...cards.entries()].filter(([k]) => k !== key).map(([, x]) => x.opt.templateId)])); },
   });
   on(s.el, '[data-addopt]', 'click', async (e, bt) => { await addOption(date, slot, cards.get(bt.dataset.addopt).opt); s.close(); toast('נוסף לתכנון. סמן "אכלתי" אחרי הארוחה'); done(); });
   run();
@@ -329,10 +363,9 @@ async function openPlanDay(date, done) {
   const added = new Set();
   const draw = () => {
     const sum = [...cards.values()].reduce((a, c) => { a.k += c.opt.totals.kcal; a.p += c.opt.totals.protein; a.c += c.opt.totals.carbs; a.f += c.opt.totals.fat; return a; }, { ...kept });
-    $('#pdb', s.el).innerHTML = `${keep.length ? `<div class="note">נשארות כמו שהן (נעולות או נאכלו): ${keep.map(k => esc(k.label)).join(', ')}</div>` : ''}
+    $('#pdb', s.el).innerHTML = `${menuPrefsHtml()}${keep.length ? `<div class="note">נשארות כמו שהן (נעולות או נאכלו): ${keep.map(k => esc(k.label)).join(', ')}</div>` : ''}
       ${plan.length ? [...cards.entries()].map(([key, c]) => `<h3 style="margin-top:14px">${esc(slots(date).find(x => x.id === c.slot)?.label)}</h3>${c.alts ? '<div class="small muted">יש ארוחה עיקרית אחת היום — בחר מה מתחשק:</div>' : ''}${suggestionHtml(c.opt, key, ui.get(key), { alts: c.alts, altIdx: c.altIdx, addLabel: added.has(key) ? 'נוסף ✓ — לחץ שוב לעדכון' : 'הוסף לתכנון' })}`).join('') : '<div class="empty-state">כל הארוחות נעולות או נאכלו.</div>'}
-      <div class="card tight" style="margin-top:12px" id="daysum">סה״כ ביום: <b>${n0(sum.k)}</b> / ${tgt.kcal} קק״ל · <b>${n0(sum.p)}</b> / ${tgt.protein} ג׳ חלבון · ${n0(sum.c)} ג׳ פחמימה · ${n0(sum.f)} ג׳ שומן</div><div id="psrc"></div>`;
-    plannerSourcesHtml().then(h => { const el = $('#psrc', s.el); if (el) el.innerHTML = h; });
+      <div class="card tight" style="margin-top:12px" id="daysum">סה״כ ביום: <b>${n0(sum.k)}</b> / ${tgt.kcal} קק״ל · <b>${n0(sum.p)}</b> / ${tgt.protein} ג׳ חלבון · ${n0(sum.c)} ג׳ פחמימה · ${n0(sum.f)} ג׳ שומן</div>`;
   };
   // מקורות החלבון של שאר היום: ארוחות שנשארות + שאר הכרטיסים (אחרי עוף בצהריים — דג או בקר בערב)
   const dayFams = key => {
@@ -343,8 +376,11 @@ async function openPlanDay(date, done) {
   const ui = bindSwaps(s.el, cards, {
     date, redraw: draw, dayFams,
     other: (key, seen) => { const c = cards.get(key); const fc = familyContext({ entries: D.state.entries, foods: D.foods, date, slot: c.slot });
-      return otherMeal({ foods: D.foods, slot: c.slot, profile: p, maxPrep: +p.prepMinutes || 0, recent: recentComps(date), dayFams: dayFams(key), weekFams: fc.weekFams }, c.budget, new Set([...seen, ...[...cards.entries()].filter(([k]) => k !== key).map(([, x]) => x.opt.templateId)])); },
+      const dayT = new Set([...cards.entries()].filter(([k]) => k !== key).map(([, x]) => x.opt.templateId));
+      const rc = recipeContext({ entries: D.state.entries.filter(e => e.date !== date), date, slot: c.slot });
+      return otherMeal({ foods: D.foods, slot: c.slot, profile: p, maxPrep: +p.prepMinutes || 0, recent: recentComps(date), dayFams: dayFams(key), weekFams: fc.weekFams, ...rc, dayT, avoidMethod: c.opt.method, avoidSauce: c.opt.sauce, ...keepGroup(c.opt, [...dayFams(key).keys()], p) }, c.budget, new Set([...seen, ...dayT])); },
   });
+  bindMenuPrefs(s.el, () => { s.close(); openPlanDay(date, done); });
   // כל ארוחה נשמרת פעם אחת: הוספה (או הוספה חוזרת) מחליפה את מה שתוכנן לאותה ארוחה
   on(s.el, '[data-addopt]', 'click', async (e, b) => { const c = cards.get(b.dataset.addopt); await addOption(date, c.slot, c.opt, { replace: true }); added.add(b.dataset.addopt); draw(); done(); });
   on(s.el, '[data-all]', 'click', async () => { for (const c of cards.values()) await addOption(date, c.slot, c.opt, { replace: true }); s.close(); toast('היום נבנה. אפשר לשנות כל רכיב'); done(); });

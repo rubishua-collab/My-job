@@ -112,3 +112,31 @@ test('שבוע: התפריט משתנה — לפחות 5 מנות צהריים �
   assert.ok(new Set(week.map(d => d.meals.find(m => m.slot === 'lunch').name)).size >= 5);
   assert.deepEqual([...new Set(mains.map(m => famGroup(m.fam)))].filter(g => MAIN.includes(g)).sort(), ['beef', 'fish', 'poultry']);
 });
+
+import { ROBI } from '../week-sim.mjs';
+test('פרופיל רובי: שבוע — עוף או דג כל יום, בלי טופו, אף מתכון לא חוזר באותו יום, תיאור והוראות לכל מנה עיקרית', () => {
+  const week = simulateWeek(ROBI, 118);
+  for (const d of week) {
+    assert.ok(d.meals.some(m => ['lunch', 'dinner'].includes(m.slot) && ['poultry', 'fish'].includes(famGroup(m.fam))), d.date);
+    assert.ok(!d.meals.some(m => m.items.some(i => i.comp === 'tofu')));
+    const t = d.meals.map(m => m.templateId); assert.equal(new Set(t).size, t.length, d.date + ': ' + t);
+    for (const m of d.meals.filter(m => ['lunch', 'dinner'].includes(m.slot))) assert.ok(m.desc, m.name);
+  }
+  const mains = week.flatMap(d => d.meals.filter(m => ['lunch', 'dinner'].includes(m.slot)).map(m => m.templateId));
+  assert.ok(new Set(mains).size >= 12, `מתכונים שונים בשבוע: ${new Set(mains).size}`);
+});
+
+test('"הצע מנה אחרת" למנת העוף/הדג היחידה: שלוש חלופות שונות מעוף או דג, לא אותו מתכון', () => {
+  const b = budgetForSlot({ profile: ROBI, target: tgt(ROBI, 118), entries: [], foods, slot: 'lunch' });
+  const ctx = { foods, slot: 'lunch', profile: ROBI, recent: new Map(), maxPrep: 30, wantGroup: ['poultry', 'fish'], strict: true };
+  const seen = new Set(['schnitzel']); const got = [];
+  for (let i = 0; i < 3; i++) { const o = otherMeal({ ...ctx, avoidMethod: 'fried' }, b, seen); got.push(o); seen.add(o.templateId); }
+  assert.equal(new Set(got.map(o => o.templateId)).size, 3);
+  for (const o of got) assert.ok(['poultry', 'fish'].includes(famGroup(o.fam)) && o.templateId !== 'schnitzel', o.name);
+});
+
+test('החלפת אורז מלא באורז לבן לא נחשבת מתכון חדש: אותו מתכון לא מוצע שוב באותו יום', () => {
+  const b = budgetForSlot({ profile: ROBI, target: tgt(ROBI, 118), entries: [], foods, slot: 'dinner' });
+  const o = suggestMeals({ foods, slot: 'dinner', profile: ROBI, recent: new Map(), dayT: new Set(['chickenLemon', 'omelet']) }, b, 3);
+  assert.ok(o.every(x => !['chickenLemon', 'omelet'].includes(x.templateId)));
+});
