@@ -18,6 +18,9 @@ const today = () => israelDate();
 
 // ---- מאגר המזון: משותף לכולם; מוצרים אישיים ומתכונים — לכל משתמש בנפרד ----
 export const globalFoods = new FoodIndex(foodsData.foods);
+// מאגרים עולמיים (USDA FoodData Central, CoFID) — קובץ נפרד, כדי שהאפליקציה תיטען מהר ותוסיף אותם ברקע
+export const WORLD_FILE = path.join(ROOT, 'data', 'foods-world.json');
+export const WORLD_META = fs.existsSync(WORLD_FILE) ? (() => { const w = JSON.parse(fs.readFileSync(WORLD_FILE, 'utf8')); globalFoods.add(w.foods); return w.meta; })() : null;
 const personal = new Map(); // uid → FoodIndex של המוצרים והמתכונים שלו
 /** תצוגת מזון של משתמש: המאגר הכללי + הפריטים האישיים שלו בלבד */
 export function foodsFor(uid) {
@@ -136,7 +139,7 @@ export function addEntries(uid, list) {
     return putDoc(uid, 'entries', newId('e'), {
       date, meal: String(e.meal || 'breakfast').slice(0, 20), foodId: e.manual ? newId('q:') : f.id, snapshot: SNAP(f), grams, unit: e.unit || 'g', qty: e.qty ?? null,
       status, plannedGrams: status === 'planned' ? grams : (e.plannedGrams ?? null), eatenGrams: status === 'eaten' ? grams : null,
-      source: e.source || 'manual', comp: e.comp || null, order: e.order ?? now(),
+      source: e.source || 'manual', comp: e.comp || null, order: e.order ?? now(), ...(e.label ? { label: String(e.label).slice(0, 80) } : {}), ...(e.group ? { group: String(e.group).slice(0, 40) } : {}),
     });
   }));
 }
@@ -242,7 +245,7 @@ export function state(uid) {
     entries: entriesFor(uid, from, addDays(t, 30)), days: days(uid, from, addDays(t, 30)),
     custom: listDocs(uid, 'custom'), recipes: listDocs(uid, 'recipes').map(r => ({ ...r, food: foodsFor(uid).get('r:' + r.id) })),
     favorites: listDocs(uid, 'favorites'), fixedMeals: listDocs(uid, 'fixedMeals'), checkins: Object.fromEntries(listDocs(uid, 'checkins').map(c => [c.id, c])),
-    foodsMeta: FOODS_META,
+    foodsMeta: { ...FOODS_META, world: WORLD_META },
   };
 }
 const COLS = ['profile', 'plans', 'weights', 'entries', 'days', 'targets', 'custom', 'recipes', 'favorites', 'fixedMeals', 'checkins'];

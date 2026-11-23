@@ -40,7 +40,7 @@ function paceCards(p) {
 const tagHtml = v => `<button type="button" class="chip on tag" data-tag="${esc(v)}" aria-label="הסר את ${esc(v)}">${esc(v)} <span aria-hidden="true">✕</span></button>`;
 let likeList = null;
 function bindLikes(el) {
-  if (!likeList || (!likeList.full && D.foods)) { likeList = likeNames({ chips: LIKES, components: Object.values(COMPONENTS).map(c => c.name), foods: D.foods?.list || [] }); likeList.full = !!D.foods; }
+  if (!likeList || (!likeList.full && D.foods)) { likeList = likeNames({ chips: LIKES, components: Object.values(COMPONENTS).map(c => c.name), foods: D.foods?.list || [] }); likeList.full = !!D.worldMeta; }
   const inp = $('#likesx', el), box = $('#likesug', el), tags = $('#liketags', el);
   const chipFor = key => $$('[data-chips="likes"] .chip', el).find(c => likeKey(c.dataset.v) === key);
   const chosen = () => new Set([...$$('[data-chips="likes"] .chip.on', el).map(c => likeKey(c.dataset.v)), ...$$('[data-tag]', tags).map(t => likeKey(t.dataset.tag))]);

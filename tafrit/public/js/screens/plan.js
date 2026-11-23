@@ -58,6 +58,7 @@ function openPlan(p) {
 
 // ---- האשף ----
 route('plan-change', async (el, [mode, baseId]) => {
+  await D.worldReady; // יום לדוגמה משתמש גם ברכיבים ממאגר USDA
   const t = today(); const st = currentStatus();
   const cur = st.pl || { goal: profile()?.goal || 'maintain', settings: pickPlanFields(baseProfile()) };
   const base = mode === 'base' ? D.state.plans.find(p => p.id === baseId) : null;
@@ -124,7 +125,7 @@ route('plan-change', async (el, [mode, baseId]) => {
     const recent = recentComps(today());
     const rec = new Map(); if (w.menuMode === 'new') for (const [k, n] of recent) rec.set(k, n + 3);
     const pp = { ...p }; if (w.menuMode === 'keep') pp.likes = [...(p.likes || []), ...[...recent.keys()].map(k => COMPONENTS[k]?.name).filter(Boolean)];
-    w.sample = planDay({ profile: pp, target: { kcal: w.preview.kcal, protein: w.preview.protein }, foods: D.foods, entries: [], locked: [], recent: rec, maxPrep: +p.prepMinutes || 0 });
+    w.sample = planDay({ profile: pp, target: { kcal: w.preview.kcal, protein: w.preview.protein }, foods: D.foods, entries: [], history: D.state.entries, date: today(), locked: [], recent: rec, maxPrep: +p.prepMinutes || 0 });
   }
   function sampleTotals() { return w.sample.reduce((a, x) => { a.k += x.option.totals.kcal; a.p += x.option.totals.protein; return a; }, { k: 0, p: 0 }); }
   function compareHtml() {

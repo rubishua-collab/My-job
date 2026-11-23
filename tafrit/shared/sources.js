@@ -162,6 +162,38 @@ export const SOURCES = {
     title: 'תנאי שקילה',
     supports: 'מומלץ להישקל בתנאים דומים: בבוקר, אחרי השירותים ולפני אוכל ושתייה. כך התנודות היומיות קטנות יותר.',
   },
+  moh_guidelines: {
+    kind: 'guideline', year: 2019,
+    title: 'המלצות התזונה הלאומיות וצלחת האוכל הבריא — משרד הבריאות',
+    authors: 'משרד הבריאות, האגף לתזונה', url: 'https://www.health.gov.il/Subjects/FoodAndNutrition/Nutrition/Adequate_nutrition/Pages/default.aspx',
+    supports: 'ברירות המחדל של המחולל: בכל ארוחה עיקרית מקור חלבון, דגן (עדיף מלא) וירקות; גיוון במקורות החלבון לאורך השבוע — עוף, בשר, דגים, קטניות, ביצים ומוצרי חלב; קטניות כחלופה לבשר.',
+  },
+  dhillon2016: {
+    kind: 'research', year: 2016,
+    title: 'The Effects of Increased Protein Intake on Fullness: A Meta-Analysis and Its Limitations',
+    authors: 'Dhillon J, Craig BA, Leidy HJ, et al.', journal: 'J Acad Nutr Diet 116(6):968–983',
+    url: 'https://doi.org/10.1016/j.jand.2016.01.003',
+    supports: 'מטה-אנליזה: ארוחה עשירה יותר בחלבון מגבירה את תחושת המלאות. לכן המחולל מעדיף ארוחות עם חלבון מספק למנה ומציג כמה חלבון יש בה.',
+  },
+  clark2013: {
+    kind: 'research', year: 2013,
+    title: 'The effect of fiber on satiety and food intake: a systematic review',
+    authors: 'Clark MJ, Slavin JL', journal: 'J Am Coll Nutr 32(3):200–211',
+    url: 'https://doi.org/10.1080/07315724.2013.791194',
+    supports: 'סקירה שיטתית: חלק מסוגי הסיבים מגבירים שובע, אם כי ההשפעה משתנה בין סוגים. המחולל נותן ניקוד קטן לסיבים, ירקות וקטניות — לא כמבטיח שובע.',
+  },
+  rolls2009: {
+    kind: 'research', year: 2009,
+    title: 'The relationship between dietary energy density and energy intake',
+    authors: 'Rolls BJ', journal: 'Physiol Behav 97(5):609–615',
+    url: 'https://doi.org/10.1016/j.physbeh.2009.03.011',
+    supports: 'מזון עם צפיפות קלורית נמוכה (ירקות, פירות, מנות עשירות במים) מאפשר מנה גדולה יותר באותן קלוריות. לכן ארוחה עם ירקות מקבלת עדיפות.',
+  },
+  dec_variety: {
+    kind: 'decision',
+    title: 'גיוון בתפריט',
+    supports: 'מקור החלבון העיקרי של ארוחה הוא הרכיב שנותן לה הכי הרבה חלבון. כברירת מחדל מוצעת לכל היותר ארוחה אחת ביום שמבוססת על ביצים (ביצה כמרכיב קטן, למשל בציפוי, לא נחשבת), אותו מקור חלבון לא חוזר באותו יום, ומקור שהופיע השבוע מקבל ניקוד נמוך יותר. למי שסימן שהוא אוהב עוף, הודו או בקר — מנה בשרית מועדפת בצהריים. המשתמש תמיד יכול לבחור בעצמו אחרת.',
+  },
   dec_portions: {
     kind: 'decision',
     title: 'כמויות מעשיות',

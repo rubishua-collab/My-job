@@ -2,7 +2,8 @@
 
 export const SRC_LABEL = {
   moh: 'מאגר התזונה הלאומי (משרד הבריאות)',
-  usda: 'USDA FoodData Central',
+  usda: 'USDA FoodData Central (ארה״ב)',
+  cofid: 'CoFID — McCance & Widdowson (בריטניה)',
   custom: 'מוצר אישי לפי תווית',
   recipe: 'מתכון ביתי',
   yoman: 'ממוצעי USDA ומוצרים נפוצים (מהיומן הקודם)',
@@ -58,6 +59,7 @@ export class FoodIndex {
       if (f.src === 'custom' || f.src === 'recipe') s += 25; // אישי / מתכון
       else if (f.src === 'yoman') s += 12; // הרשימה הנפוצה מהיומן הקודם — לפני הווריאציות הנדירות במאגר
       else if (f.src === 'chain') s -= 5;
+      else if (f.src === 'usda' || f.src === 'cofid') s -= f.he === 1 ? 8 : 14; // מאגרים עולמיים: אחרי הישראלי
       if (f.mk === 1 || f.mk === 6) s += 4; // ערכי בסיס
       if (f.mk === 4) s -= 2;
       if (boost.has(f.id)) s += 40;
@@ -128,12 +130,22 @@ export function isVegFruit(f) {
   return f.src === 'moh' && (f.g === 6 || f.g === 7) && !/מיץ|נקטר|משקה|מיובש|צ׳יפס|צ'יפס|מטוגן|ריבה|מסוכר|תפוחי אדמה|תפוח אדמה|בטטה|פירה/.test(f.n);
 }
 /** כמות בטקסט קריא: "2 ביצה L (116 ג׳)" */
+// רבים ליחידות נפוצות: "4 פרוסות", "3 ביצים L", "2 גביעים"
+const PLURAL = { 'פרוסה': 'פרוסות', 'יחידה': 'יחידות', 'ביצה': 'ביצים', 'כוס': 'כוסות', 'כף': 'כפות', 'כפית': 'כפיות', 'גביע': 'גביעים', 'קציצה': 'קציצות', 'המבורגר': 'המבורגרים', 'מנה': 'מנות', 'פיתה': 'פיתות', 'כריך': 'כריכים', 'כוס': 'כוסות', 'משולש': 'משולשים', 'אריזה': 'אריזות', 'חטיף': 'חטיפים', 'קונוס': 'קונוסים', 'פאי': 'פאים', 'פרוסות': 'פרוסות', 'מקמאפין': 'מקמאפינים', 'ארוחה': 'ארוחות', 'עוגה': 'עוגות' };
+const ADJ_PL = { 'קטנה': 'קטנות', 'בינונית': 'בינוניות', 'גדולה': 'גדולות', 'דקה': 'דקות', 'קטן': 'קטנים', 'בינוני': 'בינוניים', 'גדול': 'גדולים', 'מאד': 'מאד', 'אישית': 'אישיות' };
+export function plural(label, n) {
+  if (!(n > 1)) return label;
+  const w = String(label).split(' ');
+  if (PLURAL[w[0]]) w[0] = PLURAL[w[0]]; else return label;
+  for (let i = 1; i < w.length; i++) if (ADJ_PL[w[i]]) w[i] = ADJ_PL[w[i]];
+  return w.join(' ');
+}
 export function qtyText(f, grams, unitKey, qty) {
   const g = Math.round(grams);
-  if (f.pp) return `${fmtQty(unitKey === f.pp && qty ? qty : grams / 100)} ${f.pp}`;
+  if (f.pp) { const q = unitKey === f.pp && qty ? qty : grams / 100; return `${fmtQty(q)} ${plural(f.pp, q)}`; }
   if (unitKey && unitKey !== 'g' && qty) {
     const u = unitsFor(f).find(x => x.key === unitKey);
-    if (u) return `${fmtQty(qty)} ${u.label} (${g} ג׳)`;
+    if (u) return qty === 1 ? `${u.label} (${g} ג׳)` : `${fmtQty(qty)} ${plural(u.label, qty)}, ${g} גרם בסך הכול`;
   }
   return `${g} ג׳`;
 }

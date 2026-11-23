@@ -2,6 +2,7 @@
 import { D, refresh, food, searchFoods, favorites, slots } from '../data.js';
 import { save, get, del } from '../api.js';
 import { decodeBarcode, normBc, findByBarcode, readLabelPhoto } from './scan.js';
+import { EATOUT, EATOUT_CATS, eatoutById, defaultChoice, composeDish, dishTitle, searchEatout } from '/shared/eatout.js';
 import { $, $$, esc, n0, n1, toast, openSheet, on } from '../ui.js';
 import { nutrients, unitsFor, defaultUnit, STATE, SRC_LABEL, MAKOR_LABEL, recipeFood, fmtQty, perLabel, qtyText, manualFood } from '/shared/foods.js';
 
@@ -9,7 +10,7 @@ const stPill = f => f.st ? `<span class="pill st-${f.st}">${esc(STATE[f.st].shor
 const srcLine = f => `${esc(SRC_LABEL[f.src] || '')}${f.src === 'moh' && f.mk ? ` · ${esc(MAKOR_LABEL[f.mk] || '')}` : ''}`;
 
 export function foodRow(f) {
-  return `<li class="li" data-food="${esc(f.id)}"><div class="m"><b>${esc(f.n)}</b><small>${stPill(f)} ${n0(f.k)} קק״ל · ${n1(f.p)} ג׳ חלבון ${esc(perLabel(f))}${f.src === 'chain' ? ' · מזון מהיר' : ''}</small></div><div class="a">›</div></li>`;
+  return `<li class="li" data-food="${esc(f.id)}"><div class="m"><b>${esc(f.n)}</b><small>${stPill(f)} ${n0(f.k)} קק״ל · ${n1(f.p)} ג׳ חלבון ${esc(perLabel(f))}${f.src === 'chain' ? ' · מזון מהיר' : f.src === 'usda' ? ' · USDA ארה״ב' : f.src === 'cofid' ? ' · CoFID בריטניה' : ''}</small></div><div class="a">›</div></li>`;
 }
 
 /** חיפוש ובחירה. onPick(food) — ברירת מחדל: כרטיס מזון והוספה לארוחה */
@@ -18,7 +19,7 @@ export function openFoodPicker({ date, meal, onAdded, onPick, title } = {}) {
   const s = openSheet({ title: title || 'אבחר בעצמי', body: `
     ${meal ? `<label class="field"><span>לארוחה</span><select class="in" id="fpmeal">${slots(date).map(x => `<option value="${x.id}" ${x.id === meal ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></label>` : ''}
     <input class="in" id="fpq" type="search" placeholder="חפש מזון, מותג או מנה — למשל אורז, קוטג׳, שניצל" autocomplete="off" enterkeyhint="search">
-    <div class="seg wrap" id="fptabs" style="margin:10px 0">${[['search', 'חיפוש'], ['fav', 'מועדפים'], ['recipes', 'מתכונים'], ['fixed', 'ארוחות קבועות'], ['mine', 'מוצר אישי'], ...(date && !onPick ? [['scan', '📷 ברקוד'], ['photo', '📷 ערכים'], ['manual', 'ידני']] : [])].map(([k, l]) => `<button type="button" data-t="${k}" class="${k === tab ? 'on' : ''}">${l}</button>`).join('')}</div>
+    <div class="seg wrap" id="fptabs" style="margin:10px 0">${[['search', 'חיפוש'], ['fav', 'מועדפים'], ['recipes', 'מתכונים'], ['fixed', 'ארוחות קבועות'], ['mine', 'מוצר אישי'], ...(date && !onPick ? [['out', '🍔 בחוץ'], ['scan', '📷 ברקוד'], ['photo', '📷 ערכים'], ['manual', 'ידני']] : [])].map(([k, l]) => `<button type="button" data-t="${k}" class="${k === tab ? 'on' : ''}">${l}</button>`).join('')}</div>
     <div id="fpres"></div>` });
   const q = $('#fpq', s.el); const res = $('#fpres', s.el);
   const curMeal = () => $('#fpmeal', s.el)?.value || meal;
@@ -27,7 +28,9 @@ export function openFoodPicker({ date, meal, onAdded, onPick, title } = {}) {
     if (tab === 'search') {
       if (term.length < 2) { res.innerHTML = `<p class="muted small">כתוב לפחות שתי אותיות. החיפוש כולל את מאגר התזונה הלאומי (${D.foods.list.filter(f => f.src === 'moh').length.toLocaleString('he-IL')} מזונות), המזונות הנפוצים ורשתות המזון המהיר מהיומן הקודם, מוצרים אישיים ומתכונים.</p><p class="small">שים לב לסימון: <span class="pill st-dry">יבש</span> = שוקלים לפני בישול, <span class="pill st-cooked">מבושל</span> = שוקלים בצלחת.</p>`; return; }
       const list = searchFoods(term, 50);
-      res.innerHTML = list.length ? `<ul class="list">${list.map(foodRow).join('')}</ul>` : `<div class="empty-state">לא נמצא. אפשר להוסיף <a href="#" data-new>מוצר אישי לפי התווית</a>.</div>`;
+      const out = date && !onPick ? searchEatout(term) : [];
+      res.innerHTML = (out.length ? `<div class="small muted" style="margin:4px 0">אוכל בחוץ — להרכבה כמו שמזמינים</div><ul class="list">${out.map(eatoutRow).join('')}</ul>` : '')
+        + (list.length ? `<ul class="list">${list.map(foodRow).join('')}</ul>` : out.length ? '' : `<div class="empty-state">לא נמצא. אפשר להוסיף <a href="#" data-new>מוצר אישי לפי התווית</a>.</div>`);
     } else if (tab === 'fav') {
       const ids = [...favorites()]; const list = ids.map(food).filter(Boolean);
       res.innerHTML = list.length ? `<ul class="list">${list.map(foodRow).join('')}</ul>` : '<div class="empty-state">עוד אין מועדפים. בכרטיס מזון לחץ ☆ כדי לשמור.</div>';
@@ -37,6 +40,9 @@ export function openFoodPicker({ date, meal, onAdded, onPick, title } = {}) {
     } else if (tab === 'fixed') {
       const list = D.state.fixedMeals;
       res.innerHTML = list.length ? `<ul class="list">${list.map(m => { const tot = m.items.reduce((a, i) => { const f = food(i.foodId) || (i.manual ? manualFood(i.manual) : null); if (!f) return a; const n = nutrients(f, i.grams); a.k += n.kcal; a.p += n.protein; return a; }, { k: 0, p: 0 }); return `<li class="li" data-fixed="${esc(m.id)}"><div class="m"><b>${esc(m.name)}</b><small>${m.items.length} רכיבים · ${n0(tot.k)} קק״ל · ${n0(tot.p)} ג׳ חלבון</small></div><div class="a">+</div></li>`; }).join('')}</ul>` : '<div class="empty-state">עוד אין ארוחות קבועות. בכל ארוחה ב״היום שלי״ אפשר לשמור אותה כקבועה.</div>';
+    } else if (tab === 'out') {
+      res.innerHTML = Object.entries(EATOUT_CATS).map(([c, l]) => `<h3 style="margin-top:10px">${esc(l)}</h3><ul class="list">${EATOUT.filter(d => d.cat === c).map(eatoutRow).join('')}</ul>`).join('')
+        + '<p class="tiny muted">רשתות: הערכים שהרשת פרסמה בארה״ב (אין נתונים רשמיים ישראליים שאפשר לייבא) — המנות בארץ יכולות להיות שונות. מנות ממסעדה: הערכה לפי מזונות במאגר; אפשר לערוך כל כמות אחרי ההוספה.</p>';
     } else if (tab === 'scan') {
       res.innerHTML = scanHtml();
     } else if (tab === 'photo') {
@@ -50,6 +56,7 @@ export function openFoodPicker({ date, meal, onAdded, onPick, title } = {}) {
   };
   q.addEventListener('input', () => { if (tab !== 'search') { tab = 'search'; $$('#fptabs button', s.el).forEach(b => b.classList.toggle('on', b.dataset.t === 'search')); } draw(); });
   on(s.el, '#fptabs button', 'click', (e, b) => { tab = b.dataset.t; $$('#fptabs button', s.el).forEach(x => x.classList.toggle('on', x === b)); draw(); });
+  on(s.el, '[data-dish]', 'click', (e, li) => openEatout(eatoutById(li.dataset.dish), { date, meal: curMeal(), onDone: () => { s.close(); onAdded?.(); } }));
   on(s.el, '[data-food]', 'click', (e, li) => { const f = food(li.dataset.food); if (!f) return; if (onPick) { s.close(); onPick(f); } else openFoodDetail(f, { date, meal: curMeal(), onDone: () => { s.close(); onAdded?.(); } }); });
   on(s.el, '[data-new]', 'click', e => { e.preventDefault(); openCustomForm({ name: q.value.trim(), onSaved: f => { draw(); openFoodDetail(f, { date, meal: curMeal(), onDone: () => { s.close(); onAdded?.(); } }); } }); });
   on(s.el, '[data-usda]', 'click', () => openUsda({ onSaved: f => { draw(); openFoodDetail(f, { date, meal: curMeal(), onDone: () => { s.close(); onAdded?.(); } }); } }));
@@ -171,6 +178,43 @@ const manualHtml = () => `<div class="stack" id="manbody">
   <div class="note ok" id="manprev"></div>
   <div class="row"><button class="btn plain grow" data-manadd="planned" disabled>הוסף לתכנון</button><button class="btn grow" data-manadd="eaten" disabled>אכלתי</button></div></div>`;
 
+const eatoutRow = d => `<li class="li" data-dish="${esc(d.id)}"><div class="m"><b>🍽 ${esc(d.name)}${d.chain ? ` · ${esc(d.chain)}` : ''}</b><small>${d.kind === 'official' ? 'ערכי הרשת (ארה״ב)' : 'הערכה'} · ${esc(d.groups.filter(g => g.type !== 'count').map(g => g.label).join(', '))}</small></div><div class="a">›</div></li>`;
+
+/** הרכבת מנה מבחוץ: בחירות → ערכים מתעדכנים מיד → הוספה ליומן, או החלפת מה שתוכנן לארוחה (כל רכיב נספר פעם אחת) */
+export function openEatout(dish, { date, meal, onDone } = {}) {
+  const choice = defaultChoice(dish);
+  const planned = () => D.state.entries.filter(e => e.date === date && e.meal === meal && e.status !== 'eaten');
+  const s = openSheet({ title: dish.name + (dish.chain ? ` · ${dish.chain}` : ''), body: '<div id="eob"></div>', foot: '<button class="btn plain" data-eoadd="planned">הוסף לתכנון</button><button class="btn" data-eoadd="eaten">אכלתי</button>' });
+  let replace = planned().length > 0;
+  const draw = () => {
+    const r = composeDish(dish, choice, D.foods); const pl = planned();
+    const pr = pl.reduce((a, e) => { const f = D.foods.get(e.foodId) || e.snapshot; const n = nutrients(f, e.grams); a.k += n.kcal; a.p += n.protein; return a; }, { k: 0, p: 0 });
+    $('#eob', s.el).innerHTML = `<div class="note ${dish.kind === 'official' ? '' : 'warn'} small">${dish.kind === 'official' ? `ערכים רשמיים שפרסמה ${esc(dish.chain)} בארה״ב. אין נתונים רשמיים ישראליים שאפשר לייבא, והמנה בארץ יכולה להיות שונה.` : '<b>הערכה</b> — מנה כללית ממסעדה, לפי מזונות במאגר. אחרי ההוספה אפשר לערוך כל כמות.'}</div>
+      ${dish.groups.map(g => g.type === 'count'
+        ? `<div class="field"><span>${esc(g.label)}</span><div class="row" style="gap:12px"><button type="button" class="cupbtn" data-cnt="${g.id}" data-d="-1">−</button><b class="num" style="font-size:22px">${choice[g.id]}</b><button type="button" class="cupbtn" data-cnt="${g.id}" data-d="1">+</button></div></div>`
+        : `<div class="field"><span>${esc(g.label)}</span><div class="chips">${g.choices.map(c => `<button type="button" class="chip ${(g.type === 'one' ? choice[g.id] === c.id : (choice[g.id] || []).includes(c.id)) ? 'on' : ''}" data-g="${g.id}" data-c="${esc(c.id)}">${esc(c.label)}</button>`).join('')}</div></div>`).join('')}
+      <div class="card tight"><b>${esc(dishTitle(dish, choice))}</b><ul class="list" style="margin-top:6px">${r.items.map(i => `<li class="li"><div class="m"><b>${esc(i.label)}</b><small>${esc(qtyText(D.foods.get(i.foodId), i.grams, i.unit, i.qty))}</small></div><div class="a"><b class="num">${n0(i.kcal)}</b> קק״ל<br><span class="num">${n1(i.protein)}</span> ג׳ חלבון</div></li>`).join('')}</ul>
+        <div class="note ok" id="eotot">סה״כ: <b class="num">${n0(r.totals.kcal)}</b> קק״ל · <b class="num">${n0(r.totals.protein)}</b> ג׳ חלבון · פחמ׳ ${n0(r.totals.carbs)} · שומן ${n0(r.totals.fat)}</div></div>
+      ${pl.length ? `<label class="row small" style="gap:8px;margin-top:10px"><input type="checkbox" id="eorep" style="width:22px;height:22px" ${replace ? 'checked' : ''}> להחליף את מה שתוכנן לארוחה הזו (${pl.length} פריטים · ${n0(pr.k)} קק״ל)</label>` : ''}`;
+    $('#eorep', s.el)?.addEventListener('change', e => { replace = e.target.checked; });
+  };
+  on(s.el, '[data-g]', 'click', (e, b) => {
+    const g = dish.groups.find(x => x.id === b.dataset.g);
+    if (g.type === 'one') choice[g.id] = b.dataset.c;
+    else { const set = new Set(choice[g.id] || []); set.has(b.dataset.c) ? set.delete(b.dataset.c) : set.add(b.dataset.c); choice[g.id] = [...set]; }
+    draw();
+  });
+  on(s.el, '[data-cnt]', 'click', (e, b) => { const g = dish.groups.find(x => x.id === b.dataset.cnt); choice[g.id] = Math.max(g.min, Math.min(g.max, (+choice[g.id] || g.def) + +b.dataset.d)); draw(); });
+  on(s.el, '[data-eoadd]', 'click', async (e, b) => {
+    const r = composeDish(dish, choice, D.foods); const title = dishTitle(dish, choice); const group = 'eo' + Date.now().toString(36);
+    if (replace) for (const x of planned()) await del('/api/entries/' + x.id);
+    await save('POST', '/api/entries', { entries: r.items.map((i, k) => ({ date, meal, foodId: i.foodId, grams: i.grams, unit: i.unit, qty: i.qty, status: b.dataset.eoadd, source: 'eatout', label: `${dish.name}: ${i.label}`, group, order: Date.now() + k })) });
+    await refresh(); s.close(); toast(`${title} — ${replace ? 'הוחלף בארוחה' : 'נוסף'} (${n0(r.totals.kcal)} קק״ל)`, 3500); onDone?.();
+  });
+  draw();
+  return s;
+}
+
 /** כרטיס מזון: מקור, ל-100 גרם, יחידות מידה, מצב (יבש/מבושל/מסונן) והערכים לכמות שבחרתי */
 export function openFoodDetail(f, { date, meal, entry, onDone } = {}) {
   const units = unitsFor(f);
@@ -193,6 +237,7 @@ export function openFoodDetail(f, { date, meal, entry, onDone } = {}) {
   const draw = () => {
     $('#fdb', s.el).innerHTML = `
       <div class="row between"><div class="small muted">${srcLine(f)}</div>${f.src === 'manual' ? '' : `<button class="iconbtn" data-fav aria-label="מועדף">${isFav() ? '★' : '☆'}</button>`}</div>
+      ${(f.src === 'usda' || f.src === 'cofid') ? `<div class="small muted" dir="ltr" style="text-align:right">${esc(f.e)}</div>${f.he === 1 ? '<div class="tiny muted">השם העברי תורגם אוטומטית מהתיאור באנגלית.</div>' : ''}` : ''}
       ${f.st ? `<div class="note ${f.st === 'dry' || f.st === 'raw' ? 'warn' : ''}" style="margin:8px 0"><b>${esc(STATE[f.st].label)}</b><br><span class="small">${esc(STATE[f.st].hint)}</span></div>` : ''}
       ${f.src === 'recipe' ? `<div class="note" style="margin:8px 0">מתכון: ${n0(f.rawGrams)} ג׳ רכיבים (כולל שמן ורטבים) → ${n0(f.finalGrams)} ג׳ בסיר. הערכים לפי החלק שאכלת.</div>` : ''}
       <div class="grid2" style="margin-top:10px"><label class="field"><span>כמות</span><input class="in" id="fq" inputmode="decimal" value="${qty}"></label>

@@ -2,7 +2,7 @@
 import * as S from './store.js';
 import { israelDate, israelMinutes, addDays, weekStart, dmy, hebDay } from '../shared/dates.js';
 import { mealWeights, mealSlots, GOALS } from '../shared/nutrition.js';
-import { suggestMeals, budgetForSlot, nextSlot } from '../shared/planner.js';
+import { suggestMeals, budgetForSlot, nextSlot, familyContext } from '../shared/planner.js';
 import { componentsInText, COMPONENTS, COMMON_IDS } from '../shared/catalog.js';
 import { nutrients, unitsFor, unitGrams, STATE, SRC_LABEL } from '../shared/foods.js';
 import { recentWeeks, parseWeightText } from '../shared/weights.js';
@@ -61,7 +61,8 @@ export function suggestMeal(uid, { slot, pantry_text, no_cook, max_prep_minutes,
   const pantry = pantry_text ? componentsInText(pantry_text) : null;
   if (pantry_text && !pantry.length) return { error: 'לא זיהיתי מוצרים מהרשימה. נסה לכתוב שמות פשוטים כמו "ביצים, קוטג׳, פיתה".' };
   const budget = budgetForSlot({ profile, target: tgt, entries, foods, slot: s });
-  const opts = suggestMeals({ foods, slot: s, profile, maxPrep: +max_prep_minutes || +profile.prepMinutes || 0, recent: recentUse(uid, d), pantry, noCook: !!no_cook, anySlot: !!pantry }, budget, Math.min(3, +count || 3));
+  const fc = familyContext({ entries: S.entriesFor(uid, addDays(d, -6), d), foods, date: d, slot: s });
+  const opts = suggestMeals({ foods, slot: s, profile, maxPrep: +max_prep_minutes || +profile.prepMinutes || 0, recent: recentUse(uid, d), pantry, noCook: !!no_cook, anySlot: !!pantry, ...fc }, budget, Math.min(3, +count || 3));
   const out = opts.map(o => {
     const card = { type: 'meal', id: newId('s'), date: d, slot: s, slotLabel: slotLabel(profile, s), name: o.name, items: o.items.map(i => ({ foodId: i.foodId, comp: i.comp, name: i.name, grams: i.grams, unit: i.unit, qty: i.qty, approx: i.approx, kcal: i.kcal, protein: i.protein })), totals: o.totals, why: o.why, prep: o.prep };
     cards?.push(card);

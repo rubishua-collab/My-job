@@ -5,7 +5,7 @@ import { TRAIN_BONUS } from '/shared/nutrition.js';
 import { save, del, get } from '../api.js';
 import { $, $$, esc, n0, n1, kg, toast, openSheet, meter, on, confirmSheet } from '../ui.js';
 import { nutrients, qtyText, unitsFor, STATE, isVegFruit } from '/shared/foods.js';
-import { suggestMeals, budgetForSlot, planDay, nextSlot, swapItem, swapCandidates } from '/shared/planner.js';
+import { suggestMeals, budgetForSlot, planDay, nextSlot, swapItem, swapCandidates, familyContext, PLANNER_SOURCES } from '/shared/planner.js';
 import { COMPONENTS, componentsInText } from '/shared/catalog.js';
 import { addDays, dmy, hebDay, israelMinutes, savedAt } from '/shared/dates.js';
 import { GOALS } from '/shared/nutrition.js';
@@ -73,7 +73,7 @@ function mealCard(s, date, day) {
 function itemRow(e) {
   const f = foodOf(e); const n = nutrients(f, e.grams);
   const planned = e.status === 'eaten' && e.plannedGrams && Math.abs(e.plannedGrams - e.grams) > 0.5 ? ` · תוכנן ${n0(e.plannedGrams)} ג׳` : '';
-  return `<li class="item" data-entry="${e.id}"><div class="nm"><b>${esc(COMPONENTS[e.comp]?.name || f.n)}</b><small>${esc(qtyText(f, e.grams, e.unit, e.qty))}${f.st ? ' · ' + esc(STATE[f.st].short) : ''}${planned}</small></div>
+  return `<li class="item" data-entry="${e.id}"><div class="nm"><b>${esc(e.label || COMPONENTS[e.comp]?.name || f.n)}</b><small>${esc(qtyText(f, e.grams, e.unit, e.qty))}${f.st ? ' · ' + esc(STATE[f.st].short) : ''}${planned}</small></div>
     <div class="kc"><b class="num">${n0(n.kcal)}</b> קק״ל<br><span class="num">${n1(n.protein)}</span> ג׳ חלבון</div><span class="st ${e.status}">${e.status === 'eaten' ? 'אכלתי' : 'תכננתי'}</span></li>`;
 }
 
@@ -198,10 +198,15 @@ function openSwap(e, done) {
 // ---- הצעות ----
 export function suggestionHtml(o, idx) {
   return `<div class="sugg" data-opt="${idx}"><div class="hd"><b>${esc(o.name)}</b><span class="small muted">${o.prep ? `~${o.prep} דק׳` : ''}</span></div>
-    <ul>${o.items.map(i => `<li>${esc(i.name)}: ${i.qty ? `${esc(String(i.qty))} × ` : ''}${n0(i.grams)} ג׳${i.approx ? ` (${esc(i.approx)})` : ''} <span class="muted small">· ${n0(i.kcal)} קק״ל · ${n1(i.protein)} ג׳</span></li>`).join('')}</ul>
+    <ul>${o.items.map(i => { const f = D.foods.get(i.foodId); const amt = f && i.qty ? qtyText(f, i.grams, i.unit, i.qty) : `${n0(i.grams)} גרם${i.approx ? ` (${esc(i.approx)})` : ''}`; return `<li>${esc(i.name)}: ${esc(amt)} <span class="muted small">· ${n0(i.kcal)} קק״ל · ${n1(i.protein)} ג׳ חלבון</span></li>`; }).join('')}</ul>
     <div class="tot"><b class="num">${n0(o.totals.kcal)}</b> קק״ל · <b class="num">${n0(o.totals.protein)}</b> ג׳ חלבון · ${n0(o.totals.fiber)} ג׳ סיבים${o.totals.vegFruitG ? ` · ${n0(o.totals.vegFruitG)} ג׳ ירקות/פירות` : ''}</div>
     ${o.why?.length ? `<div class="why">${o.why.map(w => `<span>${esc(w)}</span>`).join('')}</div>` : ''}
     <button class="btn block sm" data-addopt="${idx}">הוסף לתכנון</button></div>`;
+}
+/** על מה מבוססת הבחירה — מקורות שאפשר לפתוח */
+export async function plannerSourcesHtml() {
+  const { sourcesHtml } = await import('./targets.js');
+  return `<details class="how" style="margin-top:10px"><summary>על מה מבוססת הבחירה?</summary>${sourcesHtml(PLANNER_SOURCES)}</details>`;
 }
 export async function addOption(date, slot, o, { replace } = {}) {
   const existing = entriesOn(date).filter(e => e.meal === slot && e.status !== 'eaten');
@@ -213,7 +218,8 @@ export async function addOption(date, slot, o, { replace } = {}) {
   await refresh();
 }
 
-function openSuggest(date, slot, done) {
+async function openSuggest(date, slot, done) {
+  await D.worldReady; // חלק מהרכיבים (קציצות הודו) מגיעים ממאגר USDA שנטען ברקע
   const p = profile(date); const tgt = targetOn(date);
   if (!tgt) return toast('אין יעד יומי — סיים את השאלון');
   const label = slots(date).find(s => s.id === slot)?.label || '';
@@ -223,7 +229,8 @@ function openSuggest(date, slot, done) {
     const entries = entriesOn(date);
     const b = budgetForSlot({ profile: p, target: tgt, entries, foods: D.foods, slot });
     const pk = pantry ? componentsInText(pantry) : null;
-    const opts = suggestMeals({ foods: D.foods, slot, profile: p, maxPrep: noCook ? 5 : +p.prepMinutes || 0, recent: recentComps(date), pantry: pk, noCook, anySlot: !!pk }, b, 3);
+    const fc = familyContext({ entries: D.state.entries, foods: D.foods, date, slot });
+    const opts = suggestMeals({ foods: D.foods, slot, profile: p, maxPrep: noCook ? 5 : +p.prepMinutes || 0, recent: recentComps(date), pantry: pk, noCook, anySlot: !!pk, ...fc }, b, 3);
     $('#sg', s.el).innerHTML = `<div class="note">נשארו להיום: <b>${n0(b.remain.kcal)}</b> קק״ל, <b>${n0(b.remain.protein)}</b> ג׳ חלבון. לארוחה הזו: כ-<b>${n0(b.kcal)}</b> קק״ל ו-<b>${n0(b.protein)}</b> ג׳ חלבון.</div>
       <form id="pf" class="row" style="margin:10px 0"><input class="in grow" id="pt" value="${esc(pantry)}" placeholder="יש לי בבית… (ביצים, קוטג׳, פיתה)"><button class="btn sm">מה אפשר?</button></form>
       <label class="row small" style="gap:8px;margin-bottom:10px"><input type="checkbox" id="nc" ${noCook ? 'checked' : ''} style="width:22px;height:22px"> בלי לבשל</label>
@@ -237,18 +244,20 @@ function openSuggest(date, slot, done) {
   run();
 }
 
-function openPlanDay(date, done) {
+async function openPlanDay(date, done) {
+  await D.worldReady;
   const p = profile(date); const tgt = targetOn(date);
   if (!tgt) return toast('אין יעד יומי — סיים את השאלון');
   const day = dayDoc(date);
-  const plan = planDay({ profile: p, target: tgt, foods: D.foods, entries: entriesOn(date), locked: day.locked || [], recent: recentComps(date), maxPrep: +p.prepMinutes || 0 });
+  const plan = planDay({ profile: p, target: tgt, foods: D.foods, entries: entriesOn(date), history: D.state.entries, date, locked: day.locked || [], recent: recentComps(date), maxPrep: +p.prepMinutes || 0 });
   const keep = slots(date).filter(s => !plan.some(x => x.slot === s.id));
   const sum = plan.reduce((a, x) => { a.k += x.option.totals.kcal; a.p += x.option.totals.protein; return a; }, { k: 0, p: 0 });
   const kept = entriesOn(date).filter(e => keep.some(s => s.id === e.meal)).reduce((a, e) => { const n = nutrients(foodOf(e), e.grams); a.k += n.kcal; a.p += n.protein; return a; }, { k: 0, p: 0 });
   const s = openSheet({ title: 'יום שלם', body: `${keep.length ? `<div class="note">נשארות כמו שהן (נעולות או נאכלו): ${keep.map(k => esc(k.label)).join(', ')}</div>` : ''}
     ${plan.length ? plan.map((x, i) => `<h3 style="margin-top:14px">${esc(slots(date).find(s => s.id === x.slot)?.label)}</h3>${suggestionHtml(x.option, i)}`).join('') : '<div class="empty-state">כל הארוחות נעולות או נאכלו.</div>'}
-    <div class="card tight" style="margin-top:12px">סה״כ ביום: <b>${n0(sum.k + kept.k)}</b> / ${tgt.kcal} קק״ל · <b>${n0(sum.p + kept.p)}</b> / ${tgt.protein} ג׳ חלבון</div>`,
+    <div class="card tight" style="margin-top:12px">סה״כ ביום: <b>${n0(sum.k + kept.k)}</b> / ${tgt.kcal} קק״ל · <b>${n0(sum.p + kept.p)}</b> / ${tgt.protein} ג׳ חלבון</div><div id="psrc"></div>`,
     foot: plan.length ? '<button class="btn" data-all>הוסף את כל היום לתכנון</button>' : '' });
+  plannerSourcesHtml().then(h => { const el = $('#psrc', s.el); if (el) el.innerHTML = h; });
   on(s.el, '[data-addopt]', 'click', async (e, b) => { const x = plan[+b.dataset.addopt]; await addOption(date, x.slot, x.option, { replace: true }); b.disabled = true; b.textContent = 'נוסף ✓'; done(); });
   on(s.el, '[data-all]', 'click', async () => { for (const x of plan) await addOption(date, x.slot, x.option, { replace: true }); s.close(); toast('היום נבנה. אפשר לשנות כל רכיב'); done(); });
 }

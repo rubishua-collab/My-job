@@ -12,6 +12,7 @@ fs.cpSync(path.join(ROOT, 'public'), OUT, { recursive: true, filter: f => !/\/(s
 fs.cpSync(path.join(ROOT, 'shared'), path.join(OUT, 'shared'), { recursive: true });
 fs.mkdirSync(path.join(OUT, 'data'), { recursive: true });
 fs.copyFileSync(path.join(ROOT, 'data', 'foods.json'), path.join(OUT, 'data', 'foods.json'));
+if (fs.existsSync(path.join(ROOT, 'data', 'foods-world.json'))) fs.copyFileSync(path.join(ROOT, 'data', 'foods-world.json'), path.join(OUT, 'data', 'foods-world.json'));
 fs.writeFileSync(path.join(OUT, 'js', 'config.js'), `// נוצר אוטומטית ב-build-app\nexport const API_BASE = ${JSON.stringify(API)};\nexport const APP_BUILD = true;\n`);
 // באפליקציה: CSP שמאפשר חיבור רק לשרת שלנו
 let html = fs.readFileSync(path.join(OUT, 'index.html'), 'utf8');

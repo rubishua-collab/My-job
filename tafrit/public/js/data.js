@@ -14,6 +14,8 @@ export async function loadFoods() {
   const r = await fetch('/data/foods.json');
   const j = await r.json();
   D.meta = j.meta; D.foods = new FoodIndex(j.foods);
+  // USDA ו-CoFID: ברקע, בלי לעכב את פתיחת האפליקציה
+  D.worldReady = fetch('/data/foods-world.json').then(r => r.ok ? r.json() : null).then(w => { if (w) { D.foods.add(w.foods); D.worldMeta = w.meta; } }).catch(() => {});
   return D.foods;
 }
 export async function refresh() {

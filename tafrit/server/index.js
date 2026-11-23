@@ -62,6 +62,7 @@ function serveFile(req, res, file) {
 function staticPath(p) {
   if (p === '/' || p === '') return path.join(ROOT, 'public', 'index.html');
   if (p === '/data/foods.json') return S.FOODS_FILE;
+  if (p === '/data/foods-world.json') return S.WORLD_FILE;
   if (p === '/privacy' || p === '/privacy/') return path.join(ROOT, 'public', 'privacy.html');
   if (p === '/delete-account' || p === '/delete-account/') return path.join(ROOT, 'public', 'delete-account.html');
   if (p === '/terms') return path.join(ROOT, 'public', 'terms.html');
