@@ -8,8 +8,10 @@ let KEY = null;
 export function initKey(dataDir) {
   const env = process.env.DATA_ENCRYPTION_KEY;
   if (env) {
-    if (!/^[0-9a-f]{64}$/i.test(env)) throw new Error('DATA_ENCRYPTION_KEY חייב להיות 64 תווי hex (32 בתים)');
-    KEY = Buffer.from(env, 'hex');
+    // 64 תווי hex = המפתח עצמו. כל מחרוזת אקראית אחרת באורך 32+ (למשל מכפתור Generate של Render) → נגזר ממנה מפתח ב-SHA-256
+    if (/^[0-9a-f]{64}$/i.test(env)) KEY = Buffer.from(env, 'hex');
+    else if (env.length >= 32) KEY = crypto.createHash('sha256').update('tafrit-data-key:' + env).digest();
+    else throw new Error('DATA_ENCRYPTION_KEY קצר מדי — לפחות 32 תווים');
     return 'env';
   }
   const f = path.join(dataDir, '.data-key');
