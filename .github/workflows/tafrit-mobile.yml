@@ -56,7 +56,7 @@ jobs:
           status: draft
 
   ios:
-    runs-on: macos-15
+    runs-on: macos-latest
     defaults: { run: { working-directory: tafrit } }
     env:
       HAS_APPLE: ${{ secrets.APPSTORE_API_KEY_P8 != '' }}
