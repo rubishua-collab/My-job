@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">תפריט יומי רובי</string>
-    <string name="title_activity_main">תפריט יומי רובי</string>
+    <string name="app_name">תפריטי פרו</string>
+    <string name="title_activity_main">תפריטי פרו</string>
     <string name="package_name">com.rubishua.tafritrobi</string>
     <string name="custom_url_scheme">com.rubishua.tafritrobi</string>
 </resources>

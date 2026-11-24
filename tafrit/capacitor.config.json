@@ -1,6 +1,6 @@
 {
   "appId": "com.rubishua.tafritrobi",
-  "appName": "תפריט יומי רובי",
+  "appName": "תפריטי פרו",
   "webDir": "app-www",
   "android": { "allowMixedContent": false, "captureInput": true, "webContentsDebuggingEnabled": false },
   "ios": { "contentInset": "automatic", "limitsNavigationsToAppBoundDomains": false },
