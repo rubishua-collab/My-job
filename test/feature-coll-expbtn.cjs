@@ -39,9 +39,9 @@ const results = []; const step = async (n, f) => { try { await f(); results.push
   });
   await step('צפייה בגובה ״בן״ → ״הוצאות של גובה״ → ״הוסף הוצאה״: בן נבחר מראש; נסיעות 100 ₪', async () => {
     if (await p.locator('.chip[data-c="בן"]').count()) await p.click('.chip[data-c="בן"]');
-    await p.click('.band button:has-text("הוצאות של גובה")'); await p.waitForSelector('#w-x-new'); await p.click('#w-x-new'); await p.waitForSelector('#xf-c');
-    assert.strictEqual(await p.inputValue('#xf-c'), 'בן'); assert.ok((await p.locator('#xf-cs').innerText()).includes('נבחר הגובה: בן'));
-    await p.fill('#xf-a', '100'); await p.fill('#xf-n', 'נסיעות'); await p.click('#xf-save'); await p.waitForFunction(() => document.querySelector('#sheet').hidden);
+    await p.click('.band button:has-text("הוצאות של גובה")'); await p.waitForSelector('.xc-row');
+    assert.strictEqual(await p.inputValue('.xc-row [data-xf="c"]'), 'בן'); assert.ok((await p.locator('.xc-row .xc-cs').innerText()).includes('בן'));
+    await p.fill('.xc-row [data-xf="a"]', '100'); await p.fill('.xc-row [data-xf="n"]', 'נסיעות'); await p.click('.xc-row >> nth=0 >> [data-xsave]'); await p.waitForFunction(() => !document.querySelector('.xc-row [data-xsave][disabled]') && document.querySelector('.xc-tot')); await p.click('#xc-done'); await p.waitForFunction(() => document.querySelector('#sheet').hidden);
   });
   await step('חשבון גובים: אצל בן נגבו 8,190 · הוצאות 100 · נטו 8,090 (הוצאה אחת)', async () => {
     const x = await collBen(); assert.strictEqual(x.debts, 8190); assert.strictEqual(x.exps.length, 1); assert.deepStrictEqual([x.exps[0].n, x.exps[0].a], ['נסיעות', 100]); assert.ok(x.exps[0].xk);
@@ -62,8 +62,8 @@ const results = []; const step = async (n, f) => { try { await f(); results.push
     const w = await api('GET', '/api/accounts/' + W); assert.strictEqual(w.expenses.length, 1);
   });
   await step('הסרה מתוך חשבון גובים מסירה את ההוצאה משתי הלשוניות', async () => {
-    await p.click('.band button:has-text("הוצאות של גובה")'); await p.waitForSelector('#xlist [data-xdel]');
-    p.once('dialog', d => d.accept()); await p.click('#xlist [data-xdel]'); await p.waitForTimeout(800);
+    await p.click('.band button:has-text("הוצאות של גובה")'); await p.waitForSelector('#xc-list [data-xdl]');
+    p.once('dialog', d => d.accept()); await p.click('#xc-list [data-xdl]'); await p.waitForTimeout(800);
     assert.strictEqual((await collBen()).exps.length, 0); assert.strictEqual((await api('GET', '/api/accounts/' + W)).expenses.length, 0);
     assert.deepStrictEqual(errs, []);
   });

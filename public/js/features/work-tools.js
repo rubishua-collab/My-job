@@ -69,45 +69,13 @@ function xCollOptions(entries, cur) {
   const list = used.concat(knownCollectors().filter(x => used.indexOf(x) < 0));
   return '<option value="">בחר גובה</option>' + list.map(v => '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(v) + '</option>').join('') + '<option value="' + NOX + '"' + (cur === NOX ? ' selected' : '') + '>ללא גובה</option>';
 }
+// ״הוצאות של גובה״ — כרטיס משותף לכל הלשוניות (public/js/expenses-card.js): כמה הוצאות, שמירה בלי לצאת, וכל הוצאות התאריך
 const expensesAction = {
   label: 'הוצאות של גובה', can: (App) => fin(App),
   async run(ctx) {
     const isColl = ctx.a.kind === 'collectors';
-    // בחשבון גובים: ההוצאות הן שורות מסוג ״הוצאה״; הוספה והסרה משותפות לרשימת האיסוף של אותו תאריך
-    const xsOf = () => isColl ? (ctx.a.entries || []).filter(e => e && e.k === 'e' && (String(e.n || '').trim() || num(e.a))).map(e => ({ ...e, _k: e.xk || e._k })) : (ctx.a.expenses || []).filter(x => x && (String(x.n || '').trim() || num(x.a)));
-    await loadBook(false).catch(() => {});
-    const draw = (s) => {
-      const xs = xsOf();
-      $('#xlist', s.el).innerHTML = xs.length ? `<div class="small muted">${xs.length} הוצאות · סה״כ ${fmt(sum(xs.map(x => num(x.a))))} ₪</div><div class="list">${xs.map(x => `<div class="li noc"><div class="t">${esc(x.n)}${x.lk ? ' <span class="pill acc">מקושרת לאיסוף</span>' : ''}${x.nf ? ' <span class="pill">לא מכספי האיסוף</span>' : ''}</div><div class="a">${fmt(num(x.a))} ₪</div><div class="m"><span>${esc(cleanColl(x.c) || 'ללא גובה')}</span>${x.by && x.by !== '@' ? `<span>של: ${esc(x.by)}</span>` : ''}</div><div style="grid-column:1/-1"><button class="btn plain sm" data-xdel="${esc(x._k)}">הסר הוצאה</button></div></div>`).join('')}</div>` : '<div class="empty">אין עדיין הוצאות ברשימה הזו</div>';
-    };
-    const s = openSheet(`<div class="hd"><h2>הוצאות של גובה</h2><button class="x" data-close>×</button></div>
-      <p class="small muted" style="margin:0">ההוצאה מופיעה ברשימה של אותו גובה (גם ב״פיצול״ של אותו תאריך), יורדת מ״נטו למסירה״ שלו, נכנסת להעתקה ול-PDF ונשמרת יחד עם הרשימה.</p>
-      <div class="row" style="margin-top:8px"><button class="btn xl" id="w-x-new" style="width:100%">הוסף הוצאה</button></div><div id="xlist" style="margin-top:12px"></div>`);
-    draw(s);
-    $('#w-x-new', s.el).onclick = async () => { const { openExpenseForm } = await import('../expense-form.js'); openExpenseForm({ date: ctx.a.date, workId: isColl ? undefined : ctx.a.id, collId: isColl ? ctx.a.id : undefined, preColl: ctx.coll || '', onSaved: () => ctx.reload() }); };
-    let opId = uid();
-    if ($('#w-x-add', s.el)) $('#w-x-add', s.el).onclick = async (ev) => {
-      const c = $('#w-x-c', s.el).value, n = $('#w-x-n', s.el).value.trim(), a = num($('#w-x-a', s.el).value);
-      if (!c) return toast('בחר לאיזה גובה ההוצאה');
-      if (!n && !a) return toast('כתוב שם הוצאה וסכום');
-      if (!a) return toast('חסר סכום להוצאה');
-      ev.target.disabled = true;
-      try {
-        await putAcc(ctx.a.id, (acc) => { (acc.expenses ||= []).push({ n: n || 'הוצאה', a, c: c === NOX ? '' : cleanColl(c) }); }, 'הוספת הוצאה' + (c === NOX ? '' : ' ל' + cleanColl(c)), opId);
-        opId = uid(); await ctx.reload(); draw(s);
-        $('#w-x-n', s.el).value = ''; $('#w-x-a', s.el).value = ''; toast('ההוצאה נוספה' + (c === NOX ? '' : ' ל' + cleanColl(c))); $('#w-x-n', s.el).focus();
-      } catch (e) { toast(errMsg(e)); } finally { ev.target.disabled = false; }
-    };
-
-    $('#xlist', s.el).addEventListener('click', async (e) => {
-      const d = e.target.closest('[data-xdel]'); if (!d) return;
-      const x = xsOf().find(v => v._k === d.dataset.xdel); if (!x || !confirm('להסיר את ההוצאה ' + (x.n || '') + '?')) return;
-      try {
-        if (isColl || !x.lk) await save('POST', '/api/day-expense/remove', { date: ctx.a.date, key: x._k, opId: uid() }, { queue: false, label: 'הסרת הוצאה' });
-        else await putAcc(ctx.a.id, (acc) => { const before = (acc.expenses || []).length; acc.expenses = (acc.expenses || []).filter(v => v._k !== x._k); if (acc.expenses.length === before) return false; if (x.lk) (acc.entries || []).forEach(en => { if (en.lk === x.lk && !(acc.expenses || []).some(v => v.lk === x.lk)) delete en.lk; }); }, 'הסרת הוצאה ' + (x.n || ''));
-        await ctx.reload(); draw(s); toast('ההוצאה הוסרה');
-      } catch (err) { toast(errMsg(err)); }
-    });
+    const { openExpensesCard } = await import('../expenses-card.js');
+    openExpensesCard({ date: ctx.a.date, workId: ctx.a.kind === 'work' ? ctx.a.id : undefined, collId: isColl ? ctx.a.id : undefined, preColl: ctx.coll || '', onChange: () => ctx.reload() });
   },
 };
 accountAction('work', expensesAction);

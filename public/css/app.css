@@ -293,3 +293,7 @@ tr.exp-row td{background:color-mix(in srgb,var(--warn-bg,#fff1d6) 55%,transparen
 .ed-dot[hidden]{display:none}
 .edbar.wa-opening .ed-body{animation:waUp .2s ease-out}
 .edbar.wa-closing .ed-tab{animation:waTab .2s ease-out}
+
+/* כרטיס הוצאות של גובה */
+.xc-row label.bad .in{border-color:var(--neg);box-shadow:0 0 0 2px color-mix(in srgb,var(--neg) 25%,transparent)}
+.xc-tot{margin-top:8px}

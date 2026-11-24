@@ -28,6 +28,18 @@ export async function register(ctx) {
   const { r, err, need, can, db, getDoc, listDocs, putDoc, once, newId, now } = ctx;
   const tx = (fn) => { db.exec('BEGIN IMMEDIATE'); try { const out = fn(); db.exec('COMMIT'); return out; } catch (e) { try { db.exec('ROLLBACK'); } catch { /* */ } throw e; } };
 
+  // כל ההוצאות של תאריך (לכרטיס ״הוצאות של גובה״): ההוצאות המשותפות מרשימות האיסוף, ושורות הוצאה שנרשמו רק בחשבון הגובים
+  r.get('/api/day-expense', (req, res, { user, q }) => {
+    need(can.finance(user));
+    const date = ISO.test(q.get('date') || '') ? q.get('date') : null; if (!date) throw err(400, 'חסר תאריך');
+    const docs = listDocs('accounts').filter(x => x.data.date === date);
+    const shared = [], keys = new Set();
+    for (const w of docs.filter(x => x.data.kind === 'work')) for (const x of w.data.expenses || []) if (x && (x.n || x.a)) { shared.push({ key: x._k, n: x.n, a: num(x.a), c: cleanColl(x.c), t: x.t || '', at: x.at || 0, by: x.by || '' }); keys.add(x._k); }
+    const collOnly = [];
+    for (const d of docs.filter(x => x.data.kind === 'collectors')) for (const e of d.data.entries || []) if (e && e.k === 'e' && (e.n || e.a) && !(e.xk && keys.has(e.xk))) collOnly.push({ key: e.xk || e._k, n: e.n, a: num(e.a), c: cleanColl(e.c), t: e.t || '', only: 'חשבון גובים' });
+    return { date, items: shared.concat(collOnly) };
+  });
+
   // הסרת הוצאה משותפת: מרשימת האיסוף (expenses._k) ומחשבון הגובים (entries.xk) של אותו תאריך — יחד
   r.post('/api/day-expense/remove', (req, res, { user, body }) => {
     need(can.finance(user));

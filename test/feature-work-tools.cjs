@@ -72,10 +72,10 @@ const clean = (d) => { const x = { ...d }; ['_version', '_updatedAt', '_updatedB
     await d.waitForSelector('#wt-share a.btn.wa');
   });
   await step('הוצאה מהירה לגובה: נשמרת ומורידה מהנטו שלו', async () => {
-    await d.click('button:has-text("הוצאות של גובה")'); await d.waitForSelector('#w-x-new');
-    await d.click('#w-x-new'); await d.waitForSelector('#xf-save');
-    await d.click('#xf-save'); assert.ok(/בחר גובה/.test(await d.locator('#xf-err').innerText()));
-    await d.fill('#xf-c', 'טל'); await d.fill('#xf-n', 'חניה'); await d.fill('#xf-a', '30'); await d.click('#xf-save');
+    await d.click('button:has-text("הוצאות של גובה")'); await d.waitForSelector('.xc-row');
+    await d.click('.xc-row [data-xsave]'); assert.ok(/חסר שם גובה/.test(await d.locator('.xc-row .xc-cs').innerText()));
+    await d.fill('.xc-row [data-xf="c"]', 'טל'); await d.fill('.xc-row [data-xf="n"]', 'חניה'); await d.fill('.xc-row [data-xf="a"]', '30'); await d.click('.xc-row [data-xsave]');
+    await d.waitForSelector('.xc-tot'); await d.click('#xc-done');
     await d.waitForFunction(() => document.querySelector('#sheet').hidden);
     await d.waitForFunction(() => [...document.querySelectorAll('.card')].some(c => /חניה/.test(c.innerText)));
     const a = await acc(wid); assert.ok(a.expenses.some(x => x.n === 'חניה' && x.a === 30 && x.c === 'טל'));

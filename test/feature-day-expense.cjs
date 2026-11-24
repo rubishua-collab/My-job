@@ -21,13 +21,13 @@ const results = []; const step = async (n, f) => { try { await f(); results.push
   const W = await mk('work', { entries: [{ n: 'אבי כהן', p: '', a: 2000, c: 'בן', t: '10:00', s: 'נאסף', ga: 2000 }, { n: 'דנה לוי', p: '', a: 500, c: 'בן', t: '15:00', s: '' }], expenses: [] }, 'w');
   const card = (c) => p.locator('.card').filter({ has: p.locator('h2', { hasText: new RegExp('^' + c + '$') }) });
 
-  await step('״פיצול״: כפתור ״הוסף הוצאה״ בשורת הפעולות העליונה; הקלדת ״בן״ בוחרת את הגובה בן (לא את הלקוח ״בן דבש״)', async () => {
+  await step('״פיצול״: כפתור ״הוצאות של גובה״ בשורת הפעולות העליונה; הקלדת ״בן״ בוחרת את הגובה בן (לא את הלקוח ״בן דבש״)', async () => {
     await p.goto(URL + '/#/acc/' + SP); await p.waitForSelector('.band [data-xact]');
-    await p.click('.band button:has-text("הוסף הוצאה")'); await p.waitForSelector('#xf-c');
-    await p.fill('#xf-c', 'ב'); const sug = await p.locator('#xf-sug').innerText();
+    await p.click('.band button:has-text("הוצאות של גובה")'); await p.waitForSelector('.xc-row');
+    await p.fill('.xc-row [data-xf="c"]', 'ב'); const sug = await p.locator('.xc-row .xc-sug').innerText();
     assert.ok(sug.includes('בן') && sug.includes('בנימין') && !sug.includes('דבש'), 'הצעות מרשימת הגובים בלבד: ' + sug);
-    await p.fill('#xf-c', 'בן'); assert.ok((await p.locator('#xf-cs').innerText()).includes('נבחר הגובה: בן'));
-    await p.fill('#xf-a', '150'); await p.fill('#xf-n', 'דלק'); await p.click('#xf-save'); await p.waitForFunction(() => document.querySelector('#sheet').hidden);
+    await p.fill('.xc-row [data-xf="c"]', 'בן'); assert.ok((await p.locator('.xc-row .xc-cs').innerText()).includes('✓ בן'));
+    await p.fill('.xc-row [data-xf="a"]', '150'); await p.fill('.xc-row [data-xf="n"]', 'דלק'); await p.click('.xc-row >> nth=0 >> [data-xsave]'); await p.waitForFunction(() => !document.querySelector('.xc-row [data-xsave][disabled]') && document.querySelector('.xc-tot')); await p.click('#xc-done'); await p.waitForFunction(() => document.querySelector('#sheet').hidden);
   });
   await step('״פיצול״: אצל בן ״הוצאות״ עם שעה, תיאור וסכום; נגבה 2,000 · הוצאות 150 · נטו למסירה 1,850', async () => {
     await p.waitForSelector('.dayx'); const t = await card('בן').innerText();
@@ -42,8 +42,8 @@ const results = []; const step = async (n, f) => { try { await f(); results.push
     if (await p.locator('.chip[data-c=""]').count()) await p.click('.chip[data-c=""]');
   });
   await step('״איסוף יום״ → ״הוצאות של גובה״ → ״הוסף הוצאה״ לגובה טל (בלי גביות היום) → מופיע ברשימה של טל גם ב״פיצול״', async () => {
-    await p.click('.band button:has-text("הוצאות של גובה")'); await p.click('#w-x-new'); await p.waitForSelector('#xf-c');
-    await p.fill('#xf-c', 'טל'); await p.fill('#xf-a', '40'); await p.fill('#xf-n', 'חניה'); await p.click('#xf-save'); await p.waitForFunction(() => document.querySelector('#sheet').hidden);
+    await p.click('.band button:has-text("הוצאות של גובה")'); await p.waitForSelector('.xc-row');
+    await p.fill('.xc-row [data-xf="c"]', 'טל'); await p.fill('.xc-row [data-xf="a"]', '40'); await p.fill('.xc-row [data-xf="n"]', 'חניה'); await p.click('.xc-row >> nth=0 >> [data-xsave]'); await p.waitForFunction(() => !document.querySelector('.xc-row [data-xsave][disabled]') && document.querySelector('.xc-tot')); await p.click('#xc-done'); await p.waitForFunction(() => document.querySelector('#sheet').hidden);
     await p.waitForSelector('.wgcard[data-wg="טל"]'); assert.ok(/חניה\s+40 ₪/.test(await card('טל').innerText()), 'כרטיס לטל גם בלי גביות');
     await p.goto(URL + '/#/acc/' + SP); await p.waitForSelector('.dayx');
     assert.ok(/חניה\s+40 ₪/.test(await card('טל').innerText()));
@@ -61,8 +61,8 @@ const results = []; const step = async (n, f) => { try { await f(); results.push
     assert.strictEqual(await card('בן').locator('.wg-x .li').count(), 1);
   });
   await step('לחיצה כפולה על ״שמור הוצאה״ לא רושמת פעמיים, ואין שגיאות דף', async () => {
-    await p.click('.band button:has-text("הוצאות של גובה")'); await p.click('#w-x-new'); await p.waitForSelector('#xf-c');
-    await p.fill('#xf-c', 'בנימין'); await p.fill('#xf-a', '25'); await p.fill('#xf-n', 'קפה'); await p.locator('#xf-save').dblclick(); await p.waitForTimeout(800);
+    await p.click('.band button:has-text("הוצאות של גובה")'); await p.waitForSelector('.xc-row');
+    await p.fill('.xc-row [data-xf="c"]', 'בנימין'); await p.fill('.xc-row [data-xf="a"]', '25'); await p.fill('.xc-row [data-xf="n"]', 'קפה'); await p.locator('.xc-row [data-xsave]').dblclick(); await p.waitForTimeout(800);
     assert.strictEqual((await api('GET', '/api/accounts/' + W)).expenses.filter(x => x.n === 'קפה').length, 1);
     await p.screenshot({ path: path.join(os.tmpdir(), 'day-expense-iphone.png') }); assert.deepStrictEqual(p.errs, []);
   });
