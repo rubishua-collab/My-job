@@ -65,6 +65,7 @@ function staticPath(p) {
   if (p === '/data/foods-world.json') return S.WORLD_FILE;
   if (p === '/privacy' || p === '/privacy/') return path.join(ROOT, 'public', 'privacy.html');
   if (p === '/accessibility' || p === '/accessibility/') return path.join(ROOT, 'public', 'accessibility.html');
+  if (p === '/support' || p === '/support/') return path.join(ROOT, 'public', 'support.html');
   if (p === '/delete-account' || p === '/delete-account/') return path.join(ROOT, 'public', 'delete-account.html');
   if (p === '/terms') return path.join(ROOT, 'public', 'terms.html');
   const base = p.startsWith('/shared/') ? path.join(ROOT, 'shared') : path.join(ROOT, 'public');

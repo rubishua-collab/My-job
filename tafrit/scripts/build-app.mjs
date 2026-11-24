@@ -8,7 +8,7 @@ const OUT = path.join(ROOT, 'app-www');
 const API = (process.env.APP_API_BASE || 'https://tafrit-robi.onrender.com').replace(/\/$/, '');
 if (!/^https:\/\//.test(API) && !process.env.APP_ALLOW_HTTP) throw new Error('APP_API_BASE חייב להיות https');
 fs.rmSync(OUT, { recursive: true, force: true });
-fs.cpSync(path.join(ROOT, 'public'), OUT, { recursive: true, filter: f => !/\/(sw\.js|privacy\.html|delete-account\.html|accessibility\.html)$/.test(f) });
+fs.cpSync(path.join(ROOT, 'public'), OUT, { recursive: true, filter: f => !/\/(sw\.js|privacy\.html|delete-account\.html|accessibility\.html|support\.html)$/.test(f) });
 fs.cpSync(path.join(ROOT, 'shared'), path.join(OUT, 'shared'), { recursive: true });
 fs.mkdirSync(path.join(OUT, 'data'), { recursive: true });
 fs.copyFileSync(path.join(ROOT, 'data', 'foods.json'), path.join(OUT, 'data', 'foods.json'));
