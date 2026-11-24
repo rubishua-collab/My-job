@@ -494,7 +494,7 @@ const COLS = {
 const LIST_NAMES = { rows: 'שורות גבייה (ריבית/קרן)', loans: 'הלוואות שיצאו', entries: 'שורות', records: 'לקוחות', expenses: 'הוצאות' };
 function renderEditor(ctx) {
   const a = structuredClone(ctx.a); const { view } = ctx; const spec = COLS[a.kind];
-  const openMg = new Set();
+  const openMg = new Set(); let edCgOpen = true;
   // חיפוש לפי שם הלקוח ברשימת ״איסוף יום״: מסתיר שורות שלא מתאימות (בלי לצייר מחדש — המקלדת לא נסגרת).
   // השורות עצמן לא משתנות: עריכה בתוצאה מעדכנת את השורה המקורית, ו״שמור״ שומר את כל הרשימה.
   const edQ = {}; const searchable = (li) => a.kind === 'work' && li === 'entries';
@@ -534,7 +534,8 @@ function renderEditor(ctx) {
     if (t === 'k') return `<select class="in" data-l="${li}" data-r="${ri}" data-k="${k}"><option value="d" ${v !== 'e' ? 'selected' : ''}>חוב</option><option value="e" ${v === 'e' ? 'selected' : ''}>הוצאה</option></select>`;
     if (t === 'h') return `<select class="in" data-l="${li}" data-r="${ri}" data-k="${k}"><option></option><option ${v === 'קשה' ? 'selected' : ''}>קשה</option><option ${v === 'לא קשה' ? 'selected' : ''}>לא קשה</option></select>`;
     if (t === 'b') return `<input type="checkbox" data-l="${li}" data-r="${ri}" data-k="${k}" ${v ? 'checked' : ''}>`;
-    return `<input class="in ${t === 'n' ? 'n' : ''}" ${t === 'n' ? 'inputmode="decimal"' : ''} data-l="${li}" data-r="${ri}" data-k="${k}" value="${esc(v)}">`;
+    const extra = k === 'c' ? ' list="ed-colls" autocomplete="off"' : (k === 'n' && a.kind === 'collectors' && r.k === 'e' ? ' placeholder="תיאור ההוצאה (שליח, דלק…)"' : '');
+    return `<input class="in ${t === 'n' ? 'n' : ''}" ${t === 'n' ? 'inputmode="decimal"' : ''}${extra} data-l="${li}" data-r="${ri}" data-k="${k}" value="${esc(v)}">`;
   };
   // עדכון הסיכום בלבד (בלי לצייר מחדש את הטבלה, כדי לא לאבד את מה שמקלידים)
   const summary = () => {
@@ -546,10 +547,15 @@ function renderEditor(ctx) {
       const cy = $('#ed-carry', view); if (cy) cy.onclick = () => { a.keren = pv.final; $('#ed-keren', view).value = pv.final; summary(); };
     } else if (a.kind === 'work') { const c = calcWork((a.entries || []).filter(e => e && (e.n || e.a))); el.innerHTML = `<div class="note info">צפוי ${money(c.total)} · נגבה ${money(c.gotTotal)} · הוצאות ${money(sum(wExpList(a).map(x => x.a)))}</div>`; }
     else if (a.kind === 'split') { const c = calcSplit(a.records || []); el.innerHTML = `<div class="note info">${customerCount(a.records)} לקוחות · סה״כ גובים ${money(c.grand)} · סה״כ הכול ${money(c.all)}</div>`; const h = $('#ed-h-records', view); if (h) h.textContent = `${LIST_NAMES.records} (${customerCount(a.records)})`; $$('tr.mghead', view).forEach(tr => { const g = mgGroups(a.records).get(tr.dataset.mg); const s = tr.querySelector('.mgsum'); if (g && s) s.innerHTML = money(mgTotal(g)); }); }
-    else if (a.kind === 'collectors') { const c = calcCollectors(a.entries || []); el.innerHTML = `<div class="note info">חובות ${money(c.totalDebts)} · הוצאות ${money(c.totalExp)} · נטו ${money(c.totalNet)}</div>`; }
+    else if (a.kind === 'collectors') {
+      const c = calcCollectors((a.entries || []).filter(e => e && (e.n || num(e.a) || e.k === 'e')));
+      el.innerHTML = `<div class="note info" id="ed-ctot">חובות ${money(c.totalDebts)} · הוצאות ${money(c.totalExp)} · נטו ${money(c.totalNet)}</div>
+        <details class="ed-cg" ${edCgOpen ? 'open' : ''}><summary>סיכום לפי גובה (${c.groups.length})</summary><div class="tbl-wrap"><table><thead><tr><th>גובה</th><th class="a">חובות</th><th class="a">הוצאות</th><th class="a">נטו</th></tr></thead><tbody>${c.groups.map(g => `<tr data-cg="${esc(g.c)}"><td>${esc(g.c)}</td><td class="a">${money(g.debtTotal)}</td><td class="a">${money(g.expTotal)}</td><td class="a"><b>${money(g.net)}</b></td></tr>`).join('')}</tbody></table></div></details>`;
+      const d = $('.ed-cg', el); if (d) d.ontoggle = () => { edCgOpen = d.open; };
+    }
   };
   // פיצול: חובות מאוחדים (mg) מוצגים כשורה אחת של הלקוח עם ״פירוט חובות״; כל חוב נשאר שורה עם הגובה שלו
-  const rowTr = (r, ri, li, cols, cls = '') => `<tr class="${cls}"><td>${ri + 1}${r.pp ? `<div class="pill acc" title="חלק של חוב שפוצל">חלק ${esc(r.pp)}</div>` : ''}</td>${cols.map(c => `<td>${cell(r, c, li, ri)}</td>`).join('')}<td class="rowacts">${a.kind === 'split' && li === 'records' ? `<button type="button" class="btn ghost sm" data-spl="${ri}">פצל חוב</button>` : ''}<button class="x" data-del="${li}|${ri}" aria-label="מחק">×</button></td></tr>`;
+  const rowTr = (r, ri, li, cols, cls = '') => `<tr class="${cls}${a.kind === 'collectors' && r.k === 'e' ? ' exp-row' : ''}"><td>${ri + 1}${a.kind === 'collectors' && r.k === 'e' ? '<div class="pill warn exp-tag">הוצאה</div>' : ''}${r.pp ? `<div class="pill acc" title="חלק של חוב שפוצל">חלק ${esc(r.pp)}</div>` : ''}</td>${cols.map(c => `<td>${cell(r, c, li, ri)}</td>`).join('')}<td class="rowacts">${a.kind === 'split' && li === 'records' ? `<button type="button" class="btn ghost sm" data-spl="${ri}">פצל חוב</button>` : ''}<button class="x" data-del="${li}|${ri}" aria-label="מחק">×</button></td></tr>`;
   const tbody = (li, cols) => {
     const list = a[li] || [];
     if (!(a.kind === 'split' && li === 'records')) return list.map((r, ri) => rowTr(r, ri, li, cols)).join('');
@@ -572,7 +578,7 @@ function renderEditor(ctx) {
     <div class="card"><div class="grid"><label class="f">תאריך<input class="in" type="date" id="ed-date" value="${esc(a.date)}"></label><label class="f">כותרת<input class="in" id="ed-title" value="${esc(a.title)}"></label>
     ${a.kind === 'morning' ? `<label class="f">קרן קיימת<input class="in n" id="ed-keren" inputmode="decimal" value="${esc(a.keren ?? '')}"></label><label class="f">משלוחים<input class="in n" id="ed-courier" inputmode="decimal" value="${esc(a.courier ?? '')}"></label>` : ''}</div>
     <div id="ed-sum"></div></div>
-    ${Object.entries(spec).map(([li, cols]) => `<div class="card"><div class="row sp"><h2 id="ed-h-${li}">${LIST_NAMES[li]} (${a.kind === 'split' && li === 'records' ? customerCount(a[li]) : (a[li] || []).length})</h2><div class="row"><button class="btn ghost sm" data-paste="${li}">הדבקה מאקסל</button><button class="btn sm" data-add="${li}">+ שורה</button></div></div>
+    ${Object.entries(spec).map(([li, cols]) => `<div class="card"><div class="row sp"><h2 id="ed-h-${li}">${LIST_NAMES[li]} (${a.kind === 'split' && li === 'records' ? customerCount(a[li]) : (a[li] || []).length})</h2><div class="row" style="flex-wrap:wrap;gap:6px"><button class="btn ghost sm" data-paste="${li}">הדבקה מאקסל</button><button class="btn sm" data-add="${li}">+ שורה</button>${a.kind === 'collectors' && li === 'entries' ? `<button class="btn sm exp-add" data-addx="${li}">+ הוצאה</button>` : ''}</div></div>
       ${searchable(li) ? `<div class="edsearch" role="search"><input class="in" type="search" data-edq="${li}" value="${esc(edQ[li] || '')}" placeholder="חיפוש לפי שם הלקוח" aria-label="חיפוש לפי שם הלקוח" dir="rtl" inputmode="search" enterkeyhint="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"><button type="button" class="edq-x" data-edqx="${li}" aria-label="נקה חיפוש" ${edQ[li] ? '' : 'hidden'}>נקה חיפוש</button></div>` : ''}
       <div class="tbl-wrap"><table data-tl="${li}"><thead><tr><th>#</th>${cols.map(c => `<th>${c[1]}</th>`).join('')}<th></th></tr></thead><tbody>${tbody(li, cols)}</tbody></table></div>${searchable(li) ? `<div class="empty edq-empty" data-edqe="${li}" hidden>לא נמצאו שורות בשם הזה</div>` : ''}</div>`).join('')}
     ${(R.editorActions[a.kind] || []).length ? `<div class="card row">${R.editorActions[a.kind].map((x, i) => `<button class="btn ghost" data-eact="${i}">${esc(x.label)}</button>`).join('')}</div>` : ''}
@@ -582,6 +588,15 @@ function renderEditor(ctx) {
     $$('[data-edq]', view).forEach(inp => { inp.addEventListener('input', () => { edQ[inp.dataset.edq] = inp.value; applyQ(inp.dataset.edq); }); inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } }); applyQ(inp.dataset.edq); });
     $$('[data-edqx]', view).forEach(b => b.onclick = () => { const li = b.dataset.edqx; edQ[li] = ''; const inp = $(`[data-edq="${li}"]`, view); inp.value = ''; applyQ(li); inp.focus(); });
     $$('[data-l], #ed-date, #ed-title, #ed-keren, #ed-courier', view).forEach(i => i.addEventListener('input', touch));
+    $$('[data-addx]', view).forEach(b => b.onclick = () => {
+      const li = b.dataset.addx; touch(); (a[li] ||= []).push({ n: '', a: 0, c: '', k: 'e', t: '' }); drawE();
+      const ins = $$(`[data-l="${li}"][data-k="n"]`, view); const last = ins[ins.length - 1]; if (last) { last.scrollIntoView({ block: 'center' }); last.focus(); }
+    });
+    // הסכום והגובה מתעדכנים בסיכום כבר בזמן ההקלדה (בלי לצייר את הטבלה מחדש)
+    $$('[data-l][data-k="a"], [data-l][data-k="c"]', view).forEach(inp => inp.addEventListener('input', () => { const r = a[inp.dataset.l][+inp.dataset.r]; if (!r) return; r[inp.dataset.k] = inp.dataset.k === 'a' ? (inp.value === '' ? 0 : num(inp.value)) : inp.value; summary(); }));
+    $$('select[data-l][data-k="k"]', view).forEach(sel => sel.addEventListener('change', () => { setTimeout(() => { const y = window.scrollY; drawE(); window.scrollTo(0, y); }, 0); }));
+    if (!$('#ed-colls', view)) view.insertAdjacentHTML('beforeend', '<datalist id="ed-colls"></datalist>');
+    import('./expense-form.js').then(m => m.collectorsList()).then(list => { const dl = $('#ed-colls', view); if (dl && !dl.children.length) dl.innerHTML = list.map(c => `<option value="${esc(c)}"></option>`).join(''); }).catch(() => {});
     $$('[data-l]', view).forEach(inp => inp.onchange = () => { touch(inp.tagName === 'INPUT' && inp.type !== 'checkbox');
       const r = a[inp.dataset.l][+inp.dataset.r]; const k = inp.dataset.k; const col = spec[inp.dataset.l].find(c => c[0] === k);
       let v = inp.type === 'checkbox' ? inp.checked : inp.value;
