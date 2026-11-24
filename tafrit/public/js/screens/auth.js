@@ -3,6 +3,7 @@ import { route, go } from '../app.js';
 import { D, refresh } from '../data.js';
 import { save, setToken, isApp, apiUrl } from '../api.js';
 import { $, esc, toast } from '../ui.js';
+import { STATEMENT_URL } from '../a11y.js';
 
 export const PRIVACY_URL = () => apiUrl('/privacy');
 const kind = () => isApp() ? 'bearer' : 'cookie';
@@ -22,7 +23,7 @@ export function privacySummaryHtml() {
     <a href="${esc(PRIVACY_URL())}" target="_blank" rel="noopener">מדיניות הפרטיות המלאה ↗</a></div>`;
 }
 
-const shell = (title, body) => `<div class="stack" style="padding-top:6vh"><div class="row" style="gap:12px"><img src="/icons/icon-192.png" alt="" width="52" height="52" style="border-radius:14px"><div><h1>תפריט יומי רובי</h1><div class="muted small">${esc(title)}</div></div></div>${body}</div>`;
+const shell = (title, body) => `<div class="stack" style="padding-top:6vh"><div class="row" style="gap:12px"><img src="/icons/icon-192.png" alt="" width="52" height="52" style="border-radius:14px"><div><h1>תפריט יומי רובי</h1><div class="muted small">${esc(title)}</div></div></div>${body}<p class="small" style="text-align:center"><a href="${esc(STATEMENT_URL)}" target="_blank" rel="noopener">הצהרת נגישות</a> · <a href="${esc(PRIVACY_URL())}" target="_blank" rel="noopener">מדיניות פרטיות</a></p></div>`;
 
 route('welcome', async (el) => {
   el.innerHTML = shell('תזונה אישית: יעדים, יומן, שקילות ומלווה', `

@@ -46,7 +46,7 @@ route('chat', async (el) => {
   el.innerHTML = `<div class="top"><div><h1>מלווה התזונה שלי</h1><div class="sub"><span class="ai-badge">עוזר AI</span> ${D.session.ai ? '' : '· מצב בסיסי (בלי חיבור ל-Claude)'}</div></div><button class="btn xs plain" data-clear>ניקוי</button></div>
     <div class="chat" id="msgs">${msgs.length ? msgs.map(msgHtml).join('') : `<div class="msg a">שלום! אני רואה את הפרופיל, היעדים והיומן שלך. אפשר לשאול מה לאכול, לרשום שקילה ("הבוקר שקלתי 119.8") או לשאול למה היעד נקבע כך. הכמויות שאציע מחושבות מול המאגר, כמו ביומן.</div>`}</div>
     <div class="composer"><div class="quick">${QUICK.map(q => `<button class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
-      <form class="row" id="cf"><input class="in grow" id="ci" placeholder="כתוב למלווה…" autocomplete="off" enterkeyhint="send"><button class="btn" id="cs" aria-label="שלח">שלח</button></form></div>`;
+      <form class="row" id="cf"><input class="in grow" id="ci" aria-label="הודעה למלווה" placeholder="כתוב למלווה…" autocomplete="off" enterkeyhint="send"><button class="btn" id="cs" aria-label="שלח">שלח</button></form></div>`;
   const box = $('#msgs', el);
   const scroll = () => window.scrollTo(0, document.body.scrollHeight);
   scroll();

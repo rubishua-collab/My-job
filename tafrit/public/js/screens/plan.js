@@ -144,7 +144,7 @@ route('plan-change', async (el, [mode, baseId]) => {
       <h3 style="margin-top:14px">מתי להתחיל?</h3>
       <div class="opts" data-opts="start"><button type="button" class="opt ${w.start === today() ? 'on' : ''}" data-v="${today()}"><b>היום</b><small>מה שכבר אכלת היום נשמר, והיתרה תחושב לפי היעד החדש</small></button>
         <button type="button" class="opt ${w.start === addDays(today(), 1) ? 'on' : ''}" data-v="${addDays(today(), 1)}"><b>מחר</b></button>
-        <button type="button" class="opt ${![today(), addDays(today(), 1)].includes(w.start) ? 'on' : ''}" data-v="custom"><b>בתאריך שאבחר</b><input class="in" type="date" id="sd" min="${today()}" value="${w.startCustom}" style="margin-top:8px"></button></div>
+        <button type="button" class="opt ${![today(), addDays(today(), 1)].includes(w.start) ? 'on' : ''}" data-v="custom"><b>בתאריך שאבחר</b><input class="in" type="date" id="sd" aria-label="תאריך התחלה" min="${today()}" value="${w.startCustom}" style="margin-top:8px"></button></div>
       <label class="row small" style="gap:8px;margin-top:10px"><input type="checkbox" id="aps" ${w.applySample ? 'checked' : ''} style="width:22px;height:22px">להוסיף את היום לדוגמה לתכנון של יום ההתחלה (רק בארוחות ריקות)</label>`;
   }
 

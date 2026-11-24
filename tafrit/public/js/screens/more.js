@@ -8,6 +8,7 @@ import { $, esc, n0, toast, on, openSheet, confirmSheet } from '../ui.js';
 import { openRecipe, openCustomForm, openUsda, openFoodDetail, foodRow, openFixedMeal } from './food.js';
 import { sourcesHtml } from './targets.js';
 import { openEatingProfile } from './eating.js';
+import { STATEMENT_URL } from '../a11y.js';
 import { SOURCES } from '/shared/sources.js';
 import { nutrients, manualFood } from '/shared/foods.js';
 import { savedAt } from '/shared/dates.js';
@@ -33,6 +34,7 @@ route('more', async (el) => {
       ${D.session.ai ? `<li class="li" data-sec="ai"><div class="m"><b>מלווה חכם (ספק AI חיצוני)</b><small>${D.session.user.aiConsent ? 'מאושר — אפשר לבטל' : 'לא מאושר — המלווה עובד במצב בסיסי'}</small></div><div class="a">›</div></li>` : ''}
       <li class="li" data-sec="password"><div class="m"><b>שינוי סיסמה</b></div><div class="a">›</div></li>
       <li class="li" data-sec="privacy"><div class="m"><b>פרטיות — מה נשמר ומי רואה</b></div><div class="a">›</div></li>
+      <li class="li" data-sec="a11y"><div class="m"><b>הצהרת נגישות</b><small>התאמות הנגישות באפליקציה ופרטי רכז הנגישות</small></div><div class="a">›</div></li>
       <li class="li" data-sec="logout"><div class="m"><b>התנתקות</b><small>המידע המקומי במכשיר יימחק</small></div><div class="a">›</div></li>
       <li class="li" data-sec="logoutAll"><div class="m"><b>התנתקות מכל המכשירים</b></div><div class="a">›</div></li>
       <li class="li" data-sec="deleteAcc"><div class="m"><b style="color:var(--danger)">מחיקת החשבון וכל המידע</b><small>לא ניתן לשחזר</small></div><div class="a">›</div></li>
@@ -49,6 +51,7 @@ const SECTIONS = {
     on(s.el, '[data-ok]', 'click', async () => { try { await save('POST', '/api/account/password', { current: $('#c', s.el).value, password: $('#n', s.el).value }); s.close(); toast('הסיסמה עודכנה'); } catch {} });
   },
   privacy() { openSheet({ title: 'פרטיות', body: privacySummaryHtml() }); },
+  a11y() { window.open(STATEMENT_URL, '_blank', 'noopener'); },
   logout() { logout(); },
   async logoutAll() { if (await confirmSheet('להתנתק מכל המכשירים?', '<p>כל המכשירים שמחוברים לחשבון יתנתקו, כולל זה.</p>', 'התנתק')) logout({ all: true }); },
   deleteAcc() {

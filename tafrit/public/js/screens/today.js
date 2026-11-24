@@ -143,7 +143,7 @@ function openEaten(date, slot, done) {
 }
 function openEditAmounts(date, slot, done) {
   const es = entriesOn(date).filter(x => x.meal === slot);
-  const s = openSheet({ title: 'ערוך כמות', body: `<ul class="list">${es.map(x => { const f = foodOf(x); return `<li class="li"><div class="m"><b>${esc(COMPONENTS[x.comp]?.name || f.n)}</b><small>${x.status === 'eaten' ? 'נאכל' : 'מתוכנן'} · ${esc(qtyText(f, x.grams, x.unit, x.qty))}</small></div><input class="in" style="width:96px" data-g="${x.id}" inputmode="decimal" value="${n0(x.grams)}"><span class="small">ג׳</span></li>`; }).join('')}</ul><div id="edp" class="note"></div>`, foot: '<button class="btn" data-ok>שמור כמויות</button>' });
+  const s = openSheet({ title: 'ערוך כמות', body: `<ul class="list">${es.map(x => { const f = foodOf(x); return `<li class="li"><div class="m"><b>${esc(COMPONENTS[x.comp]?.name || f.n)}</b><small>${x.status === 'eaten' ? 'נאכל' : 'מתוכנן'} · ${esc(qtyText(f, x.grams, x.unit, x.qty))}</small></div><input class="in" style="width:96px" data-g="${x.id}" inputmode="decimal" aria-label="גרמים" value="${n0(x.grams)}"><span class="small">ג׳</span></li>`; }).join('')}</ul><div id="edp" class="note"></div>`, foot: '<button class="btn" data-ok>שמור כמויות</button>' });
   const upd = () => { let k = 0, p = 0; $$('[data-g]', s.el).forEach(i => { const x = es.find(y => y.id === i.dataset.g); const n = nutrients(foodOf(x), +i.value.replace(',', '.') || 0); k += n.kcal; p += n.protein; }); $('#edp', s.el).innerHTML = `סה״כ בארוחה: <b>${n0(k)}</b> קק״ל · <b>${n1(p)}</b> ג׳ חלבון`; };
   s.el.addEventListener('input', upd); upd();
   on(s.el, '[data-ok]', 'click', async () => {
@@ -210,7 +210,7 @@ const swapNotes = o => (o.why || []).filter(w => /^הוחלף|הוצא מהמנ�
 /** כרטיס ארוחה. key — מזהה הכרטיס בחלון (למשל "d0" ביום שלם, "s1" בהצעות). ui = { open: מספר הפריט שפתוח להחלפה, more, choices } */
 export function suggestionHtml(o, key, ui = {}, { addLabel = 'הוסף לתכנון', alts = null, altIdx = 0, swap = true } = {}) {
   return `<div class="sugg" data-opt="${key}">
-    ${alts ? `<div class="seg" style="margin-bottom:8px">${alts.map((a, i) => `<button type="button" data-alt="${key}|${i}" class="${i === altIdx ? 'on' : ''}">${ALT_LABEL[famGroup(a.fam)] || esc(a.name)}</button>`).join('')}</div>` : ''}
+    ${alts ? `<div class="seg" style="margin-bottom:8px">${alts.map((a, i) => `<button type="button" data-alt="${key}|${i}" class="${i === altIdx ? 'on' : ''}" aria-pressed="${i === altIdx}">${ALT_LABEL[famGroup(a.fam)] || esc(a.name)}</button>`).join('')}</div>` : ''}
     <div class="hd"><b data-name class="dish">${esc(o.name)}</b></div>
     ${o.desc ? `<p class="desc">${esc(o.desc)}</p>` : ''}
     <ul class="sitems">${o.items.map((i, j) => `<li class="si"><div class="m"><b>${esc(i.name)}</b><small>${amtLine(i)}<br>${macroLine(i)}</small></div>${swap && SWAP_LABEL[i.role] ? `<button type="button" class="btn xs soft swb" data-sw="${key}|${j}" aria-expanded="${ui.open === j}">${SWAP_LABEL[i.role]}</button>` : ''}</li>
@@ -226,11 +226,11 @@ function choiceHtml(key, j, c, o) {
   if (c.variants?.length > 1) return `<div class="swo eggs" data-group="${c.group}">${tag}<b>ביצים — בחר צורת הכנה</b>
     <div class="row wrap" style="gap:6px;margin-top:6px">${c.variants.map(v => `<button type="button" class="btn xs soft" data-pick="${key}|${j}|${esc(v.key)}" title="${esc(v.item.name)}">${esc(v.label)} · ${esc(amtText(v.item))} · ${n0(v.item.kcal)} קק״ל</button>`).join('')}</div>
     <small>${macroLine(c.item)} (${esc(c.variants[0].label)})<br>${meal}</small></div>`;
-  return `<button type="button" class="swo" role="option" data-group="${c.group || ''}" data-pick="${key}|${j}|${esc(c.key)}">${tag}<b>${esc(c.item.name)}</b><small>${amtLine(c.item)}<br>${macroLine(c.item)}${c.note ? `<br><span class="warn">${esc(c.note)}</span>` : ''}<br>${meal}</small></button>`;
+  return `<button type="button" class="swo" data-group="${c.group || ''}" data-pick="${key}|${j}|${esc(c.key)}">${tag}<b>${esc(c.item.name)}</b><small>${amtLine(c.item)}<br>${macroLine(c.item)}${c.note ? `<br><span class="warn">${esc(c.note)}</span>` : ''}<br>${meal}</small></button>`;
 }
 function swapPanel(key, j, ui, o) {
   const N = 6; const list = ui.more ? ui.choices : ui.choices.slice(0, N);
-  return `<li class="swp" role="listbox" aria-label="תחליפים">${list.length ? list.map(c => choiceHtml(key, j, c, o)).join('') : '<div class="small muted">אין תחליף מתאים מהרשימה — אפשר לחפש במאגר.</div>'}
+  return `<li class="swp"><div role="group" aria-label="תחליפים">${list.length ? list.map(c => choiceHtml(key, j, c, o)).join('') : '<div class="small muted">אין תחליף מתאים מהרשימה — אפשר לחפש במאגר.</div>'}</div>
     <div class="row" style="gap:6px;margin-top:6px">${!ui.more && ui.choices.length > N ? `<button type="button" class="btn xs plain grow" data-more="${key}">הצג עוד (${ui.choices.length - N})</button>` : ''}<button type="button" class="btn xs plain grow" data-db="${key}|${j}">חיפוש במאגר</button><button type="button" class="btn xs plain" data-swclose="${key}">סגור</button></div></li>`;
 }
 /** על מה מבוססת הבחירה — מקורות שאפשר לפתוח */
@@ -242,33 +242,35 @@ export async function plannerSourcesHtml() {
  * החלפות בתוך כרטיסים: cards = Map(key → { opt, slot, alts?, altIdx?, seen }). אחרי כל בחירה — שם, רכיבים וסיכומים מחושבים מחדש (redraw).
  * other(key) — מנה חדשה לאותה ארוחה ("הצע מנה אחרת"); dayFams(key) — מקורות החלבון של שאר היום.
  */
-function bindSwaps(root, cards, { date, redraw, other, dayFams }) {
+function bindSwaps(root, cards, { date, redraw: draw0, other, dayFams }) {
   const ui = new Map(); // key → { open, more, choices }
+  // אחרי ציור מחדש הפוקוס עובר לכפתור המתאים (נגישות מקלדת וקורא מסך)
+  const redraw = focusSel => { draw0(); if (focusSel) requestAnimationFrame(() => root.querySelector(focusSel)?.focus({ preventScroll: false })); };
   const setOpt = (c, o) => { c.opt = o; if (c.alts) c.alts[c.altIdx] = o; };
   on(root, '[data-sw]', 'click', (e, b) => {
     const [key, j] = b.dataset.sw.split('|'); const c = cards.get(key); const u = ui.get(key);
-    if (u?.open === +j) { ui.delete(key); return redraw(); }
+    if (u?.open === +j) { ui.delete(key); return redraw(`[data-sw="${key}|${j}"]`); }
     const fc = familyContext({ entries: D.state.entries, foods: D.foods, date, slot: c.slot });
-    ui.set(key, { open: +j, more: false, choices: swapChoices(c.opt, +j, { foods: D.foods, profile: profile(date), dayFams: dayFams(key), weekFams: fc.weekFams }) }); redraw();
+    ui.set(key, { open: +j, more: false, choices: swapChoices(c.opt, +j, { foods: D.foods, profile: profile(date), dayFams: dayFams(key), weekFams: fc.weekFams }) }); redraw(`[data-opt="${key}"] .swp button`);
   });
-  on(root, '[data-more]', 'click', (e, b) => { ui.get(b.dataset.more).more = true; redraw(); });
-  on(root, '[data-swclose]', 'click', (e, b) => { ui.delete(b.dataset.swclose); redraw(); });
+  on(root, '[data-more]', 'click', (e, b) => { ui.get(b.dataset.more).more = true; redraw(`[data-opt="${b.dataset.more}"] .swp [data-db]`); });
+  on(root, '[data-swclose]', 'click', (e, b) => { const k = b.dataset.swclose; const j = ui.get(k)?.open; ui.delete(k); redraw(`[data-sw="${k}|${j}"]`); });
   on(root, '[data-pick]', 'click', (e, b) => {
     const [key, j, ck] = b.dataset.pick.split('|'); const c = cards.get(key);
     const ch = ui.get(key).choices.flatMap(x => [x, ...(x.variants || [])]).find(x => x.key === ck);
-    setOpt(c, applySwap(c.opt, +j, ch.item, { drop: ch.drops || [] })); ui.delete(key); redraw();
+    setOpt(c, applySwap(c.opt, +j, ch.item, { drop: ch.drops || [] })); ui.delete(key); redraw(`[data-sw="${key}|${j}"]`);
   });
   on(root, '[data-db]', 'click', (e, b) => {
     const [key, j] = b.dataset.db.split('|'); const c = cards.get(key); const old = c.opt.items[+j];
     openFoodPicker({ title: SWAP_LABEL[old.role] + ' — חיפוש במאגר', onPick: f => { setOpt(c, applySwap(c.opt, +j, substituteFood(old, f))); ui.delete(key); redraw(); } });
   });
-  on(root, '[data-alt]', 'click', (e, b) => { const [key, i] = b.dataset.alt.split('|'); const c = cards.get(key); c.altIdx = +i; c.opt = c.alts[+i]; ui.delete(key); redraw(); });
+  on(root, '[data-alt]', 'click', (e, b) => { const [key, i] = b.dataset.alt.split('|'); const c = cards.get(key); c.altIdx = +i; c.opt = c.alts[+i]; ui.delete(key); redraw(`[data-alt="${key}|${i}"]`); });
   on(root, '[data-other]', 'click', (e, b) => {
     const key = b.dataset.other; const c = cards.get(key); c.seen.add(c.opt.templateId);
     let o = other(key, c.seen);
     if (!o) { c.seen.clear(); c.seen.add(c.opt.templateId); o = other(key, c.seen); } // עברנו על כל המנות — מתחילים סבב חדש
     if (!o) return toast('אין מנה נוספת שמתאימה ליעד');
-    c.alts = null; c.opt = o; ui.delete(key); redraw();
+    c.alts = null; c.opt = o; ui.delete(key); redraw(`[data-other="${key}"]`);
   });
   return ui;
 }
@@ -315,7 +317,7 @@ async function openSuggest(date, slot, done) {
   const draw = () => {
     const opts = [...cards.entries()];
     $('#sg', s.el).innerHTML = `<div class="note">נשארו להיום: <b>${n0(b.remain.kcal)}</b> קק״ל, <b>${n0(b.remain.protein)}</b> ג׳ חלבון. לארוחה הזו: כ-<b>${n0(b.kcal)}</b> קק״ל ו-<b>${n0(b.protein)}</b> ג׳ חלבון.</div>${lastMainNote ? `<div class="note ok" style="margin-top:8px">${esc(lastMainNote)}</div>` : ''}
-      <form id="pf" class="row" style="margin:10px 0"><input class="in grow" id="pt" value="${esc(pantry)}" placeholder="יש לי בבית… (ביצים, קוטג׳, פיתה)"><button class="btn sm">מה אפשר?</button></form>
+      <form id="pf" class="row" style="margin:10px 0"><input class="in grow" id="pt" aria-label="מה יש לי בבית" value="${esc(pantry)}" placeholder="יש לי בבית… (ביצים, קוטג׳, פיתה)"><button class="btn sm">מה אפשר?</button></form>
       <label class="row small" style="gap:8px;margin-bottom:10px"><input type="checkbox" id="nc" ${noCook ? 'checked' : ''} style="width:22px;height:22px"> בלי לבשל</label>
       ${pk ? `<p class="small">זיהיתי: ${pk.map(k => esc(COMPONENTS[k].name)).join(', ') || '—'}</p>` : ''}
       ${opts.length ? opts.map(([k, c]) => suggestionHtml(c.opt, k, ui.get(k))).join('') : '<div class="empty-state">לא מצאתי הצעה שמתאימה. נסה בלי סינון או הוסף מוצרים.</div>'}

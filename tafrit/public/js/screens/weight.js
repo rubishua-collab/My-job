@@ -92,7 +92,7 @@ route('weight', async (el) => {
   on(el, '[data-weigh]', 'click', () => openWeightSheet({ onSaved: redraw }));
   on(el, '[data-w]', 'click', (e, li) => {
     const w = D.state.weights.find(x => x.date === li.dataset.w);
-    const s = openSheet({ title: `שקילה ${dmy(w.date)}`, body: `<input class="in big" id="ek" inputmode="decimal" value="${w.kg}"><p class="saved">נוצר ${esc(savedAt(w.createdAt))} · עודכן ${esc(savedAt(w.updatedAt))}</p><div id="wh"></div>`, foot: '<button class="btn danger" data-del>מחק</button><button class="btn" data-ok>שמור תיקון</button>' });
+    const s = openSheet({ title: `שקילה ${dmy(w.date)}`, body: `<input class="in big" id="ek" inputmode="decimal" aria-label="משקל בק״ג" value="${w.kg}"><p class="saved">נוצר ${esc(savedAt(w.createdAt))} · עודכן ${esc(savedAt(w.updatedAt))}</p><div id="wh"></div>`, foot: '<button class="btn danger" data-del>מחק</button><button class="btn" data-ok>שמור תיקון</button>' });
     get('/api/weights/' + w.date + '/history').then(h => { $('#wh', s.el).innerHTML = h.length > 1 ? `<div class="small muted">היסטוריה: ${h.map(x => `${x.after ? x.after.kg : 'נמחק'} (${esc(savedAt(x.at))})`).join(' ← ')}</div>` : ''; }).catch(() => {});
     on(s.el, '[data-ok]', 'click', async () => { const v = +$('#ek', s.el).value.replace(',', '.'); if (!(v >= 30 && v <= 350)) return toast('משקל לא תקין'); await save('PUT', '/api/weights/' + w.date, { kg: v }); s.close(); toast('השקילה תוקנה — נספרת פעם אחת'); redraw(); });
     on(s.el, '[data-del]', 'click', async () => { if (!(await confirmSheet('למחוק שקילה?', `<p>${dmy(w.date)}: ${kg(w.kg)} ק״ג</p>`, 'מחק'))) return; await del('/api/weights/' + w.date); s.close(); toast('נמחק'); redraw(); });

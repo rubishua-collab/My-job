@@ -16,18 +16,50 @@ export function toast(msg, ms = 2600) {
 
 /** חלון תחתון: openSheet({title, body, foot}) → {el, close, body}. כפתור "סגור" ונגיעה ברקע סוגרים */
 const stack = [];
+let sheetSeq = 0;
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), summary';
+/** נגישות: כל מה שמחוץ לחלון העליון לא פעיל לקורא מסך ולמקלדת (inert); כפתור הנגישות וההודעות נשארים */
+function syncInert() {
+  const top = stack[stack.length - 1]?.el;
+  for (const el of document.body.children) {
+    if (el === top || el.id === 'toast' || el.id === 'a11y-fab' || el.id === 'a11y-panel' || el.classList.contains('skip-link')) { el.removeAttribute('inert'); continue; }
+    if (top) el.setAttribute('inert', ''); else el.removeAttribute('inert');
+  }
+}
 export function openSheet({ title, body = '', foot = '', onClose } = {}) {
   const wrap = document.createElement('div');
   wrap.className = 'sheet-wrap';
-  wrap.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="grab"></div><div class="sh"><h2>${esc(title)}</h2><button class="iconbtn" data-x aria-label="סגור">✕</button></div><div class="sb">${body}</div>${foot ? `<div class="sf">${foot}</div>` : ''}</div>`;
+  const tid = 'sheet-title-' + (++sheetSeq);
+  wrap.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="${tid}"><div class="grab" aria-hidden="true"></div><div class="sh"><h2 id="${tid}" tabindex="-1">${esc(title)}</h2><button class="iconbtn" data-x aria-label="סגור">✕</button></div><div class="sb">${body}</div>${foot ? `<div class="sf">${foot}</div>` : ''}</div>`;
+  const opener = document.activeElement;
   document.body.appendChild(wrap);
   document.body.style.overflow = 'hidden';
-  const close = () => { wrap.remove(); stack.splice(stack.indexOf(api), 1); if (!stack.length) document.body.style.overflow = ''; onClose?.(); };
+  const close = () => {
+    wrap.remove(); stack.splice(stack.indexOf(api), 1); if (!stack.length) document.body.style.overflow = ''; syncInert();
+    // הפוקוס חוזר לכפתור שפתח את החלון (אם הוא עדיין במסך), אחרת לחלון שמתחת
+    const back = opener && document.contains(opener) && !opener.closest('[inert]') ? opener : stack[stack.length - 1]?.el.querySelector('h2');
+    try { back?.focus({ preventScroll: true }); } catch {}
+    onClose?.();
+  };
   wrap.addEventListener('click', e => { if (e.target === wrap || e.target.closest('[data-x]')) close(); });
   const api = { el: wrap, body: $('.sb', wrap), foot: $('.sf', wrap), close, set(html) { $('.sb', wrap).innerHTML = html; }, setFoot(html) { const f = $('.sf', wrap); if (f) f.innerHTML = html; } };
   stack.push(api);
+  syncInert();
+  try { $('h2', wrap).focus({ preventScroll: true }); } catch {} // הפוקוס עובר לכותרת החלון (בלי לפתוח מקלדת)
   return api;
 }
+// Esc סוגר את החלון העליון; Tab ו-Shift+Tab מסתובבים בתוכו — גם אם הפוקוס "נפל" אחרי ציור מחדש של התוכן
+document.addEventListener('keydown', e => {
+  const top = stack[stack.length - 1]; if (!top) return;
+  if (e.key === 'Escape') { if (e.target.closest?.('#a11y-panel')) return; e.preventDefault(); top.close(); return; }
+  if (e.key !== 'Tab' || e.target.closest?.('#a11y-panel')) return;
+  const wrap = top.el;
+  const f = [...wrap.querySelectorAll(FOCUSABLE)].filter(x => x.offsetParent !== null || x === document.activeElement);
+  if (!f.length) { e.preventDefault(); return; }
+  const first = f[0], last = f[f.length - 1], inside = wrap.contains(document.activeElement);
+  if (e.shiftKey && (document.activeElement === first || !inside)) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && (document.activeElement === last || !inside)) { e.preventDefault(); first.focus(); }
+});
 export function closeAllSheets() { while (stack.length) stack[stack.length - 1].close(); }
 
 export function confirmSheet(title, html, yes = 'אישור', no = 'ביטול') {

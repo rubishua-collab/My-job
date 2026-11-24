@@ -25,7 +25,7 @@ export async function render() {
   const fn = routes[name] || routes.today;
   if (signed && D.state) { try { await refresh(); } catch {} } // נתונים עדכניים בכל מעבר מסך (גם ממכשיר אחר)
   if (seq !== renderSeq) return;
-  document.querySelectorAll('.tabbar a').forEach(a => a.classList.toggle('on', a.dataset.r === name));
+  document.querySelectorAll('.tabbar a').forEach(a => { a.classList.toggle('on', a.dataset.r === name); if (a.dataset.r === name) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   $('#tabbar').hidden = !signed || name === 'onboarding';
   if (typeof cleanup === 'function') cleanup();
   cleanup = await fn(freshView(), args.map(decodeURIComponent));

@@ -43,7 +43,7 @@ route('admin', async (el, [sub, id]) => {
   const r = await get('/api/admin/users?q=' + encodeURIComponent(term));
   const sys = await get('/api/admin/system');
   el.innerHTML = `<div class="stack"><div class="top"><h1>ניהול משתמשים</h1><a class="btn xs plain" href="#/admin/audit">יומן צפיות</a></div>
-    <form id="sf" class="row"><input class="in grow" id="q" type="search" placeholder="חיפוש לפי דוא״ל" value="${esc(term)}" dir="ltr"><button class="btn">חיפוש</button></form>
+    <form id="sf" class="row"><input class="in grow" id="q" type="search" aria-label="חיפוש משתמש לפי דוא״ל" placeholder="חיפוש לפי דוא״ל" value="${esc(term)}" dir="ltr"><button class="btn">חיפוש</button></form>
     <div class="small muted">${r.total} משתמשים רשומים · מוצגים ${r.users.length}</div>
     <div class="card"><ul class="list">${r.users.map(u => `<li class="li" data-u="${u.id}"><div class="m"><b dir="ltr" style="text-align:right">${esc(u.email)}</b><small>${u.admin ? 'מנהל · ' : ''}${u.verified ? 'מאומת' : 'לא אומת'} · נרשם ${esc(savedAt(u.createdAt))}${u.lastLoginAt ? ' · כניסה אחרונה ' + esc(savedAt(u.lastLoginAt)) : ''}</small></div><div class="a">›</div></li>`).join('') || '<li class="empty-state">לא נמצאו משתמשים</li>'}</ul></div>
     <details class="how"><summary>מצב המערכת</summary><div class="small stack">

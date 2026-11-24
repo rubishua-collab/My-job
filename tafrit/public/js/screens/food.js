@@ -18,7 +18,7 @@ export function openFoodPicker({ date, meal, onAdded, onPick, title } = {}) {
   let tab = 'search';
   const s = openSheet({ title: title || 'אבחר בעצמי', body: `
     ${meal ? `<label class="field"><span>לארוחה</span><select class="in" id="fpmeal">${slots(date).map(x => `<option value="${x.id}" ${x.id === meal ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></label>` : ''}
-    <input class="in" id="fpq" type="search" placeholder="חפש מזון, מותג או מנה — למשל אורז, קוטג׳, שניצל" autocomplete="off" enterkeyhint="search">
+    <input class="in" id="fpq" type="search" aria-label="חיפוש מזון" placeholder="חפש מזון, מותג או מנה — למשל אורז, קוטג׳, שניצל" autocomplete="off" enterkeyhint="search">
     <div class="seg wrap" id="fptabs" style="margin:10px 0">${[['search', 'חיפוש'], ['fav', 'מועדפים'], ['recipes', 'מתכונים'], ['fixed', 'ארוחות קבועות'], ['mine', 'מוצר אישי'], ...(date && !onPick ? [['out', '🍔 בחוץ'], ['scan', '📷 ברקוד'], ['photo', '📷 ערכים'], ['manual', 'ידני']] : [])].map(([k, l]) => `<button type="button" data-t="${k}" class="${k === tab ? 'on' : ''}">${l}</button>`).join('')}</div>
     <div id="fpres"></div>` });
   const q = $('#fpq', s.el); const res = $('#fpres', s.el);
@@ -302,7 +302,7 @@ export function openCustomForm({ name = '', data = null, onSaved } = {}) {
 
 export function openUsda({ onSaved } = {}) {
   const s = openSheet({ title: 'USDA FoodData Central', body: `<p class="small muted">מקור משלים למזונות שאין במאגר הישראלי. החיפוש באנגלית. פריט שתבחר יישמר כמוצר אישי עם ציון המקור.</p>
-    <form id="uf" class="row"><input class="in grow" id="uq" placeholder="greek yogurt" dir="ltr"><button class="btn">חפש</button></form><div id="ur" style="margin-top:10px"></div>` });
+    <form id="uf" class="row"><input class="in grow" id="uq" aria-label="חיפוש במאגר USDA (באנגלית)" placeholder="greek yogurt" dir="ltr"><button class="btn">חפש</button></form><div id="ur" style="margin-top:10px"></div>` });
   let items = [];
   $('#uf', s.el).onsubmit = async e => {
     e.preventDefault(); $('#ur', s.el).innerHTML = '<div class="loading">מחפש…</div>';
@@ -321,7 +321,7 @@ export function openRecipe({ recipe = null, onSaved } = {}) {
     const preview = r.items.length ? recipeFood({ ...r, id: 'tmp' }, D.foods) : null;
     $('#rb', s.el).innerHTML = `<label class="field"><span>שם המתכון</span><input class="in" id="rn" value="${esc(r.name)}"></label>
       <h3>רכיבים</h3><p class="tiny muted">כלול גם שמן, רטבים ותוספות. כמויות בגרמים, כפי שנכנסו לסיר.</p>
-      <ul class="list">${r.items.map((it, i) => { const f = food(it.foodId); const n = f ? nutrients(f, it.grams) : null; return `<li class="li"><div class="m"><b>${esc(f?.n || it.foodId)}</b><small>${n ? `${n0(n.kcal)} קק״ל · ${n1(n.protein)} ג׳ חלבון` : ''}</small></div><input class="in" style="width:90px;min-height:42px" data-g="${i}" inputmode="decimal" value="${it.grams}"><button class="iconbtn" data-rm="${i}" aria-label="הסר">✕</button></li>`; }).join('')}</ul>
+      <ul class="list">${r.items.map((it, i) => { const f = food(it.foodId); const n = f ? nutrients(f, it.grams) : null; return `<li class="li"><div class="m"><b>${esc(f?.n || it.foodId)}</b><small>${n ? `${n0(n.kcal)} קק״ל · ${n1(n.protein)} ג׳ חלבון` : ''}</small></div><input class="in" style="width:90px;min-height:42px" data-g="${i}" inputmode="decimal" aria-label="כמות בגרמים" value="${it.grams}"><button class="iconbtn" data-rm="${i}" aria-label="הסר">✕</button></li>`; }).join('')}</ul>
       <button class="btn block soft" data-addi>+ הוסף רכיב</button>
       <div class="grid2" style="margin-top:12px"><label class="field"><span>משקל סופי בסיר (ג׳)</span><input class="in" id="rc" inputmode="decimal" value="${esc(r.cookedGrams || '')}" placeholder="לא חובה"></label><label class="field"><span>מספר מנות</span><input class="in" id="rs" inputmode="numeric" value="${esc(r.servings || '')}"></label></div>
       ${preview ? `<div class="card tight"><b>סה״כ במתכון:</b> ${n0(preview.total.kcal)} קק״ל · ${n0(preview.total.protein)} ג׳ חלבון<br><span class="small">ל-100 ג׳ מוכן: ${n0(preview.k)} קק״ל · ${n1(preview.p)} ג׳ חלבון${preview.u[0] ? ` · מנה ≈ ${preview.u[0][1]} ג׳` : ''}</span><div class="tiny muted">אם לא תזין משקל סופי, החישוב לפי משקל הרכיבים (${n0(preview.rawGrams)} ג׳). בישול מאדה מים, ולכן עדיף לשקול את הסיר.</div></div>` : ''}`;
@@ -344,7 +344,7 @@ export function openFixedMeal({ meal = null, onSaved } = {}) {
   const draw = () => {
     const tot = m.items.reduce((a, it) => { const f = fOf(it); if (!f) return a; const n = nutrients(f, it.grams); a.k += n.kcal; a.p += n.protein; a.c += n.carbs; a.f += n.fat; return a; }, { k: 0, p: 0, c: 0, f: 0 });
     $('#fmb', s.el).innerHTML = `<label class="field"><span>שם הארוחה</span><input class="in" id="fmn" value="${esc(m.name)}" placeholder="למשל ארוחת בוקר קבועה"></label>
-      <ul class="list">${m.items.map((it, i) => { const f = fOf(it); const n = f ? nutrients(f, it.grams) : null; const pp = f?.pp; return `<li class="li"><div class="m"><b>${esc(f?.n || 'מזון לא זמין')}</b><small>${n ? `${n0(n.kcal)} קק״ל · ${n1(n.protein)} ג׳ חלבון` : ''}</small></div><input class="in" style="width:80px;min-height:42px" data-g="${i}" inputmode="decimal" value="${pp ? (it.qty || it.grams / 100) : n0(it.grams)}"><span class="small">${pp ? esc(pp) : 'ג׳'}</span><button class="iconbtn" data-out="${i}" aria-label="הסר">✕</button></li>`; }).join('') || '<li class="empty-state">עוד אין רכיבים.</li>'}</ul>
+      <ul class="list">${m.items.map((it, i) => { const f = fOf(it); const n = f ? nutrients(f, it.grams) : null; const pp = f?.pp; return `<li class="li"><div class="m"><b>${esc(f?.n || 'מזון לא זמין')}</b><small>${n ? `${n0(n.kcal)} קק״ל · ${n1(n.protein)} ג׳ חלבון` : ''}</small></div><input class="in" style="width:80px;min-height:42px" data-g="${i}" inputmode="decimal" aria-label="כמות" value="${pp ? (it.qty || it.grams / 100) : n0(it.grams)}"><span class="small">${pp ? esc(pp) : 'ג׳'}</span><button class="iconbtn" data-out="${i}" aria-label="הסר">✕</button></li>`; }).join('') || '<li class="empty-state">עוד אין רכיבים.</li>'}</ul>
       <button class="btn block soft" data-addi>+ הוסף רכיב</button>
       ${m.items.length ? `<div class="card tight" style="margin-top:10px">סה״כ: <b>${n0(tot.k)}</b> קק״ל · חלבון ${n0(tot.p)} · פחמימה ${n0(tot.c)} · שומן ${n0(tot.f)}</div>` : ''}`;
   };
