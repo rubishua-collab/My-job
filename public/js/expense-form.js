@@ -18,7 +18,7 @@ export function matchCollectors(list, typed) {
   return { exact: exact.length === 1 ? exact[0] : null, sugg: exact.length > 1 ? exact : exact.concat(starts, inside).slice(0, 8) };
 }
 
-export async function openExpenseForm({ date, workId, onSaved }) {
+export async function openExpenseForm({ date, workId, collId, preColl, onSaved }) {
   const list = await collectorsList();
   let chosen = '';
   const s = openSheet(`<div class="hd"><h2>הוסף הוצאה</h2><button class="x" data-close>×</button></div>
@@ -36,6 +36,7 @@ export async function openExpenseForm({ date, workId, onSaved }) {
     $('#xf-sug', s.el).innerHTML = chosen ? '' : m.sugg.map(c => `<button type="button" class="chip" data-xc="${esc(c)}">${esc(c)}</button>`).join('');
   };
   inp.addEventListener('input', paint);
+  if (preColl) { inp.value = preColl; paint(); }
   $('#xf-sug', s.el).addEventListener('click', (e) => { const b = e.target.closest('[data-xc]'); if (!b) return; chosen = b.dataset.xc; inp.value = chosen; paint(); $('#xf-a', s.el).focus(); });
   const opId = uid();
   $('#xf-save', s.el).onclick = async (ev) => {
@@ -45,9 +46,9 @@ export async function openExpenseForm({ date, workId, onSaved }) {
     if (!(a > 0)) return err('חסר סכום להוצאה');
     ev.target.disabled = true; ev.target.textContent = 'שומר…';
     try {
-      const r = await save('POST', '/api/day-expense', { date, workId, c: chosen, a, n, opId }, { queue: false, label: 'הוספת הוצאה' });
+      const r = await save('POST', '/api/day-expense', { date, workId, collId, c: chosen, a, n, opId }, { queue: false, label: 'הוספת הוצאה' });
       s.close(); toast(`ההוצאה נשמרה: ${chosen} · ${n || 'הוצאה'} — ${a.toLocaleString('he-IL')} ₪`); onSaved && onSaved(r);
     } catch (e) { ev.target.disabled = false; ev.target.textContent = 'שמור הוצאה'; err('השמירה נכשלה — נסה שוב. ' + (e.network ? 'אין קליטה.' : e.message)); }
   };
-  setTimeout(() => inp.focus(), 50);
+  setTimeout(() => (preColl && chosen ? $('#xf-a', s.el) : inp).focus(), 50);
 }

@@ -28,6 +28,22 @@ export async function register(ctx) {
   const { r, err, need, can, db, getDoc, listDocs, putDoc, once, newId, now } = ctx;
   const tx = (fn) => { db.exec('BEGIN IMMEDIATE'); try { const out = fn(); db.exec('COMMIT'); return out; } catch (e) { try { db.exec('ROLLBACK'); } catch { /* */ } throw e; } };
 
+  // הסרת הוצאה משותפת: מרשימת האיסוף (expenses._k) ומחשבון הגובים (entries.xk) של אותו תאריך — יחד
+  r.post('/api/day-expense/remove', (req, res, { user, body }) => {
+    need(can.finance(user));
+    return tx(() => once(body.opId, user, () => {
+      const date = ISO.test(body.date || '') ? body.date : null, key = String(body.key || ''); if (!date || !key) throw err(400, 'חסרים פרטים');
+      let n = 0;
+      for (const d of listDocs('accounts').filter(x => x.data.date === date && (x.data.kind === 'work' || x.data.kind === 'collectors'))) {
+        const data = { ...d.data };
+        if (d.data.kind === 'work') { const before = (data.expenses || []).length; data.expenses = (data.expenses || []).filter(x => !(x && x._k === key)); if (data.expenses.length === before) continue; }
+        else { const before = (data.entries || []).length; data.entries = (data.entries || []).filter(x => !(x && (x.xk === key || x._k === key))); if (data.entries.length === before) continue; }
+        data.updatedAt = now(); putDoc('accounts', d.id, data, { user, action: 'הסרת הוצאה' }); n++;
+      }
+      return { ok: true, removed: n };
+    }));
+  });
+
   r.post('/api/day-expense', (req, res, { user, body }) => {
     need(can.finance(user), 'רק בעלים או מנהל יכולים לרשום הוצאה');
     return tx(() => once(body.opId, user, () => {
@@ -48,7 +64,15 @@ export async function register(ctx) {
         workId = newId('a'); created = true;
         putDoc('accounts', workId, { kind: 'work', date, title: 'איסוף יום ' + date.split('-').reverse().join('.'), createdAt: t, v: 1, entries: [], expenses: [x] }, { user, action: 'הוספת הוצאה', item: c + ' · ' + n });
       }
-      return { ok: true, workId, created, expense: x };
+      // אותה הוצאה גם בחשבון הגובים של התאריך (אם יש) — עותק מקושר (xk = מזהה ההוצאה), באותה טרנזקציה
+      let collId = null;
+      const colls = listDocs('accounts').filter(d => d.data.kind === 'collectors' && d.data.date === date).sort((p, q) => (q.data.updatedAt || q.data.createdAt || 0) - (p.data.updatedAt || p.data.createdAt || 0));
+      const C = (body.collId && colls.find(d => d.id === body.collId)) || colls[0];
+      if (C) {
+        const data = { ...C.data, entries: (C.data.entries || []).concat([{ k: 'e', n, a, c, t: x.t, xk: x._k }]) }; data.updatedAt = t;
+        putDoc('accounts', C.id, data, { user, action: 'הוספת הוצאה', item: c + ' · ' + n, note: a + ' ₪' }); collId = C.id;
+      }
+      return { ok: true, workId, created, collId, expense: x };
     }));
   });
 }

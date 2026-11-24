@@ -2,7 +2,7 @@
 // טקסט/PDF/וואטסאפ לכל גובה, הוצאה מהירה לגובה, עמלת שליח מקושרת (lk), העברה לחשבון גובים בסוף היום,
 // מילוי טלפון/גובה/קשה מספר הטלפונים, ניקוי כפילויות, הוספה מטקסט ומצילום מסך; מאגר לקוחות והקמת לקוח מתוך פיצול.
 // אין כאן נוסחה כספית חדשה: כל הסיכומים מ-calcWork/workGroups (calc.js), הטקסט וה-PDF הועתקו מהמקור.
-import { route, more, accountAction, accountPanel, editorAction } from '../registry.js';
+import { route, more, accountAction, accountPanel, editorAction, R } from '../registry.js';
 import { get, save, uid } from '../api.js';
 import { $, $$, esc, toast, openSheet } from '../ui.js';
 import { num, r2, sum, normName, normTime, normStatus, cleanColl, collKey, workGroups, wExpList, calcWork, ST_GOT, NOC_SP } from '../calc.js';
@@ -69,19 +69,22 @@ function xCollOptions(entries, cur) {
   const list = used.concat(knownCollectors().filter(x => used.indexOf(x) < 0));
   return '<option value="">בחר גובה</option>' + list.map(v => '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(v) + '</option>').join('') + '<option value="' + NOX + '"' + (cur === NOX ? ' selected' : '') + '>ללא גובה</option>';
 }
-accountAction('work', {
+const expensesAction = {
   label: 'הוצאות של גובה', can: (App) => fin(App),
   async run(ctx) {
+    const isColl = ctx.a.kind === 'collectors';
+    // בחשבון גובים: ההוצאות הן שורות מסוג ״הוצאה״; הוספה והסרה משותפות לרשימת האיסוף של אותו תאריך
+    const xsOf = () => isColl ? (ctx.a.entries || []).filter(e => e && e.k === 'e' && (String(e.n || '').trim() || num(e.a))).map(e => ({ ...e, _k: e.xk || e._k })) : (ctx.a.expenses || []).filter(x => x && (String(x.n || '').trim() || num(x.a)));
     await loadBook(false).catch(() => {});
     const draw = (s) => {
-      const xs = (ctx.a.expenses || []).filter(x => x && (String(x.n || '').trim() || num(x.a)));
+      const xs = xsOf();
       $('#xlist', s.el).innerHTML = xs.length ? `<div class="small muted">${xs.length} הוצאות · סה״כ ${fmt(sum(xs.map(x => num(x.a))))} ₪</div><div class="list">${xs.map(x => `<div class="li noc"><div class="t">${esc(x.n)}${x.lk ? ' <span class="pill acc">מקושרת לאיסוף</span>' : ''}${x.nf ? ' <span class="pill">לא מכספי האיסוף</span>' : ''}</div><div class="a">${fmt(num(x.a))} ₪</div><div class="m"><span>${esc(cleanColl(x.c) || 'ללא גובה')}</span>${x.by && x.by !== '@' ? `<span>של: ${esc(x.by)}</span>` : ''}</div><div style="grid-column:1/-1"><button class="btn plain sm" data-xdel="${esc(x._k)}">הסר הוצאה</button></div></div>`).join('')}</div>` : '<div class="empty">אין עדיין הוצאות ברשימה הזו</div>';
     };
     const s = openSheet(`<div class="hd"><h2>הוצאות של גובה</h2><button class="x" data-close>×</button></div>
       <p class="small muted" style="margin:0">ההוצאה מופיעה ברשימה של אותו גובה (גם ב״פיצול״ של אותו תאריך), יורדת מ״נטו למסירה״ שלו, נכנסת להעתקה ול-PDF ונשמרת יחד עם הרשימה.</p>
       <div class="row" style="margin-top:8px"><button class="btn xl" id="w-x-new" style="width:100%">הוסף הוצאה</button></div><div id="xlist" style="margin-top:12px"></div>`);
     draw(s);
-    $('#w-x-new', s.el).onclick = async () => { const { openExpenseForm } = await import('../expense-form.js'); openExpenseForm({ date: ctx.a.date, workId: ctx.a.id, onSaved: () => ctx.reload() }); };
+    $('#w-x-new', s.el).onclick = async () => { const { openExpenseForm } = await import('../expense-form.js'); openExpenseForm({ date: ctx.a.date, workId: isColl ? undefined : ctx.a.id, collId: isColl ? ctx.a.id : undefined, preColl: ctx.coll || '', onSaved: () => ctx.reload() }); };
     let opId = uid();
     if ($('#w-x-add', s.el)) $('#w-x-add', s.el).onclick = async (ev) => {
       const c = $('#w-x-c', s.el).value, n = $('#w-x-n', s.el).value.trim(), a = num($('#w-x-a', s.el).value);
@@ -98,14 +101,17 @@ accountAction('work', {
 
     $('#xlist', s.el).addEventListener('click', async (e) => {
       const d = e.target.closest('[data-xdel]'); if (!d) return;
-      const x = (ctx.a.expenses || []).find(v => v._k === d.dataset.xdel); if (!x || !confirm('להסיר את ההוצאה ' + (x.n || '') + '?')) return;
+      const x = xsOf().find(v => v._k === d.dataset.xdel); if (!x || !confirm('להסיר את ההוצאה ' + (x.n || '') + '?')) return;
       try {
-        await putAcc(ctx.a.id, (acc) => { const before = (acc.expenses || []).length; acc.expenses = (acc.expenses || []).filter(v => v._k !== x._k); if (acc.expenses.length === before) return false; if (x.lk) (acc.entries || []).forEach(en => { if (en.lk === x.lk && !(acc.expenses || []).some(v => v.lk === x.lk)) delete en.lk; }); }, 'הסרת הוצאה ' + (x.n || ''));
+        if (isColl || !x.lk) await save('POST', '/api/day-expense/remove', { date: ctx.a.date, key: x._k, opId: uid() }, { queue: false, label: 'הסרת הוצאה' });
+        else await putAcc(ctx.a.id, (acc) => { const before = (acc.expenses || []).length; acc.expenses = (acc.expenses || []).filter(v => v._k !== x._k); if (acc.expenses.length === before) return false; if (x.lk) (acc.entries || []).forEach(en => { if (en.lk === x.lk && !(acc.expenses || []).some(v => v.lk === x.lk)) delete en.lk; }); }, 'הסרת הוצאה ' + (x.n || ''));
         await ctx.reload(); draw(s); toast('ההוצאה הוסרה');
       } catch (err) { toast(errMsg(err)); }
     });
   },
-});
+};
+accountAction('work', expensesAction);
+(R.accountActions.collectors ||= []).unshift(expensesAction);
 
 // ===================== 3. עמלת שליח / הוצאה מקושרת לאיסוף (lk) — מקור: lgOpenRec 10381, lgSaveRec 10477 (חלק העמלה) =====================
 const LG_SELF = '@';
@@ -162,7 +168,7 @@ accountAction('work', {
 function wTocRows(a, only) {
   const entries = a.entries.map(e => ({ ...e, n: String(e.n || '').trim(), a: num(e.a), t: normTime(e.t), s: normStatus(e.s) }));
   const debts = entries.filter(e => (e.n || e.a) && (!only || e.s === ST_GOT)).map(e => { const part = e.s === ST_GOT && e.ga !== undefined && e.ga !== null && e.ga !== ''; const x = lgx(e, LGF_W); delete x.ga; return Object.assign({ k: 'd', n: e.n || '(ללא שם)', a: part ? num(e.ga) : num(e.a), c: cleanColl(e.c) }, x, part && Math.abs(num(e.ga) - num(e.a)) > 0.004 ? { due: num(e.a) } : {}, normTime(e.t) ? { t: normTime(e.t) } : {}); });
-  const exps = (a.expenses || []).map(x => ({ ...x, n: String(x.n || '').trim(), a: num(x.a) })).filter(x => x.n || x.a).map(x => Object.assign({ k: 'e', n: x.n || 'הוצאה', a: num(x.a), c: cleanColl(x.c) }, lgx(x, LGF_X)));
+  const exps = (a.expenses || []).map(x => ({ ...x, n: String(x.n || '').trim(), a: num(x.a) })).filter(x => x.n || x.a).map(x => Object.assign({ k: 'e', n: x.n || 'הוצאה', a: num(x.a), c: cleanColl(x.c) }, lgx(x, LGF_X), x._k ? { xk: x._k } : {}, x.t ? { t: x.t } : {}));
   return { debts, exps, date: a.date };
 }
 accountAction('work', {
@@ -177,14 +183,17 @@ accountAction('work', {
     const upd = () => { const r = wTocRows(acc, $('#w-toc-got', s.el).checked); $('#w-toc', s.el).disabled = !r.debts.length && !r.exps.length; $('#w-toc-n', s.el).textContent = (r.debts.length || r.exps.length) ? (r.debts.length + ' חובות · ' + fmt(sum(r.debts.map(e => e.a))) + ' ₪' + (r.exps.length ? ' · ' + r.exps.length + ' הוצאות' : '')) : 'אין שורות להעברה'; };
     $('#w-toc-got', s.el).onchange = upd; upd();
     const same = (await get('/api/accounts?kind=collectors').catch(() => [])).filter(x => x.date === acc.date);
-    if (same.length) $('#w-toc-w', s.el).innerHTML = `<div class="note warn">כבר יש חשבון גובים לתאריך הזה: ${same.map(x => `<a href="#/acc/${esc(x.id)}">${esc(x.title)}</a>`).join(', ')}. ההעברה יוצרת חשבון גובים נוסף.</div>`;
+    if (same.length) $('#w-toc-w', s.el).innerHTML = `<div class="note warn">כבר יש חשבון גובים לתאריך הזה: ${same.map(x => `<a href="#/acc/${esc(x.id)}">${esc(x.title)}</a>`).join(', ')}. ההעברה תעדכן את החשבון הקיים — שורות מהעברה קודמת והוצאות משותפות מוחלפות, בלי כפילות. חשבון גובים נוסף.</div>`;
     const opId = uid();
     $('#w-toc', s.el).onclick = async (ev) => {
       const r = wTocRows(acc, $('#w-toc-got', s.el).checked); if (!r.debts.length && !r.exps.length) return toast('אין שורות להעברה');
       ev.target.disabled = true;
       try {
-        const { id } = await save('POST', '/api/accounts', { kind: 'collectors', date: r.date, opId: opId + ':new' }, { label: 'פתיחת חשבון גובים', queue: false });
-        await putAcc(id, (c) => { c.entries = r.debts.concat(r.exps); }, 'העברה מ' + (ctx.a.title || 'איסוף יום'), opId);
+        // חשבון גובים קיים לתאריך — מעדכנים אותו: שורות מהעברה קודמת של הרשימה הזו והוצאות משותפות מוחלפות (לא נספרות פעמיים); שורות ידניות נשארות
+        const ex = (await get('/api/accounts?kind=collectors').catch(() => [])).filter(x => x.date === r.date).sort((p, q) => (q.updatedAt || 0) - (p.updatedAt || 0));
+        const id = ex.length ? ex[0].id : (await save('POST', '/api/accounts', { kind: 'collectors', date: r.date, opId: opId + ':new' }, { label: 'פתיחת חשבון גובים', queue: false })).id;
+        const src = ctx.a.id, keys = new Set(r.exps.map(x => x.xk).filter(Boolean));
+        await putAcc(id, (c) => { c.entries = (c.entries || []).filter(e => e && e.wsrc !== src && !(e.xk && keys.has(e.xk))).concat(r.debts.map(d => ({ ...d, wsrc: src })), r.exps.map(x => ({ ...x, wsrc: src }))); }, 'העברה מ' + (ctx.a.title || 'איסוף יום'), opId);
         s.close(); toast('הועברו ' + r.debts.length + ' חובות' + (r.exps.length ? ' ו-' + r.exps.length + ' הוצאות' : '') + ' לחשבון גובים. בדוק ושמור.');
         location.hash = '#/acc/' + id + '?edit=1';
       } catch (e) { ev.target.disabled = false; toast(errMsg(e)); }
