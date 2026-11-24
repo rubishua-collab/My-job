@@ -78,6 +78,7 @@ function paint() {
   const t = text(), cls = state === 'failed' ? 'neg' : (t.startsWith('יש שינויים') ? 'warn-t' : (state === 'saved' ? 'ok-t' : ''));
   $$('[data-savest]').forEach(el => { el.textContent = t; el.className = 'savest small ' + cls; });
   $$('[data-save]').forEach(b => { b.disabled = state === 'saving'; b.classList.toggle('dirtyb', t.startsWith('יש שינויים') || state === 'failed'); });
+  $$('[data-dirtydot]').forEach(d => { d.hidden = !(t.startsWith('יש שינויים') || state === 'failed'); }); // נקודה כתומה בלשונית ״פעולות״ הממוזערת
   const f = document.getElementById('savefloat'); if (f) f.hidden = !providers.size || !floatWanted;
 }
 // לחיצה על כל כפתור ״שמור שינויים״

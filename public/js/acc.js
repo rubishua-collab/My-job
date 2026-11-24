@@ -209,6 +209,15 @@ function refreshBar(ctx) {
   bar.outerHTML = actionBar(ctx, vis); bindBar(ctx); clearTimeout(ctx.ct); ctx.ct = setTimeout(() => exactCount(ctx), 250);
   $$('[data-ref]', ctx.view).forEach(c => { c.checked = ctx.sel.has(c.dataset.ref); c.closest('.li')?.classList.toggle('sel', c.checked); });
 }
+// מזעור סרגל הפעולות בעריכה (״שמור שינויים״ / ״שמור וסיים״ / ״ביטול״) — תצוגה בלבד: הערכים, הגלילה והשמירה לא משתנים
+const EDMIN = 'yh:edmin';
+function edMin() { try { return localStorage.getItem(EDMIN) === '1'; } catch { return false; } }
+function setEdMin(on) {
+  try { localStorage.setItem(EDMIN, on ? '1' : '0'); } catch { /* */ }
+  const bar = document.getElementById('edbar'); if (!bar) return; const y = window.scrollY;
+  bar.classList.toggle('is-min', on); bar.classList.add(on ? 'wa-closing' : 'wa-opening'); setTimeout(() => bar.classList.remove('wa-closing', 'wa-opening'), 220);
+  window.scrollTo(0, y); const f = document.getElementById(on ? 'edtab' : 'edmin'); if (f) f.focus({ preventScroll: true });
+}
 // מזעור חלון ״וואטסאפ פרטי״: נשמר במכשיר (גם בין מסכים). רק מחליף מחלקה — הבחירה, הסינון והגלילה לא משתנים
 const WAMIN = 'yh:wamin';
 function waMin() { try { return localStorage.getItem(WAMIN) === '1'; } catch { return false; } }
@@ -582,9 +591,13 @@ function renderEditor(ctx) {
       ${searchable(li) ? `<div class="edsearch" role="search"><input class="in" type="search" data-edq="${li}" value="${esc(edQ[li] || '')}" placeholder="חיפוש לפי שם הלקוח" aria-label="חיפוש לפי שם הלקוח" dir="rtl" inputmode="search" enterkeyhint="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"><button type="button" class="edq-x" data-edqx="${li}" aria-label="נקה חיפוש" ${edQ[li] ? '' : 'hidden'}>נקה חיפוש</button></div>` : ''}
       <div class="tbl-wrap"><table data-tl="${li}"><thead><tr><th>#</th>${cols.map(c => `<th>${c[1]}</th>`).join('')}<th></th></tr></thead><tbody>${tbody(li, cols)}</tbody></table></div>${searchable(li) ? `<div class="empty edq-empty" data-edqe="${li}" hidden>לא נמצאו שורות בשם הזה</div>` : ''}</div>`).join('')}
     ${(R.editorActions[a.kind] || []).length ? `<div class="card row">${R.editorActions[a.kind].map((x, i) => `<button class="btn ghost" data-eact="${i}">${esc(x.label)}</button>`).join('')}</div>` : ''}
-    <div class="actionbar"><div id="ed-err"></div><div class="row" style="align-items:center"><button class="btn xl" data-save id="ed-savestay" style="flex:2">שמור שינויים</button><button class="btn ghost" id="ed-save" style="flex:1">שמור וסיים</button><a class="btn plain" href="#/acc/${a.id}" style="flex:1">ביטול</a></div><span class="savest small" data-savest role="status" aria-live="polite"></span><div class="acctimes small" data-acctimes>${timesHTML(ctx.a._times)}</div></div>`;
+    <div class="actionbar edbar${edMin() ? ' is-min' : ''}" id="edbar">
+      <button type="button" class="ed-tab" id="edtab" aria-expanded="false" aria-controls="edbody">פעולות <span class="ed-dot" data-dirtydot hidden aria-label="יש שינויים שטרם נשמרו"></span> <span aria-hidden="true">⌃</span></button>
+      <div class="ed-body" id="edbody"><div class="wa-top"><b>פעולות</b><button type="button" class="btn plain sm wa-minbtn" id="edmin" aria-expanded="true" aria-controls="edbody">מזער <span aria-hidden="true">⌄</span></button></div>
+      <div id="ed-err"></div><div class="row" style="align-items:center"><button class="btn xl" data-save id="ed-savestay" style="flex:2">שמור שינויים</button><button class="btn ghost" id="ed-save" style="flex:1">שמור וסיים</button><a class="btn plain" href="#/acc/${a.id}" style="flex:1">ביטול</a></div><span class="savest small" data-savest role="status" aria-live="polite"></span><div class="acctimes small" data-acctimes>${timesHTML(ctx.a._times)}</div></div></div>`;
     summary();
     paintSave(); // בעריכה הכפתור נמצא גם בפס התחתון הדביק
+    $('#edmin', view).onclick = () => setEdMin(true); $('#edtab', view).onclick = () => setEdMin(false);
     $$('[data-edq]', view).forEach(inp => { inp.addEventListener('input', () => { edQ[inp.dataset.edq] = inp.value; applyQ(inp.dataset.edq); }); inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } }); applyQ(inp.dataset.edq); });
     $$('[data-edqx]', view).forEach(b => b.onclick = () => { const li = b.dataset.edqx; edQ[li] = ''; const inp = $(`[data-edq="${li}"]`, view); inp.value = ''; applyQ(li); inp.focus(); });
     $$('[data-l], #ed-date, #ed-title, #ed-keren, #ed-courier', view).forEach(i => i.addEventListener('input', touch));

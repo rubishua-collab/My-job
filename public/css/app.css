@@ -281,3 +281,15 @@ tr[hidden]{display:none}
 tr.exp-row td{background:color-mix(in srgb,var(--warn-bg,#fff1d6) 55%,transparent)}
 .exp-tag{display:block;margin-top:4px;font-size:11px}
 .ed-cg{margin-top:6px} .ed-cg summary{cursor:pointer;font-weight:700}
+
+/* מזעור סרגל הפעולות בעריכה */
+.edbar .wa-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:-2px 0 2px}
+.edbar .ed-tab{display:none}
+.edbar .ed-body{display:flex;flex-direction:column;gap:8px}
+.edbar.is-min{padding:0;gap:0;background:transparent;border:0;box-shadow:none;align-items:center}
+.edbar.is-min .ed-body{display:none}
+.edbar.is-min .ed-tab{display:flex;align-items:center;justify-content:center;gap:6px;align-self:center;min-height:44px;padding:0 22px;border-radius:14px 14px 0 0;border:1px solid var(--line);border-bottom:0;background:var(--accent);color:#fff;font:inherit;font-weight:800;font-size:15px;cursor:pointer;box-shadow:0 -4px 14px rgba(0,0,0,.15)}
+.ed-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#f28c18;box-shadow:0 0 0 2px #fff}
+.ed-dot[hidden]{display:none}
+.edbar.wa-opening .ed-body{animation:waUp .2s ease-out}
+.edbar.wa-closing .ed-tab{animation:waTab .2s ease-out}
