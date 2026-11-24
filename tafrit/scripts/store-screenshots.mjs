@@ -40,6 +40,6 @@ for (const [name, vp] of sets) {
 }
 // גרפיקה מוצגת ל-Google Play: ‏1024×500
 const p = await (await b.newContext({ viewport: { width: 1024, height: 500 } })).newPage();
-await p.setContent(`<html dir="rtl"><body style="margin:0;width:1024px;height:500px;background:#1f7a52;color:#fff;font-family:Arial;display:flex;align-items:center;justify-content:center;gap:48px"><img src="data:image/png;base64,${fs.readFileSync(path.join(ROOT, 'store/icon-1024.png')).toString('base64')}" style="width:220px;border-radius:48px"><div><div style="font-size:64px;font-weight:700">תפריט יומי רובי</div><div style="font-size:30px;margin-top:12px;opacity:.9">יעדים, יומן אכילה, שקילות ומלווה תזונה אישי</div></div></body></html>`);
+await p.setContent(`<html dir="rtl"><body style="margin:0;width:1024px;height:500px;background:#1f7a52;color:#fff;font-family:Arial;display:flex;align-items:center;justify-content:center;gap:48px"><img src="data:image/png;base64,${fs.readFileSync(path.join(ROOT, 'store/icon-1024.png')).toString('base64')}" style="width:220px;border-radius:48px"><div><div style="font-size:64px;font-weight:700">תפריטי פרו</div><div style="font-size:30px;margin-top:12px;opacity:.9">יעדים, יומן אכילה, שקילות ומלווה תזונה אישי</div></div></body></html>`);
 await p.screenshot({ path: path.join(ROOT, 'store/android/feature-graphic-1024x500.png') });
 await b.close(); srv.kill(); console.log('screenshots ok');

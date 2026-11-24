@@ -172,8 +172,8 @@ export function totpSetup(user, fresh = false) {
   const cur = db.prepare('SELECT totp_secret FROM users WHERE id = ?').get(user.id)?.totp_secret;
   let secret = !fresh && cur ? decrypt(cur) : null;
   if (!secret) { secret = newTotpSecret(); db.prepare('UPDATE users SET totp_secret = ?, totp_last_step = NULL WHERE id = ?').run(encrypt(secret), user.id); }
-  const label = encodeURIComponent(`תפריט יומי רובי:${user.email}`);
-  return { secret, otpauth: `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent('תפריט יומי רובי')}&digits=6&period=30` };
+  const label = encodeURIComponent(`תפריטי פרו:${user.email}`);
+  return { secret, otpauth: `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent('תפריטי פרו')}&digits=6&period=30` };
 }
 function checkTotp(user, code) {
   const fresh = getUser(user.id);

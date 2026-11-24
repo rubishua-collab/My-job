@@ -18,7 +18,7 @@
 | `ADMIN_EMAIL` | כתובת הדוא״ל שלך. החשבון הראשון שמאמת את הכתובת הזו הופך למנהל, וברגע זה הנתונים הקיימים עוברים אליו (עם גיבוי מוצפן ובדיקה) |
 | `DATA_ENCRYPTION_KEY` | לחיצה על Generate ב-Render (או 64 תווי hex). **שמור עותק במקום בטוח ואל תשנה אותו אחרי שנשמר מידע — בלעדיו אי אפשר לפענח את המידע והגיבויים** |
 | `RESEND_API_KEY` | מפתח מ-resend.com (שליחת קודי אימות) |
-| `MAIL_FROM` | למשל `תפריט יומי רובי <no-reply@הדומיין-שלך>` — דורש דומיין מאומת ב-Resend. בלי דומיין אפשר לשלוח רק לכתובת של בעל חשבון Resend |
+| `MAIL_FROM` | למשל `תפריטי פרו <no-reply@הדומיין-שלך>` — דורש דומיין מאומת ב-Resend. בלי דומיין אפשר לשלוח רק לכתובת של בעל חשבון Resend |
 | `SUPPORT_EMAIL` | כתובת לפניות (מוצגת במדיניות הפרטיות) |
 | `PUBLIC_URL` | `https://tafrit-robi.onrender.com` |
 | `ANTHROPIC_API_KEY` | לא חובה — מפעיל את המלווה החכם |
@@ -27,7 +27,7 @@
 אחר כך: היכנס לאתר ← פתיחת חשבון עם `ADMIN_EMAIL` ← אמת ← עוד ← ניהול משתמשים ← הגדר אימות דו-שלבי ← "מצב המערכת" מציג את דוח העברת הנתונים.
 
 ## שלב 2 — Apple (App Store)
-1. App Store Connect ← My Apps ← + ← New App: פלטפורמה iOS, שם "תפריט יומי רובי", שפה ראשית Hebrew, Bundle ID ‏`com.rubishua.tafritrobi` (אם תבחר מזהה אחר — עדכן ב-`capacitor.config.json` וב-`ios/App/App.xcodeproj`).
+1. App Store Connect ← My Apps ← + ← New App: פלטפורמה iOS, שם "תפריטי פרו", שפה ראשית Hebrew, Bundle ID ‏`com.rubishua.tafritrobi` (אם תבחר מזהה אחר — עדכן ב-`capacitor.config.json` וב-`ios/App/App.xcodeproj`).
 2. Users and Access ← Integrations ← App Store Connect API ← צור מפתח בתפקיד App Manager. הורד את קובץ ה-`.p8`.
 3. ב-GitHub ‏(Settings ← Secrets and variables ← Actions) הוסף:
    `APPSTORE_API_KEY_P8` (תוכן הקובץ), `APPSTORE_API_KEY_ID`, `APPSTORE_ISSUER_ID`, `APPLE_TEAM_ID`.

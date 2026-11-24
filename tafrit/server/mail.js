@@ -5,7 +5,7 @@ export const mailDev = () => process.env.MAIL_DEV === '1' && process.env.NODE_EN
 export const mailEnabled = () => !!process.env.RESEND_API_KEY || mailDev();
 export function devOutbox() { return mailDev() ? outbox : []; }
 
-const SUBJECT = { verify: 'קוד אימות לתפריט יומי רובי', reset: 'שחזור סיסמה — תפריט יומי רובי', delete: 'אישור מחיקת חשבון — תפריט יומי רובי' };
+const SUBJECT = { verify: 'קוד אימות לתפריטי פרו', reset: 'שחזור סיסמה — תפריטי פרו', delete: 'אישור מחיקת חשבון — תפריטי פרו' };
 const LINE = { verify: 'קוד האימות שלך', reset: 'קוד לשחזור הסיסמה', delete: 'קוד לאישור מחיקת החשבון וכל המידע' };
 
 export async function sendCode(to, purpose, code) {
@@ -14,7 +14,7 @@ export async function sendCode(to, purpose, code) {
   const html = `<div dir="rtl" style="font-family:Arial,sans-serif;font-size:16px">${LINE[purpose]}:<p style="font-size:30px;font-weight:bold;letter-spacing:6px">${code}</p><p>הקוד תקף ל-15 דקות. אם לא ביקשת — אפשר להתעלם מההודעה.</p></div>`;
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST', headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: process.env.MAIL_FROM || 'תפריט יומי רובי <onboarding@resend.dev>', to: [to], subject: SUBJECT[purpose], html, text: `${LINE[purpose]}: ${code}` }),
+    body: JSON.stringify({ from: process.env.MAIL_FROM || 'תפריטי פרו <onboarding@resend.dev>', to: [to], subject: SUBJECT[purpose], html, text: `${LINE[purpose]}: ${code}` }),
     signal: AbortSignal.timeout(15000),
   });
   if (!r.ok) { console.error('[mail] שליחה נכשלה, סטטוס', r.status); throw Object.assign(new Error('לא הצלחנו לשלוח דוא״ל כרגע. נסה שוב בעוד רגע.'), { status: 502 }); }

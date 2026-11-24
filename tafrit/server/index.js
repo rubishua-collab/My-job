@@ -1,4 +1,4 @@
-// תפריט יומי רובי — שרת האפליקציה (Node 22). רב-משתמשים: כל בקשה מזוהה לפי הסשן, וכל נתון מסונן לפי המשתמש המחובר.
+// תפריטי פרו — שרת האפליקציה (Node 22). רב-משתמשים: כל בקשה מזוהה לפי הסשן, וכל נתון מסונן לפי המשתמש המחובר.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -212,4 +212,4 @@ const server = http.createServer(async (req, res) => {
   }
 });
 if (PROD) scheduleBackups();
-server.listen(PORT, () => console.log(`תפריט יומי רובי פועל על פורט ${PORT} (AI: ${aiEnabled() ? MODEL : 'מצב בסיסי'}, דוא״ל: ${mailEnabled() ? 'פעיל' : 'לא מוגדר'}, מפתח הצפנה: ${KEY_SOURCE})`));
+server.listen(PORT, () => console.log(`תפריטי פרו פועל על פורט ${PORT} (AI: ${aiEnabled() ? MODEL : 'מצב בסיסי'}, דוא״ל: ${mailEnabled() ? 'פעיל' : 'לא מוגדר'}, מפתח הצפנה: ${KEY_SOURCE})`));

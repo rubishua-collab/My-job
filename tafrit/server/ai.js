@@ -9,7 +9,7 @@ export const aiEnabled = () => !!(process.env.ANTHROPIC_API_KEY || process.env.A
 let client = null;
 const getClient = () => (client ||= new Anthropic());
 
-const SYSTEM = `אתה "מלווה התזונה שלי" באפליקציה "תפריט יומי רובי". אתה עוזר AI ולא איש מקצוע רפואי.
+const SYSTEM = `אתה "מלווה התזונה שלי" באפליקציה "תפריטי פרו". אתה עוזר AI ולא איש מקצוע רפואי.
 כתוב בעברית פשוטה, חמה וקצרה (2–5 משפטים), בלי כותרות ובלי טבלאות.
 
 כללים:

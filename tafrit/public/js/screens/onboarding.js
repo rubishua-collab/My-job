@@ -179,7 +179,7 @@ route('onboarding', async (el, [arg]) => {
   let i = arg === 'edit' ? 0 : Math.max(0, visible().indexOf(STEPS[Math.min(prof?.onboarding?.step || 0, STEPS.length - 1)]));
   const show = () => {
     const steps = visible(); i = Math.max(0, Math.min(i, steps.length - 1)); const s = steps[i];
-    el.innerHTML = `<div class="ob"><div class="row between"><span class="muted small">שאלה ${i + 1} מתוך ${steps.length}</span>${i > 0 ? '' : '<span class="muted small">תפריט יומי רובי</span>'}</div>
+    el.innerHTML = `<div class="ob"><div class="row between"><span class="muted small">שאלה ${i + 1} מתוך ${steps.length}</span>${i > 0 ? '' : '<span class="muted small">תפריטי פרו</span>'}</div>
       <div class="prog"><i style="width:${(i + 1) / steps.length * 100}%"></i></div>
       <p class="q">${esc(s.q)}</p>${s.hint ? `<p class="hint">${esc(s.hint)}</p>` : ''}
       <form class="body" id="obf" novalidate>${s.html(p)}<div id="oberr"></div></form>

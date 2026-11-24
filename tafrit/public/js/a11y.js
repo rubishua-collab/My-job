@@ -62,7 +62,7 @@ function fixHeadings() {
   for (const h of app.querySelectorAll('h3')) {
     if (!hasH2) { h.setAttribute('role', 'heading'); h.setAttribute('aria-level', '2'); }
   }
-  const h1 = app.querySelector('h1'); if (h1) { const t = h1.textContent.trim(); const title = t && t !== 'תפריט יומי רובי' ? `${t} — תפריט יומי רובי` : 'תפריט יומי רובי'; if (document.title !== title && !/\/(privacy|accessibility|delete-account)/.test(location.pathname)) document.title = title; }
+  const h1 = app.querySelector('h1'); if (h1) { const t = h1.textContent.trim(); const title = t && t !== 'תפריטי פרו' ? `${t} — תפריטי פרו` : 'תפריטי פרו'; if (document.title !== title && !/\/(privacy|accessibility|delete-account)/.test(location.pathname)) document.title = title; }
 }
 
 // ---- קישור "דלג לתוכן המרכזי" ----

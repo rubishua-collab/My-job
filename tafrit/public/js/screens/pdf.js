@@ -64,7 +64,7 @@ export async function buildDayPdf(date) {
   }
   const cups = day.cups || 0;
   if (cups) { const cup = +p.cupMl || CUP_ML; txt(`מים: ${(cups * cup / 1000).toFixed(2)} מתוך ${(waterGoalMl(p, w) / 1000).toFixed(1)} ליטר`, R, y + 14, { size: 24, color: COL.water }); y += 44; }
-  txt('הערכים משוערים ואינם ייעוץ רפואי. נוצר באפליקציה "תפריט יומי רובי".', R, y + 14, { size: 21, color: MUTED });
+  txt('הערכים משוערים ואינם ייעוץ רפואי. נוצר באפליקציה "תפריטי פרו".', R, y + 14, { size: 21, color: MUTED });
   return { blob: await pagesToPdf(pages), name: `יומן תזונה - ${who} - ${dateTxt}.pdf`, ascii: `tafrit-yomi-${date}.pdf` };
 }
 
