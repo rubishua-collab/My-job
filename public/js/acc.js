@@ -298,7 +298,7 @@ function splitView(ctx, vis) {
     <div class="m" style="flex-basis:100%"><div class="mgp-notes">הערות: ${esc(collNotes(it.parts))}</div></div>
     <div class="m" style="flex-basis:100%"><details class="mgdet2"><summary>פירוט</summary><div class="tbl-wrap"><table><thead><tr><th>גובה</th><th class="a">סכום</th><th>שעה</th><th>סטטוס</th></tr></thead><tbody>${it.parts.map(x => `<tr><td>${esc(String(x.c || '').trim() || 'ללא גובה')}</td><td class="a">${money(num(x.a))}</td><td>${esc(x.t || '')}</td><td>${esc(partStatus(x))}</td></tr>`).join('')}</tbody><tfoot><tr><td><b>סה״כ</b></td><td class="a"><b>${money(it.amount)}</b></td><td></td><td></td></tr></tfoot></table></div>${App.can.finance ? `<button class="btn plain sm" data-mgun="${esc(it.mg)}">בטל איחוד</button>` : ''}</details></div></div>`;
   const rec = (r) => `<div class="li ${ctx.sel.has(r._k) ? 'sel' : ''}" data-key="${esc(r._k)}">${ck(ctx, r._k)}<div class="t">${esc(r.n)} ${r.pp ? `<span class="pill acc">חלק ${esc(r.pp)}</span>` : ''}${r.mg && MG.get(r.mg) ? ` <span class="pill acc">חוב מאוחד · סה״כ ${money(mgTotal(MG.get(r.mg)))}</span>${ctx.coll ? ` <span class="pill acc">חלקו של ${esc(String(r.c || '').trim())} ${money(collShare(MG.get(r.mg), r.c))}</span>` : ''}` : ''}${r.h === 'קשה' ? ' <span class="pill err">קשה</span>' : ''}${r.na ? ' <span class="pill acc">לא ענו</span>' : ''}</div><div class="a">${money(num(r.a))}</div>
-    <div class="m">${r.t ? `<span class="num">${esc(r.t)}</span>` : ''}${r.ph ? `<span>${esc(fmtPhone(r.ph))}</span>` : '<span class="neg">אין טלפון</span>'}${r.note ? `<span>${esc(r.note)}</span>` : ''}</div></div>`;
+    <div class="m">${r.t ? `<span class="num">${esc(r.t)}</span>` : ''}${r.ph ? `<span>${esc(fmtPhone(r.ph))}</span>` : '<span class="neg">אין טלפון</span>'}${r.gnote ? `<span class="wnote">✎ ${esc(r.gnote)}</span>` : ''}${r.note ? `<span>${esc(r.note)}</span>` : ''}</div></div>`;
   const D = a._day; const dxOf = (cn) => D ? D.exp.filter(x => collKey(cleanColl(x.c)) === collKey(cn)) : [];
   const dayBox = (cn) => { if (!D) return ''; const xs = dxOf(cn), et = r2(sum(xs.map(x => num(x.a)))), got = D.got[collKey(cn)] || 0; if (!xs.length && !got) return '';
     return `<div class="dayx">${xs.length ? `<h3 style="margin:10px 0 4px">הוצאות</h3><div class="list">${xs.map(x => `<div class="li noc"><div class="t">${x.t ? `<span class="num">${esc(x.t)}</span> · ` : ''}${esc(String(x.n || '').trim() || 'הוצאה')}</div><div class="a">${money(num(x.a))}</div></div>`).join('')}</div>` : ''}
@@ -355,6 +355,7 @@ function workRow(ctx, e, gname) {
   const courier = e.by && e.by !== '@' ? `<span>גובה אחראי: <b>${esc(cleanColl(e.c) || gname)}</b> · אסף בפועל: <b>${esc(e.by)}</b></span>` : (e.by === '@' ? `<span>נאסף ע״י הגובה</span>` : '');
   return `<div class="li ${s === 'נאסף' ? 'got' : ''} ${ctx.sel.has(e._k) ? 'sel' : ''} link" data-row="${esc(e._k)}" data-key="${esc(e._k)}">${ck(ctx, e._k)}
     <div class="t">${!s && e.t ? `<span class="num">${esc(e.t)}</span> · ` : ''}${esc(e.n)} ${s ? `<span class="pill ${s === 'נאסף' ? 'ok' : s === 'לא נאסף' ? 'err' : s === 'לא ענו' ? 'acc' : 'warn'}">${esc(s)}</span>` : ''}${e.h === 'קשה' ? ' <span class="pill err">קשה</span>' : ''}${e.pp ? ` <span class="pill acc">חלק ${esc(e.pp)}</span>` : ''}</div>
+    ${(e._notes || []).length ? `<div class="wnotes">${e._notes.map(t => `<div class="wnote">✎ ${esc(t)}</div>`).join('')}</div>` : ''}
     <div class="a">${money(num(e.a))}${s === 'נאסף' && e.ga != null && e.ga !== '' ? `<div class="small muted">נגבה ${money(e.ga)}</div>` : ''}</div>
     <div class="m">${courier}${e.p ? `<a href="tel:${esc(e.p)}">${esc(fmtPhone(e.p))}</a>` : '<span class="neg">אין טלפון</span>'}${e.pmt ? `<span>${esc(e.pmt)}</span>` : ''}${e.mk ? `<span>סומן ע״י ${esc(e.mk.u)} ${when(e.mk.at)}</span>` : ''}</div>
     <div class="st no-print">${['נאסף', 'לא נאסף', 'לעבור', 'לא ענו'].map(x => `<button data-s="${x}" aria-pressed="${s === x}" data-mark="${esc(e._k)}|${s === x ? '' : x}">${x}</button>`).join('')}</div>
@@ -444,10 +445,13 @@ async function splitDebtSheet(r, done) {
   if (!r) return;
   const total = r2(num(r.a)); if (!(total > 0)) return toast('אין סכום לפצל בשורה הזו');
   let known = []; try { const { collectorsList } = await import('./expense-form.js'); known = await collectorsList(); } catch { /* */ }
-  const parts = [{ a: '', c: String(r.c || '').trim(), t: r.t || '', note: r.note || '', touched: false }, { a: '', c: '', t: r.t || '', note: '', touched: false }];
+  // הערה כללית — מוצגת לכל הגובים שקיבלו חלק; הערה לחלק — רק לגובה של אותו חלק
+  let gnote = [r.gnote, r.note].filter(v => String(v || '').trim()).join('\n');
+  const parts = [{ a: '', c: String(r.c || '').trim(), t: r.t || '', note: '', touched: false }, { a: '', c: '', t: r.t || '', note: '', touched: false }];
   const s = openSheet(`<div class="hd"><h2>פצל חוב</h2><button class="x" data-close>×</button></div>
     <div class="note info"><b>${esc(String(r.n || '').trim())}</b>${r.ph ? ' · ' + esc(r.ph) : ''}<br>יתרת החוב: <b>${money(total)}</b>${r.c ? ' · כרגע אצל ' + esc(r.c) : ''}</div>
     <datalist id="spl-colls">${known.map(c => `<option value="${esc(c)}"></option>`).join('')}</datalist>
+    <label class="f">הערה כללית (לכל החלקים)<textarea class="in" id="spl-g" rows="2" placeholder="למשל: לבקש מזומן">${esc(gnote)}</textarea></label>
     <div id="spl-parts"></div>
     <button type="button" class="btn ghost sm" id="spl-add">+ חלק נוסף</button>
     <div id="spl-st" class="note" role="status" aria-live="polite" style="margin-top:8px"></div>
@@ -458,7 +462,7 @@ async function splitDebtSheet(r, done) {
       <div class="grid"><label class="f">סכום (₪)<input class="in n" data-pa="${i}" inputmode="decimal" value="${esc(p.a)}" placeholder="0"></label>
       <label class="f">גובה<input class="in" data-pc="${i}" list="spl-colls" value="${esc(p.c)}" placeholder="בחר גובה" autocomplete="off"></label>
       <label class="f">שעה<input class="in num" data-pt="${i}" inputmode="numeric" value="${esc(p.t)}" placeholder="שעה"></label>
-      <label class="f">הערה<input class="in" data-pn="${i}" value="${esc(p.note)}" placeholder="הערה"></label></div></div>`).join('');
+      <label class="f">הערה לחלק הזה בלבד<input class="in" data-pn="${i}" value="${esc(p.note)}" placeholder="רק לגובה של החלק"></label></div></div>`).join('');
   };
   const status = () => {
     const amts = parts.map(p => num(p.a)), dealt = r2(sum(amts)), left = r2(total - dealt);
@@ -484,7 +488,9 @@ async function splitDebtSheet(r, done) {
   $('#spl-ok', s.el).onclick = () => {
     const pg = r.pg || ('p' + uid().replace(/-/g, '').slice(0, 10));
     const news = parts.map((p, i) => {
+      const g = String($('#spl-g', s.el).value || '').trim();
       const o = { ...r, a: r2(num(p.a)), c: String(p.c || '').trim(), t: p.t ? normTime(p.t) : '', note: String(p.note || '').trim(), pg, pp: `${i + 1}/${parts.length}` };
+      if (g) o.gnote = g; else delete o.gnote;
       if (i > 0) delete o._k; if (o.t) o.na = false; delete o.xd; return o;
     });
     s.close(); done(news);
@@ -497,7 +503,7 @@ async function splitDebtSheet(r, done) {
 const COLS = {
   morning: { rows: [['n', 'לקוח'], ['i', 'ריבית', 'n'], ['p', 'קרן', 'n']], loans: [['n', 'הלוואה'], ['a', 'סכום', 'n']] },
   collectors: { entries: [['n', 'שם'], ['a', 'סכום', 'n'], ['c', 'גובה'], ['k', 'סוג', 'k'], ['t', 'שעה']] },
-  split: { records: [['n', 'שם'], ['ph', 'טלפון'], ['a', 'יתרה', 'n'], ['c', 'גובה'], ['t', 'שעה'], ['h', 'קושי', 'h'], ['note', 'הערה'], ['side', 'לא היום', 'b']] },
+  split: { records: [['n', 'שם'], ['ph', 'טלפון'], ['a', 'יתרה', 'n'], ['c', 'גובה'], ['t', 'שעה'], ['h', 'קושי', 'h'], ['note', 'הערה', 'ta'], ['side', 'לא היום', 'b']] },
   work: { entries: [['n', 'שם'], ['p', 'טלפון'], ['a', 'סכום', 'n'], ['c', 'גובה'], ['t', 'שעה'], ['h', 'קושי', 'h']], expenses: [['n', 'הוצאה'], ['a', 'סכום', 'n'], ['c', 'גובה']] },
 };
 const LIST_NAMES = { rows: 'שורות גבייה (ריבית/קרן)', loans: 'הלוואות שיצאו', entries: 'שורות', records: 'לקוחות', expenses: 'הוצאות' };
@@ -543,6 +549,7 @@ function renderEditor(ctx) {
     if (t === 'k') return `<select class="in" data-l="${li}" data-r="${ri}" data-k="${k}"><option value="d" ${v !== 'e' ? 'selected' : ''}>חוב</option><option value="e" ${v === 'e' ? 'selected' : ''}>הוצאה</option></select>`;
     if (t === 'h') return `<select class="in" data-l="${li}" data-r="${ri}" data-k="${k}"><option></option><option ${v === 'קשה' ? 'selected' : ''}>קשה</option><option ${v === 'לא קשה' ? 'selected' : ''}>לא קשה</option></select>`;
     if (t === 'b') return `<input type="checkbox" data-l="${li}" data-r="${ri}" data-k="${k}" ${v ? 'checked' : ''}>`;
+    if (t === 'ta') return `<textarea class="in edta" rows="1" data-l="${li}" data-r="${ri}" data-k="${k}">${esc(v)}</textarea>`; // הערה: נשמרים מעברי השורה
     const extra = k === 'c' ? ' list="ed-colls" autocomplete="off"' : (k === 'n' && a.kind === 'collectors' && r.k === 'e' ? ' placeholder="תיאור ההוצאה (שליח, דלק…)"' : '');
     return `<input class="in ${t === 'n' ? 'n' : ''}" ${t === 'n' ? 'inputmode="decimal"' : ''}${extra} data-l="${li}" data-r="${ri}" data-k="${k}" value="${esc(v)}">`;
   };

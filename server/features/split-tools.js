@@ -3,6 +3,7 @@
 // ההעברה רצה בתוך טרנזקציה אחת: מוסיפה לרשימת האיסוף של היום ומוציאה מהפיצול את מה שעבר (ל-xstash),
 // עם opId (ניסיון חוזר לא רושם פעמיים) ו-baseVersion של הפיצול (לחיצה כפולה / מכשיר אחר → 409, בלי כפילות).
 import { num, r2, sum, normName, normTime, normStatus, cleanPh, cleanColl, normHard, phShow } from '../../public/js/calc.js';
+import { notesFor, findRec } from '../split-notes.js';
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const todayIL = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Jerusalem' });
@@ -64,7 +65,7 @@ export async function register(ctx) {
       const works = listDocs('accounts').filter(x => x.data.kind === 'work' && x.data.date === date);
       let W = body.workId ? works.find(x => x.id === body.workId) : null;
       if (!W) W = works.sort((x, y) => ((y.data.entries || []).length - (x.data.entries || []).length) || (wStamp(y.data) - wStamp(x.data)))[0] || null;
-      const add = ents.map(e => ({ ...workEntry(e), _k: 'e' + newId() }));
+      const add = ents.map(e => { const src = e.sid ? findRec(sp, e.sid) : null; const sn = src ? notesFor(sp, src) : []; return { ...workEntry(e), _k: 'e' + newId(), ...(src ? { sid: src._k, spl: sd.id } : {}), ...(sn.length ? { sn } : {}) }; });
       let workId, created = false, all;
       if (W) {
         const data = { ...W.data }; data.entries = (data.entries || []).concat(add); data.updatedAt = now(); data.edits = (data.edits || 0) + 1;

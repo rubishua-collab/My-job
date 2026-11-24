@@ -119,7 +119,7 @@ export function mCompareHTML(acc,list){
 /* ---- איסוף יומי: טקסט ודוח — app.html 2667-2745 ---- */
 const expLines=(xl,lines,withC)=>xl.forEach(x=>lines.push('• '+x.n+' – '+fmt(x.a)+' ₪'+(withC&&x.c?' – '+x.c:'')));
 function workLines(c,lines){
-  c.rows.forEach((r,i)=>{ if(c.noAns&&c.noAns.length){ if(i===0) lines.push('— לא ענו —'); else if(i===c.noAns.length) lines.push('— לפי שעה —'); } lines.push((i+1)+'. '+r.n+(r.pp?' (חלק '+r.pp+')':'')+' – '+fmt(r.a)+' ₪'+(r.s?' – '+r.s+(r.ga!==null&&r.ga!==undefined&&Math.abs(r.ga-r.a)>0.004?' '+fmt(r.ga)+' ₪ (חלקי)':''):(r.t?' – '+r.t:''))+(r.p?' – '+r.p:'')+(r.h?' – '+(r.h==='קשה'?'🔴 קשה':'🟢 לא קשה'):''));});
+  c.rows.forEach((r,i)=>{ if(c.noAns&&c.noAns.length){ if(i===0) lines.push('— לא ענו —'); else if(i===c.noAns.length) lines.push('— לפי שעה —'); } lines.push((i+1)+'. '+r.n+(r.pp?' (חלק '+r.pp+')':'')+' – '+fmt(r.a)+' ₪'+(r.s?' – '+r.s+(r.ga!==null&&r.ga!==undefined&&Math.abs(r.ga-r.a)>0.004?' '+fmt(r.ga)+' ₪ (חלקי)':''):(r.t?' – '+r.t:''))+(r.p?' – '+r.p:'')+(r.h?' – '+(r.h==='קשה'?'🔴 קשה':'🟢 לא קשה'):'')); (r.notes||[]).forEach(t=>String(t).split(/\r?\n/).forEach(l=>{ if(l.trim()) lines.push('   ✎ '+l.trim()); }));});
 }
 export function workText(acc){
   const es=acc.entries||[], xs=wExpList(acc), xt=sum(xs.map(x=>x.a)), c=calcWork(es), gs=workGroups(es,xs);
@@ -168,7 +168,7 @@ function expTableHTML(xl,total,net,withC){
 function workTableHTML(c,opts){
   let body='', n=0;
   const lbl=r=>r.s?'<span class="stl '+(r.s===ST_GOT?'got':(r.s===ST_NOT?'hard':(r.s===ST_NA?'na':'pass')))+'">'+esc(r.s)+(r.ga!==null&&r.ga!==undefined&&Math.abs(r.ga-r.a)>0.004?' '+fmt(r.ga)+' ₪ חלקי':'')+'</span>':(r.t?'<span class="num"><b>'+esc(r.t)+'</b></span>':'—');
-  const row=r=>{n++;const cl=(r.s===ST_GOT?'done':'')+(opts&&opts.hit&&opts.hit(r.n,r.a)?' hit':'');return '<tr'+(cl.trim()?' class="'+cl.trim()+'"':'')+'><td class="ix">'+n+'</td><td>'+esc(r.n)+(r.pp?' <span class="stl part">חלק <span class="num">'+esc(r.pp)+'</span></span>':'')+(r.h?' <span class="stl '+(r.h==='קשה'?'hard':'easy')+'">'+esc(r.h)+'</span>':'')+(r.p?'<div class="phl"><span class="num">'+esc(r.p)+'</span></div>':'')+'</td><td class="a">'+money(r.a)+'</td><td class="a">'+lbl(r)+'</td></tr>';};
+  const row=r=>{n++;const cl=(r.s===ST_GOT?'done':'')+(opts&&opts.hit&&opts.hit(r.n,r.a)?' hit':'');return '<tr'+(cl.trim()?' class="'+cl.trim()+'"':'')+'><td class="ix">'+n+'</td><td>'+esc(r.n)+((r.notes&&r.notes.length)?'<div class="rnotes">'+r.notes.map(t=>esc(t)).join('<br>').replace(/\n/g,'<br>')+'</div>':'')+(r.pp?' <span class="stl part">חלק <span class="num">'+esc(r.pp)+'</span></span>':'')+(r.h?' <span class="stl '+(r.h==='קשה'?'hard':'easy')+'">'+esc(r.h)+'</span>':'')+(r.p?'<div class="phl"><span class="num">'+esc(r.p)+'</span></div>':'')+'</td><td class="a">'+money(r.a)+'</td><td class="a">'+lbl(r)+'</td></tr>';};
   const sep=t=>n>0?'<tr class="hl"><td colspan="4">'+t+'</td></tr>':'';
   /* "לא ענו": בלוק נפרד בראש הרשימה, לא מתערבב עם מי שיש לו שעה */
   if(c.noAns.length) body+='<tr class="hl"><td colspan="4">'+ST_NA+' ('+c.noAns.length+')</td></tr>'+c.noAns.map(row).join('');
@@ -284,6 +284,7 @@ export async function sharePdf(html,acc,text,box,btn){
 
 /* ---- עיצוב החשבון המודפס — app.html 241-291, 365, 377-383, 405-407, 418, 891-897. נשאר בהיר בשני מצבי התצוגה, זה מסמך ---- */
 export const REPORT_CSS=`
+.report .rnotes{white-space:pre-line;font-size:12.5px;color:#4d3a08;margin-top:2px}
 .report,#pdf-stage{--paper:#ffffff;--ink:#16223a;--ink-muted:#5a6678;--rline:#cfd6df;--zebra:#f4f6fa;
   --r-blue:#1d3f6e;--r-brown:#7a4a1c;--r-slate:#3a4a60;--r-green:#17603f;--r-hl:#fbf1d6;--r-neg:#b3261e;--r-hit:#ffd978;
   --r-band:#0f2444;--r-band2:#183560;--r-band-fg:#ffffff;--r-band-muted:#c3cfe2;--r-gold:#b8913f;--r-note-fg:#4d3a08;

@@ -14,6 +14,7 @@ import * as wa from './wa.js';
 import { calcMorning, prevMorning, normStatus, collKey, cleanColl, ST_GOT, r2, normName } from '../public/js/calc.js';
 import { normPhone } from '../public/js/phone.js';
 import { dayInfo } from './features/day-expense.js';
+import { attachNotes } from './split-notes.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const PORT = +process.env.PORT || 8080;
@@ -43,6 +44,7 @@ r.get('/api/accounts/:id', (req, res, { user, params }) => {
   const a = filterForUser(user, { id: d.id, ...d.data }); if (!a) throw err(403, 'אין לך הרשאה לחשבון הזה');
   const extra = {};
   if (a.kind === 'morning') { const p = prevMorning(listDocs('accounts').map(x => ({ id: x.id, ...x.data })), a.date, a.id); extra.prev = p; }
+  if (a.kind === 'work') attachNotes(listDocs, a); // הערות מהפיצול מתחת לשם הלקוח (תמיד מהנוסח העדכני)
   if (a.kind === 'split' && can.finance(user)) extra._day = dayInfo(listDocs, a.date); // הוצאות הגובים ו״נגבה בפועל״ מאיסוף היום של אותו תאריך
   if (a.kind === 'split' && can.finance(user)) {
     // שורה שהיא העתק זהה (אותו מזהה שנוצר באפליקציה, אותו שם וסכום) של שורה בחשבון פיצול אחר — הגיעה לכאן בטעות

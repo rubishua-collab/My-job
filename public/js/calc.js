@@ -120,7 +120,7 @@ export const stripInv=v=>String(v==null?'':v).replace(/[\u200B-\u200F\u202A-\u20
 export const cleanColl=v=>{const t=stripInv(v); return collKey(t)==='טאייה'?'טאייה':t;};
 // מקור: שורה 2643
 export function calcWork(entries){
-  const rows=entries.map((e,i)=>{const s=normStatus(e.s);return {n:e.n||'(ללא שם)',a:num(e.a),t:s?'':normTime(e.t),s,p:cleanPh(e.p),c:cleanColl(e.c),h:normHard(e.h),pp:e.pp||'',ga:(s===ST_GOT&&e.ga!==undefined&&e.ga!==null&&e.ga!=='')?num(e.ga):null,i};});
+  const rows=entries.map((e,i)=>{const s=normStatus(e.s);return {n:e.n||'(ללא שם)',a:num(e.a),t:s?'':normTime(e.t),s,p:cleanPh(e.p),c:cleanColl(e.c),h:normHard(e.h),pp:e.pp||'',ga:(s===ST_GOT&&e.ga!==undefined&&e.ga!==null&&e.ga!=='')?num(e.ga):null,i,notes:Array.isArray(e._notes)?e._notes:[]};});
   const rank=r=>r.s===ST_NA?-1:(r.s===ST_GOT?4:(r.s===ST_NOT?3:(r.s===ST_PASS?1:(r.t?0:2))));
   rows.sort((x,y)=>(rank(x)-rank(y))||(rank(x)===0?timeMin(x.t)-timeMin(y.t):0)||(x.i-y.i));
   const noAns=rows.filter(r=>r.s===ST_NA), timed=rows.filter(r=>rank(r)===0), pass=rows.filter(r=>r.s===ST_PASS), noTime=rows.filter(r=>rank(r)===2), notGot=rows.filter(r=>r.s===ST_NOT), got=rows.filter(r=>r.s===ST_GOT);

@@ -297,3 +297,8 @@ tr.exp-row td{background:color-mix(in srgb,var(--warn-bg,#fff1d6) 55%,transparen
 /* כרטיס הוצאות של גובה */
 .xc-row label.bad .in{border-color:var(--neg);box-shadow:0 0 0 2px color-mix(in srgb,var(--neg) 25%,transparent)}
 .xc-tot{margin-top:8px}
+
+/* הערות מהפיצול באיסוף יום */
+.wnotes{grid-column:2;display:flex;flex-direction:column;gap:2px;margin:2px 0}
+.wnote{white-space:pre-line;font-size:14px;line-height:1.4;color:var(--ink,#16223a);background:color-mix(in srgb,var(--warn-bg,#fff1d6) 70%,transparent);border-inline-start:3px solid var(--gold,#b8913f);padding:3px 8px;border-radius:6px;overflow-wrap:anywhere}
+.edta{min-width:140px;min-height:40px;resize:vertical;white-space:pre-wrap}

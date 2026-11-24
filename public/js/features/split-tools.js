@@ -678,6 +678,8 @@ function panelRender(ctx) {
     <div class="small" id="spt-xn">${esc(xs.text)}</div>
     ${xs.nd ? '<div class="row" style="margin-top:6px"><button class="btn plain sm" id="spt-reset">אפס העברה (החזר את מה שהועבר)</button></div>' : ''}</div>
   <div class="card"><h2>שעות, גובים ופיצול סכום</h2>${filtered ? '<div class="note info">מוצגות השורות שתואמות לסינון.</div>' : ''}${canMerge ? '<button class="btn ghost sm" id="spt-smerge">אחד חובות של הלווים שמוצגים לשורה אחת</button>' : ''}<div id="spt-lists">${listsHTML(ctx, A, X)}</div></div>
+  ${(A.xstash || []).filter(r => r && r.n).length ? `<details class="card" id="spt-moved"${X.movedOpen ? ' open' : ''}><summary><b>שורות שהועברו לאיסוף (${(A.xstash || []).filter(r => r && r.n).length})</b> <span class="small muted">— ההערה כאן מופיעה באיסוף היומי וברשימה לגובה</span></summary>
+    <div class="list">${(A.xstash || []).filter(r => r && r.n).map(r => `<div class="li noc"><div class="t">${esc(r.n)}${r.pp ? ` <span class="pill acc">חלק ${esc(r.pp)}</span>` : ''}</div><div class="a">${money(num(r.a))}</div><div class="m" style="flex-direction:column;align-items:stretch"><span class="small">${esc(String(r.c || '').trim() || 'ללא גובה')}${r.t ? ' · ' + esc(r.t) : ''}</span><textarea class="in" rows="2" data-xsn="${esc(r._k)}" placeholder="הערה ללקוח (תופיע באיסוף)">${esc(r.note || '')}</textarea></div></div>`).join('')}</div></details>` : ''}
   <details class="card" id="spt-rows"${X.rowsOpen ? ' open' : ''}><summary><b>עריכת שורות (${(A.records || []).length})</b></summary>
     <p class="small muted">הערות שרשמת אצל לקוח נשארות בשורה נפרדת ולא מתאחדות. הכפתור ⇄ מחליף בין שם משפחה להערה. ״לא נגבה היום״ מעביר את השורה לרשימה צדדית. ״הערה טופלה״ — ההערה לא תועבר לחשבון הבא.</p>
     <div class="row"><button class="btn ghost sm" id="spt-merge">אחד כפולים</button><button class="btn ghost sm" id="spt-mergedebts" title="אותו לווה בכמה שורות הופך לשורה אחת עם סכום מצטבר, וההערות של כל החובות נשמרות">אחד חובות של אותו לווה</button></div>
@@ -829,6 +831,11 @@ function panelBind(ctx) {
     }
   });
   const sb = $('#spt-lists [data-spx]', root); if (sb) updateSpxRem(A(), X, sb);
+  const mv = $('#spt-moved', root);
+  if (mv) {
+    mv.addEventListener('toggle', () => { X.movedOpen = mv.open; });
+    mv.addEventListener('input', (e) => { const ta = e.target.closest('[data-xsn]'); if (!ta) return; const r = (A().xstash || []).find(x => x && x._k === ta.dataset.xsn); if (r) { r.note = ta.value; H.later('הערה לשורה שהועברה'); } });
+  }
   // ״איחוד חובות לפי לווה״: מציג את הלווים שנמצאו ומאחד רק באישור. כל חוב נשאר שורה עם הגובה שלו (מזהה קבוצה mg),
   // כך שסכומי הגובים וסך החשבון לא משתנים, ולא נוצרת הלוואה או חיוב חדש.
   const mb = $('#mgbtn', ctx.view);
