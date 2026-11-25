@@ -122,8 +122,23 @@ r.post('/api/accounts/:id/mark', (req, res, { user, params, body }) => once(body
   logAudit({ user, action: 'שינוי סטטוס', col: 'accounts', doc_id: params.id, item: body.key, before, after, note: e.n });
   return { ok: true, version: out.version, entry: e };
 }));
-r.get('/api/accounts/:id/history', (req, res, { user, params }) => {
-  const rows = db.prepare("SELECT id,at,user_name,action,item,before,after,note FROM audit WHERE col='accounts' AND doc_id=? AND action='שינוי סטטוס' ORDER BY id DESC LIMIT 500").all(params.id);
+// ״שייך לגובה״ / ״העבר לגובה אחר״: משנה רק את הגובה האחראי על השורה (c). ״אסף בפועל״ (by), הסטטוס והסכום שנגבה לא משתנים
+r.post('/api/accounts/:id/assign', (req, res, { user, params, body }) => {
+  need(can.finance(user), 'רק בעלים או מנהל יכולים לשייך לגובה');
+  return once(body.opId, user, () => {
+    const d = getDoc('accounts', params.id); if (!d || d.deleted || d.data.kind !== 'work') throw err(404, 'רשימת האיסוף לא נמצאה');
+    const e = (d.data.entries || []).find(x => x && x._k === body.key); if (!e) throw err(404, 'השורה לא נמצאה (אולי נמחקה). רענן את המסך.');
+    const c = cleanColl(body.c); if (!c || c === 'לשנות' || c === 'ללא גובה') throw err(400, 'בחר גובה מהרשימה');
+    const before = cleanColl(e.c) || '';
+    e.c = c; e.ca = { u: user.name, at: now() };
+    d.data.updatedAt = now();
+    const out = putDoc('accounts', params.id, d.data, { user, action: 'שיוך לגובה', item: e.n + ' (' + body.key + ')', note: (before || 'ללא גובה') + ' ← ' + c });
+    logAudit({ user, action: 'שינוי גובה אחראי', col: 'accounts', doc_id: params.id, item: body.key, before: { c: before }, after: { c }, note: e.n });
+    return { ok: true, version: out.version, entry: e };
+  });
+});
+r.get('/api/accounts/:id/history',(req, res, { user, params }) => {
+  const rows = db.prepare("SELECT id,at,user_name,action,item,before,after,note FROM audit WHERE col='accounts' AND doc_id=? AND action IN ('שינוי סטטוס','שינוי גובה אחראי') ORDER BY id DESC LIMIT 500").all(params.id);
   if (!can.finance(user)) { const d = getDoc('accounts', params.id); const keys = new Set((d?.data?.entries || []).filter(e => collKey(cleanColl(e.c)) === collKey(user.collector_name)).map(e => e._k)); return rows.filter(x => keys.has(x.item)); }
   return rows;
 });

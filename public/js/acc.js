@@ -204,6 +204,7 @@ function bind(ctx) {
   $$('[data-mkretry]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); const m = ctx.mk?.get(b.dataset.mkretry); if (m) runMark(ctx, b.dataset.mkretry, m.s, m.reason, m.opId); });
   $$('[data-mkx]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); ctx.mk?.delete(b.dataset.mkx); redraw(ctx); });
   $$('[data-delent]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); delEntrySheet(ctx, b.dataset.delent); });
+  $$('[data-assign]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); assignSheet(ctx, b.dataset.assign); });
 }
 function refreshBar(ctx) {
   const vis = ctx.items.filter(i => ctx.visible.has(i.ref));
@@ -363,7 +364,7 @@ function workRow(ctx, e, gname) {
     <div class="st no-print"${busy ? ' aria-busy="true"' : ''}>${['נאסף', 'לא נאסף', 'לעבור', 'לא ענו'].map(x => `<button data-s="${x}" aria-pressed="${s === x}" data-mark="${esc(e._k)}|${s === x ? '' : x}"${busy ? ' disabled' : ''}>${x}</button>`).join('')}</div>
     ${busy ? `<div class="mkst no-print" role="status">⏳ שומר ${mk.s ? '״' + esc(mk.s) + '״' : 'ביטול סימון'}…</div>` : ''}
     ${mk && mk.st === 'err' ? `<div class="mkerr note err no-print" role="alert"><b>${mk.s ? '״' + esc(mk.s) + '״' : 'ביטול הסימון'} לא נשמר.</b> ${esc(mk.msg)}<div class="row" style="margin-top:6px"><button class="btn sm" data-mkretry="${esc(e._k)}">נסה שוב</button><button class="btn ghost sm" data-mkx="${esc(e._k)}">סגור</button></div></div>` : ''}
-    ${App.can.finance ? `<div class="delent no-print"><button class="btn danger sm" data-delent="${esc(e._k)}" aria-label="מחק גבייה של ${esc(e.n)}">🗑 מחק גבייה</button></div>` : ''}</div>`;
+    ${App.can.finance ? `<div class="delent no-print"><button class="btn sm${collKey(cleanColl(e.c)) ? ' ghost' : ''}" data-assign="${esc(e._k)}" aria-label="${collKey(cleanColl(e.c)) ? 'העבר לגובה אחר' : 'שייך לגובה'}: ${esc(e.n)}">${collKey(cleanColl(e.c)) ? '⇄ העבר לגובה אחר' : '👤 שייך לגובה'}</button><button class="btn danger sm" data-delent="${esc(e._k)}" aria-label="מחק גבייה של ${esc(e.n)}">🗑 מחק גבייה</button></div>` : ''}</div>`;
 }
 // ״מחק גבייה״: מוחק רק את השורה שנבחרה (לפי המזהה שלה), בשרת. השורה יורדת מהמסך רק אחרי שהמחיקה נשמרה.
 function delEntrySheet(ctx, key) {
@@ -440,11 +441,45 @@ async function runMark(ctx, key, s, reason, opId) {
   redraw(ctx);
   if (ctx.liveLater && !markBusy(ctx)) { ctx.liveLater = false; freshLoad(ctx).catch(() => {}); }
 }
+const hTxt = (b, af) => af.c !== undefined ? `גובה אחראי: ${esc(b.c || 'ללא גובה')} ← ${esc(af.c)}` : `${esc(b.s || 'ממתין')} ← ${esc(af.s || 'ממתין')}${af.by && af.by !== b.by ? ' · אסף: ' + esc(af.by === '@' ? 'הגובה' : af.by) : ''}`;
+// ״שייך לגובה״ / ״העבר לגובה אחר״: שומר רק את הגובה האחראי (c). ״אסף בפועל״, הסטטוס והסכום שנגבה לא משתנים.
+// אחרי שמירה מוצלחת הכרטיס עובר מיד לקבוצה של הגובה (וגם לסינון שלו), בלי לצאת מהמסך — גם כשיש חיפוש פעיל.
+async function assignSheet(ctx, key) {
+  const e = (ctx.a.entries || []).find(x => x._k === key); if (!e) return;
+  const cur = cleanColl(e.c), has = !!collKey(cur);
+  let list = []; try { const { collectorsList } = await import('./expense-form.js'); list = await collectorsList(); } catch { /* */ }
+  let chosen = '', busy = false; const opId = uid();
+  const s = openSheet(`<div class="hd"><h2>${has ? 'העבר לגובה אחר' : 'שייך לגובה'}</h2><button class="x" data-close>×</button></div>
+    <dl class="kv"><dt>לקוח</dt><dd>${esc(e.n)}</dd><dt>סכום</dt><dd>${money(num(e.a))}</dd><dt>שעה</dt><dd>${esc(e.t || '—')}</dd><dt>גובה אחראי עכשיו</dt><dd>${esc(cur || 'ללא גובה')}</dd>${e.by ? `<dt>אסף בפועל</dt><dd>${esc(e.by === '@' ? 'הגובה עצמו' : e.by)}</dd>` : ''}</dl>
+    <label class="f" style="margin-top:10px">הגובה האחראי על השורה<select class="in" id="asel"><option value="">בחר גובה…</option>${list.filter(c => collKey(c) !== collKey(cur)).map(c => `<option>${esc(c)}</option>`).join('')}</select></label>
+    <p class="small muted">משנה רק את הגובה האחראי על הגבייה של ${esc(e.n)} ביום הזה. ״אסף בפועל״, הסטטוס והסכום שנגבה לא משתנים.</p>
+    <div id="aerr" role="alert"></div>
+    <div class="row"><button class="btn ghost xl" data-close style="flex:1">ביטול</button><button class="btn xl" id="asave" style="flex:1" disabled>שמור שיוך</button></div>`);
+  const sel = $('#asel', s.el), btn = $('#asave', s.el);
+  sel.onchange = () => { chosen = sel.value; btn.disabled = !chosen || busy; $('#aerr', s.el).innerHTML = ''; };
+  btn.onclick = async () => {
+    if (!chosen || busy) return;
+    busy = true; btn.disabled = true; sel.disabled = true; btn.textContent = 'שומר…'; SaveCtl.saving();
+    try {
+      const r = await save('POST', `/api/accounts/${ctx.a.id}/assign`, { key, c: chosen, opId }, { queue: false, label: 'שיוך לגובה' });
+      const row = (ctx.a.entries || []).find(x => x._k === key); // השורה ברשימה המוצגת עכשיו
+      if (row) { row.c = r.entry.c; row.ca = r.entry.ca; }
+      if (r.version > ctx.a._version) ctx.a._version = r.version;
+      if (ctx.coll && collKey(ctx.coll) !== collKey(r.entry.c)) { ctx.coll = r.entry.c; persist(ctx); } // סינון לפי גובה אחר — עוברים לסינון של הגובה החדש כדי שהכרטיס יישאר במסך
+      s.close(); draw(ctx); SaveCtl.saved();
+      const el = ctx.view.querySelector(`[data-key="${CSS.escape(key)}"]`); if (el) { el.scrollIntoView({ block: 'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 2400); }
+      toast(`${e.n} שויך לגובה ${r.entry.c}`);
+    } catch (err) {
+      busy = false; sel.disabled = false; btn.disabled = !chosen; btn.textContent = 'שמור שיוך'; SaveCtl.failed();
+      $('#aerr', s.el).innerHTML = `<div class="note err">השיוך לא נשמר — ${esc(err.network ? 'אין תשובה מהשרת (בעיית קליטה).' : err.message)} לחץ שוב ״שמור שיוך״ כדי לנסות שוב (לא יירשם פעמיים).</div>`;
+    }
+  };
+}
 async function rowSheet(ctx, key) {
   const e = ctx.a.entries.find(x => x._k === key); if (!e) return;
   const colls = await get('/api/collectors').catch(() => []);
   const s = openSheet(`<div class="hd"><h2>${esc(e.n)}</h2><button class="x" data-close>×</button></div>
-    <dl class="kv"><dt>סכום</dt><dd>${money(num(e.a))}</dd><dt>שעה</dt><dd>${esc(e.t || '—')}</dd><dt>גובה אחראי</dt><dd>${esc(cleanColl(e.c) || '—')}</dd><dt>טלפון</dt><dd>${e.p ? `<a href="tel:${esc(e.p)}">${esc(fmtPhone(e.p))}</a>` : '—'}</dd></dl>
+    <dl class="kv"><dt>סכום</dt><dd>${money(num(e.a))}</dd><dt>שעה</dt><dd>${esc(e.t || '—')}</dd><dt>גובה אחראי</dt><dd>${esc(cleanColl(e.c) || 'ללא גובה')}${App.can.finance ? ` <button class="btn sm ghost" id="rassign">${collKey(cleanColl(e.c)) ? 'העבר לגובה אחר' : 'שייך לגובה'}</button>` : ''}</dd><dt>טלפון</dt><dd>${e.p ? `<a href="tel:${esc(e.p)}">${esc(fmtPhone(e.p))}</a>` : '—'}</dd></dl>
     <div class="grid" style="margin-top:12px">
     <label class="f">סטטוס<select class="in" id="rs">${['', 'נאסף', 'לא נאסף', 'לעבור', 'לא ענו'].map(x => `<option value="${x}" ${normStatus(e.s) === x ? 'selected' : ''}>${x || 'ממתין'}</option>`).join('')}</select></label>
     <label class="f">מי אסף בפועל<input class="in" id="rb" list="rbl" value="${esc(e.by === '@' ? 'הגובה עצמו' : (e.by || ''))}" placeholder="הגובה עצמו / שם השליח"><datalist id="rbl"><option>הגובה עצמו</option>${colls.map(c => `<option>${esc(c)}</option>`).join('')}</datalist></label>
@@ -457,9 +492,10 @@ async function rowSheet(ctx, key) {
     <h3 style="margin-top:16px">היסטוריית השורה</h3><div id="rh" class="small muted">טוען…</div>`);
   get(`/api/accounts/${ctx.a.id}/history`).then(h => {
     const L = h.filter(x => x.item === key);
-    $('#rh', s.el).innerHTML = L.length ? `<div class="list">${L.map(x => { const b = JSON.parse(x.before || '{}'), af = JSON.parse(x.after || '{}'); return `<div class="li noc"><div class="t">${esc(b.s || 'ממתין')} ← ${esc(af.s || 'ממתין')}${af.by && af.by !== b.by ? ' · אסף: ' + esc(af.by === '@' ? 'הגובה' : af.by) : ''}</div><div class="a small">${when(x.at)}</div><div class="m"><span>${esc(x.user_name)}</span></div></div>`; }).join('')}</div>` : 'אין שינויים מתועדים';
+    $('#rh', s.el).innerHTML = L.length ? `<div class="list">${L.map(x => { const b = JSON.parse(x.before || '{}'), af = JSON.parse(x.after || '{}'); return `<div class="li noc"><div class="t">${hTxt(b, af)}</div><div class="a small">${when(x.at)}</div><div class="m"><span>${esc(x.user_name)}</span></div></div>`; }).join('')}</div>` : 'אין שינויים מתועדים';
   }).catch(() => { $('#rh', s.el).textContent = ''; });
   const opId = uid();
+  const ra = $('#rassign', s.el); if (ra) ra.onclick = () => { s.close(); assignSheet(ctx, key); };
   const rp = $('#rpriv', s.el); if (rp) rp.onclick = () => { const it = itemsOf(ctx).find(x => x.ref === key); s.close(); openPrivate([it], { col: 'accounts', id: ctx.a.id, title: ctx.a.title + ' · ' + e.n, kind: ctx.a.kind }); };
   $('#rsave', s.el).onclick = async (ev) => {
     const btn = ev.target; btn.disabled = true;
@@ -477,7 +513,7 @@ document.addEventListener('click', async (e) => {
   if (e.target.id !== 'hist') return;
   const id = location.hash.split('/')[2].split('?')[0];
   const h = await get(`/api/accounts/${id}/history`);
-  openSheet(`<div class="hd"><h2>היסטוריית סימונים</h2><button class="x" data-close>×</button></div>${h.length ? `<div class="list">${h.map(x => { const b = JSON.parse(x.before || '{}'), af = JSON.parse(x.after || '{}'); return `<div class="li noc"><div class="t">${esc(x.note || '')}: ${esc(b.s || 'ממתין')} ← ${esc(af.s || 'ממתין')}</div><div class="a small">${when(x.at)}</div><div class="m"><span>${esc(x.user_name)}</span>${af.by ? `<span>אסף: ${esc(af.by === '@' ? 'הגובה' : af.by)}</span>` : ''}</div></div>`; }).join('')}</div>` : '<div class="empty">אין עדיין סימונים</div>'}`);
+  openSheet(`<div class="hd"><h2>היסטוריית סימונים</h2><button class="x" data-close>×</button></div>${h.length ? `<div class="list">${h.map(x => { const b = JSON.parse(x.before || '{}'), af = JSON.parse(x.after || '{}'); return `<div class="li noc"><div class="t">${esc(x.note || '')}: ${af.c !== undefined ? hTxt(b, af) : `${esc(b.s || 'ממתין')} ← ${esc(af.s || 'ממתין')}`}</div><div class="a small">${when(x.at)}</div><div class="m"><span>${esc(x.user_name)}</span>${af.by ? `<span>אסף: ${esc(af.by === '@' ? 'הגובה' : af.by)}</span>` : ''}</div></div>`; }).join('')}</div>` : '<div class="empty">אין עדיין סימונים</div>'}`);
 });
 
 // ---------- ״פצל חוב״ (עריכת הפיצול) ----------

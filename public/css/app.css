@@ -230,6 +230,8 @@ tr.mgpart td{background:color-mix(in srgb,var(--accent-soft) 25%,transparent)}
 /* מחק גבייה — בתוך השורה, בנפרד מכפתורי הסטטוס */
 .delent{grid-column:1/-1;display:flex;justify-content:flex-end;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
 .delent .btn{min-height:40px}
+.li.flash{box-shadow:0 0 0 3px var(--gold)}
+.delent{gap:8px}
 .mkst{grid-column:1/-1;margin-top:6px;font-weight:700;color:var(--muted)}
 .mkerr{grid-column:1/-1;margin-top:8px}
 .st[aria-busy=true] button{opacity:.55}
