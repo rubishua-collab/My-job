@@ -15,6 +15,7 @@ import { calcMorning, prevMorning, normStatus, collKey, cleanColl, ST_GOT, r2, n
 import { normPhone } from '../public/js/phone.js';
 import { dayInfo } from './features/day-expense.js';
 import { attachNotes } from './split-notes.js';
+import { attachLoanReqs } from './features/loan-flow.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const PORT = +process.env.PORT || 8080;
@@ -45,6 +46,7 @@ r.get('/api/accounts/:id', (req, res, { user, params }) => {
   const extra = {};
   if (a.kind === 'morning') { const p = prevMorning(listDocs('accounts').map(x => ({ id: x.id, ...x.data })), a.date, a.id); extra.prev = p; }
   if (a.kind === 'work') attachNotes(listDocs, a); // הערות מהפיצול מתחת לשם הלקוח (תמיד מהנוסח העדכני)
+  if ((a.kind === 'split' || a.kind === 'work') && can.finance(user)) attachLoanReqs(listDocs, getDoc, a); // בקשות הלוואה שהועברו לתאריך הזה (לתצוגה בלבד)
   if (a.kind === 'split' && can.finance(user)) extra._day = dayInfo(listDocs, a.date); // הוצאות הגובים ו״נגבה בפועל״ מאיסוף היום של אותו תאריך
   if (a.kind === 'split' && can.finance(user)) {
     // שורה שהיא העתק זהה (אותו מזהה שנוצר באפליקציה, אותו שם וסכום) של שורה בחשבון פיצול אחר — הגיעה לכאן בטעות

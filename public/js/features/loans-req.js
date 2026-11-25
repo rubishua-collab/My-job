@@ -1,13 +1,14 @@
 // בקשות להלוואה — מי ביקש, כמה ומתי. רישום בלבד: לא נכנס להלוואות, לקרן או לגבייה.
 // מקור: app.html — לשונית 1492-1530, קוד 7088-7232, עיצוב 555-575. האוסף "loan_requests": name, amount, date, phone, note, created, updated.
-import { get, save } from '../api.js';
+import { get, save, uid } from '../api.js';
+import { lreqStatus } from './loan-flow.js';
 import { $, $$, esc, fmt, money, dmy, todayISO, toast } from '../ui.js';
 import { App, onLive } from '../app.js';
 import { route, more } from '../registry.js';
 import { r2, sum, num, normName } from '../calc.js';
 
 const isoLabel = dmy;
-const RQ = { list: [], state: 'wait', edit: null, delFor: null, q: '', busy: false, flash: null, flT: null };
+const RQ = { list: [], state: 'wait', edit: null, delFor: null, q: '', busy: false, flash: null, flT: null, xFor: null, xDate: '', xSplit: '', xOp: '', xBusy: false, xErr: '', splits: null };
 const rqCanWrite = () => !!App.can.finance;
 const rqCanDel = () => App.me && App.me.role === 'owner';
 const rqCntTxt = n => n === 1 ? 'בקשה אחת' : fmt(n) + ' בקשות';
@@ -30,6 +31,9 @@ textarea.in.rq-note-in{min-height:64px}
 .rq-meta a{color:var(--accent-ink);font-weight:600}
 .rq-note{grid-column:1/-1;font-size:13.5px;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--field);border:1px solid var(--line);border-radius:6px;padding:6px 10px}
 .rq-act{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.rq-flow{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;font-size:13.5px}
+.rq-xf{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px}
+.rq-xf label{flex:1 1 160px}
 .rq-item .ln-confirm{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--err-bg);color:var(--err-fg);border-radius:10px;padding:10px 12px;font-weight:600}
 .rq-sum{position:sticky;bottom:calc(var(--tabbar-h) + 8px + env(safe-area-inset-bottom,0px));z-index:3;display:flex;flex-wrap:wrap;align-items:stretch;gap:8px 12px;background:var(--band);color:var(--band-fg);border-radius:10px;padding:12px 16px;box-shadow:0 8px 24px -10px rgba(8,20,41,.6);margin-top:10px}
 @media (min-width:980px){.rq-sum{bottom:8px}}
@@ -53,10 +57,37 @@ function rqItemHTML(r, can) {
   if (can) {
     act = RQ.delFor === r.id
       ? '<div class="ln-confirm"><span>למחוק את הבקשה של ' + esc(r.name) + ' על ' + money(num(r.amount)) + '?</span><button class="btn danger sm" type="button" data-rq-yes="' + esc(r.id) + '"' + (RQ.busy ? ' disabled' : '') + '>' + (RQ.busy ? 'מוחק…' : 'כן, מחק') + '</button><button class="btn plain sm" type="button" data-rq-no="1"' + (RQ.busy ? ' disabled' : '') + '>ביטול</button></div>'
-      : '<div class="rq-act"><button class="btn ghost sm" type="button" data-rq-edit="' + esc(r.id) + '">עריכה</button>' + (rqCanDel() ? '<button class="btn danger sm" type="button" data-rq-del="' + esc(r.id) + '">מחיקה</button>' : '') + '</div>';
+      : (RQ.xFor === r.id && !r.xfer ? rqXferForm(r) : '<div class="rq-act">' + (!r.xfer ? '<button class="btn sm" type="button" data-rq-xfer="' + esc(r.id) + '">העבר ללשונית פיצול</button>' : '') + '<button class="btn ghost sm" type="button" data-rq-edit="' + esc(r.id) + '">עריכה</button>' + (rqCanDel() ? '<button class="btn danger sm" type="button" data-rq-del="' + esc(r.id) + '">מחיקה</button>' : '') + '</div>');
   }
+  const flow = r.xfer ? '<div class="rq-flow"><span class="pill acc">הועברה לפיצול</span><span>תאריך עבודה: <b class="num">' + esc(isoLabel(r.xfer.date)) + '</b></span>' + lreqStatus(r) + '</div>' : '';
   return '<div class="rq-item' + (RQ.flash === r.id ? ' flash' : '') + (RQ.edit === r.id && !$('#rq-form').hidden ? ' editing' : '') + '" data-rq-id="' + esc(r.id) + '"><span class="rq-nm">' + esc(r.name) + '</span><span class="rq-amt">' + money(num(r.amount)) + '</span>' +
-    '<div class="rq-meta">' + meta.join('') + '</div>' + (String(r.note || '').trim() ? '<div class="rq-note">' + esc(r.note) + '</div>' : '') + act + '</div>';
+    '<div class="rq-meta">' + meta.join('') + '</div>' + (String(r.note || '').trim() ? '<div class="rq-note">' + esc(r.note) + '</div>' : '') + flow + act + '</div>';
+}
+// ״העבר ללשונית פיצול״: תאריך העבודה (ברירת מחדל היום) והפיצול של אותו תאריך
+function rqXferForm(r) {
+  const ss = (RQ.splits || []).filter(a => a.date === RQ.xDate);
+  return '<div class="rq-xf"><label class="rq-fld">תאריך העבודה<input class="in" type="date" id="rq-xd" value="' + esc(RQ.xDate) + '"' + (RQ.xBusy ? ' disabled' : '') + '></label>' +
+    '<label class="rq-fld">לפיצול<select class="in" id="rq-xs"' + (RQ.xBusy ? ' disabled' : '') + '>' + (ss.length ? ss.map(a => '<option value="' + esc(a.id) + '"' + (RQ.xSplit === a.id ? ' selected' : '') + '>' + esc(a.title || 'פיצול') + '</option>').join('') : '<option value="">פיצול חדש לתאריך הזה</option>') + '</select></label>' +
+    '<button class="btn" type="button" data-rq-xgo="' + esc(r.id) + '"' + (RQ.xBusy ? ' disabled' : '') + '>' + (RQ.xBusy ? 'מעביר…' : 'העבר') + '</button><button class="btn plain" type="button" data-rq-xno="1"' + (RQ.xBusy ? ' disabled' : '') + '>ביטול</button>' +
+    (RQ.xErr ? '<div class="note err" role="alert" style="flex-basis:100%">' + esc(RQ.xErr) + '</div>' : '') + '</div>';
+}
+async function rqXferOpen(id) {
+  RQ.xFor = id; RQ.xDate = RQ.xDate || todayISO(); RQ.xSplit = ''; RQ.xErr = ''; RQ.xOp = uid(); rqRender();
+  if (!RQ.splits) { try { RQ.splits = await get('/api/accounts?kind=split'); } catch { RQ.splits = []; } }
+  rqXferPick(); rqRender();
+}
+function rqXferPick() { const ss = (RQ.splits || []).filter(a => a.date === RQ.xDate); if (!ss.some(a => a.id === RQ.xSplit)) RQ.xSplit = ss[0] ? ss[0].id : ''; }
+async function rqXferGo(id) {
+  const r = rqGet(id); if (!r || RQ.xBusy) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(RQ.xDate)) { RQ.xErr = 'בחר תאריך עבודה.'; return rqRender(); }
+  RQ.xBusy = true; RQ.xErr = ''; rqRender();
+  try {
+    const out = await save('POST', '/api/loan-req/xfer', { id, date: RQ.xDate, splitId: RQ.xSplit || undefined, opId: RQ.xOp }, { label: 'העברת בקשה לפיצול', queue: false });
+    r.xfer = out.xfer; if (out.version) r._version = out.version;
+    RQ.xBusy = false; RQ.xFor = null; RQ.splits = null; RQ.flash = id; rqRender();
+    toast(out.already ? 'הבקשה כבר הועברה לפיצול של ' + isoLabel(out.xfer.date) : 'הבקשה של ' + r.name + ' הועברה לפיצול של ' + isoLabel(out.xfer.date));
+    clearTimeout(RQ.flT); RQ.flT = setTimeout(() => { RQ.flash = null; rqRender(); }, 2600);
+  } catch (e) { RQ.xBusy = false; RQ.xErr = 'ההעברה לא נשמרה: ' + failMsg(e).replace(/ הפעולה תישלח.*$/, '') + ' לחץ שוב ״העבר״ — הבקשה לא תועבר פעמיים.'; rqRender(); }
 }
 // שורת הסיכום: תמיד הסכום של כל הבקשות, ובזמן חיפוש גם הסכום של הבקשות שתואמות
 function rqRenderSum(all, hits, q) {
@@ -120,6 +151,7 @@ async function rqSave() {
   if (RQ.edit && !old) return rqFormMsg('הבקשה הזו כבר לא קיימת (אולי נמחקה). סגור את הטופס והוסף בקשה חדשה.');
   const now = new Date().toISOString(), id = old ? old.id : 'Q' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const doc = { name, amount, date, phone: $('#rq-f-phone').value.trim(), note: $('#rq-f-note').value.trim(), created: old && old.created ? old.created : now, updated: now };
+  if (old && old.xfer) doc.xfer = old.xfer; if (old && old.given) doc.given = old.given; // עריכה לא מבטלת העברה לפיצול או אישור מסירה
   const sb = $('#rq-save'); RQ.busy = true; sb.disabled = true; sb.textContent = 'שומר…';
   let out;
   try {
@@ -185,10 +217,18 @@ async function renderRequestsPage(view) {
   $('#rq-qclr').onclick = () => { qi.value = ''; RQ.q = ''; rqRender(); qi.focus(); };
   $('#rq-list').addEventListener('click', e => {
     const ed = e.target.closest('[data-rq-edit]'); if (ed) { const r = rqGet(ed.getAttribute('data-rq-edit')); if (r) { RQ.delFor = null; rqOpenForm(r); } return; }
+    const xf = e.target.closest('[data-rq-xfer]'); if (xf) { RQ.delFor = null; rqXferOpen(xf.getAttribute('data-rq-xfer')); return; }
+    const xg = e.target.closest('[data-rq-xgo]'); if (xg) { rqXferGo(xg.getAttribute('data-rq-xgo')); return; }
+    if (e.target.closest('[data-rq-xno]')) { if (!RQ.xBusy) { RQ.xFor = null; RQ.xErr = ''; rqRender(); } return; }
     const dl = e.target.closest('[data-rq-del]'); if (dl) { RQ.delFor = dl.getAttribute('data-rq-del'); rqRender(); return; }
     if (e.target.closest('[data-rq-no]')) { if (!RQ.busy) { RQ.delFor = null; rqRender(); } return; }
     const y = e.target.closest('[data-rq-yes]'); if (y) { rqDelete(y.getAttribute('data-rq-yes')); return; }
   });
+  $('#rq-list').addEventListener('change', e => {
+    if (e.target.id === 'rq-xd') { RQ.xDate = e.target.value; rqXferPick(); rqRender(); }
+    else if (e.target.id === 'rq-xs') RQ.xSplit = e.target.value;
+  });
+  RQ.xFor = null; RQ.xBusy = false; RQ.xErr = '';
   rqRender();
   await rqReload();
   if (RQ.delFor && !rqGet(RQ.delFor)) RQ.delFor = null;
@@ -196,7 +236,7 @@ async function renderRequestsPage(view) {
   let tm = null;
   return onLive((ev) => {
     if (ev.col !== 'loan_requests') return;
-    clearTimeout(tm); tm = setTimeout(async () => { if (RQ.busy || !$('#rq-list')) return; await rqReload().catch(() => {}); if (RQ.delFor && !rqGet(RQ.delFor)) RQ.delFor = null; rqRender(); }, 250);
+    clearTimeout(tm); tm = setTimeout(async () => { if (RQ.busy || RQ.xBusy || !$('#rq-list')) return; await rqReload().catch(() => {}); if (RQ.delFor && !rqGet(RQ.delFor)) RQ.delFor = null; rqRender(); }, 250);
   });
 }
 route('requests-manage', renderRequestsPage);

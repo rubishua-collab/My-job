@@ -52,6 +52,8 @@ export async function register(ctx) {
         else { const before = (data.entries || []).length; data.entries = (data.entries || []).filter(x => !(x && (x.xk === key || x._k === key))); if (data.entries.length === before) continue; }
         data.updatedAt = now(); putDoc('accounts', d.id, data, { user, action: 'הסרת הוצאה' }); n++;
       }
+      // הוצאת ״מתן הלוואה״ שהוסרה — הבקשה חוזרת ל״ממתינה למסירה״
+      if (key.startsWith('xL')) { const q = getDoc('loan_requests', key.slice(2)); if (q && !q.deleted && q.data.given && q.data.given.xk === key) { const data = { ...q.data }; delete data.given; putDoc('loan_requests', q.id, data, { user, action: 'ביטול אישור מסירה', item: data.name, note: 'ההוצאה הוסרה' }); } }
       return { ok: true, removed: n };
     }));
   });
