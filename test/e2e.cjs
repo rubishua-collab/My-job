@@ -176,12 +176,15 @@ const step = async (name, fn) => { try { await fn(); results.push({ name, ok: tr
     await p.goto(URL + '/#/acc/' + global.workId); await p.waitForSelector('.li[data-row]');
     await phone.setOffline(true);
     await p.locator('.li[data-row]', { hasText: 'בדיקה נכשלת' }).locator('button[data-s="נאסף"]').click();
-    await p.waitForSelector('#net:not([hidden])'); assert.ok(/לא נשמר|אין חיבור/.test(await p.locator('#net').innerText()));
+    // ההודעה מופיעה בתוך השורה עצמה, עם ״נסה שוב״
+    const fr = p.locator('.li[data-row]', { hasText: 'בדיקה נכשלת' });
+    await fr.locator('.mkerr').waitFor(); assert.ok(/לא נשמר/.test(await fr.locator('.mkerr').innerText()));
     await shot('07-iphone-offline');
     await phone.setOffline(false); await p.waitForTimeout(300);
-    // כשהקליטה חוזרת האפליקציה מנסה שוב לבד; אם הפס עדיין מוצג — לוחצים ״נסה שוב״
-    await p.waitForTimeout(1200); const r = p.locator('#net-retry'); if (await r.isVisible()) await r.click({ timeout: 3000 }).catch(() => {}); await p.waitForTimeout(800);
-    assert.ok(await p.locator('#net').isHidden(), 'הפס האדום צריך להיעלם אחרי שמירה');
+    // כשהקליטה חוזרת האפליקציה מנסה שוב לבד; אם ההודעה עדיין מוצגת — לוחצים ״נסה שוב״ בשורה
+    await p.waitForTimeout(1200); const r = fr.locator('[data-mkretry]'); if (await r.isVisible()) await r.click({ timeout: 3000 }).catch(() => {}); await p.waitForTimeout(800);
+    assert.strictEqual(await fr.locator('.mkerr').count(), 0, 'ההודעה צריכה להיעלם אחרי שמירה');
+    assert.ok(await fr.evaluate(el => el.classList.contains('got')), 'השורה מסומנת ״נאסף״');
     const h = (await api(phone, 'GET', `/api/accounts/${global.workId}/history`)).json.filter(x => x.note === 'בדיקה נכשלת');
     assert.strictEqual(h.length, 1, 'נרשם ' + h.length + ' פעמים');
   });

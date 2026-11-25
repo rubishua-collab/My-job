@@ -83,11 +83,11 @@ export async function renderAccount(view, [id], q) {
   draw(ctx);
   const hl = q.get('hl'); if (hl) { const el = view.querySelector(`[data-key="${CSS.escape(hl)}"]`); if (el) { el.scrollIntoView({ block: 'center' }); el.style.outline = '3px solid var(--gold)'; } }
   return onLive(async (e) => {
-    if (e.col !== 'accounts' || e.id !== id || e.version === ctx.a._version) return;
+    if (e.col !== 'accounts' || e.id !== id || !(e.version > ctx.a._version)) return; // גרסה שכבר מוצגת (או ישנה ממנה) — אין מה לרענן
+    if (markBusy(ctx)) { ctx.liveLater = true; return; } // סימון ״נאסף״ באמצע שמירה — מרעננים אחרי שהוא מסתיים, לא באמצע
     if (document.querySelector('#sheet:not([hidden])')) return;
     const ae = document.activeElement; if (ae && view.contains(ae) && ae.matches('input,textarea,select')) return; // באמצע הקלדה — לא מציירים מחדש
-    ctx.a = await get('/api/accounts/' + id); const y = window.scrollY; draw(ctx); window.scrollTo(0, y);
-    toast('עודכן ממכשיר אחר' + (e.by ? ' (' + e.by + ')' : ''));
+    if (await freshLoad(ctx) && !ctx.mkOwn?.has(e.version)) toast('עודכן ממכשיר אחר' + (e.by ? ' (' + e.by + ')' : ''));
   });
 }
 
@@ -186,7 +186,7 @@ function actionBar(ctx, vis) {
 
 function bind(ctx) {
   const { view } = ctx;
-  ctx.reload = async () => { ctx.a = await get('/api/accounts/' + ctx.id); if (ctx.nav !== undefined && ctx.nav !== App.nav) return; const y = window.scrollY; draw(ctx); window.scrollTo(0, y); };
+  ctx.reload = async () => { await freshLoad(ctx, true); };
   const acts = (R.accountActions[ctx.a.kind] || []).concat(R.accountActions['*'] || []);
   $$('[data-xact]', view).forEach(b => b.onclick = () => acts[+b.dataset.xact].run(ctx));
   $('#dprev', view).onclick = () => stepDay(ctx.a.kind, ctx.a.date, -1);
@@ -200,7 +200,9 @@ function bind(ctx) {
   $$('input.ck[data-ref]', view).forEach(c => c.onchange = () => { c.checked ? ctx.sel.add(c.dataset.ref) : ctx.sel.delete(c.dataset.ref); persist(ctx); refreshBar(ctx); });
   bindBar(ctx);
   $$('[data-row]', view).forEach(el => el.onclick = (e) => { if (e.target.closest('input,button,a')) return; rowSheet(ctx, el.dataset.row); });
-  $$('[data-mark]', view).forEach(b => b.onclick = () => quickMark(ctx, b));
+  $$('[data-mark]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); quickMark(ctx, b); });
+  $$('[data-mkretry]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); const m = ctx.mk?.get(b.dataset.mkretry); if (m) runMark(ctx, b.dataset.mkretry, m.s, m.reason, m.opId); });
+  $$('[data-mkx]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); ctx.mk?.delete(b.dataset.mkx); redraw(ctx); });
   $$('[data-delent]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); delEntrySheet(ctx, b.dataset.delent); });
 }
 function refreshBar(ctx) {
@@ -351,14 +353,16 @@ function workView(ctx, vis) {
   <button class="btn ghost no-print" id="hist">היסטוריית סימונים ותיקונים</button>`;
 }
 function workRow(ctx, e, gname) {
-  const s = normStatus(e.s);
+  const s = normStatus(e.s); const mk = ctx.mk && ctx.mk.get(e._k); const busy = mk && mk.st === 'saving';
   const courier = e.by && e.by !== '@' ? `<span>גובה אחראי: <b>${esc(cleanColl(e.c) || gname)}</b> · אסף בפועל: <b>${esc(e.by)}</b></span>` : (e.by === '@' ? `<span>נאסף ע״י הגובה</span>` : '');
   return `<div class="li ${s === 'נאסף' ? 'got' : ''} ${ctx.sel.has(e._k) ? 'sel' : ''} link" data-row="${esc(e._k)}" data-key="${esc(e._k)}">${ck(ctx, e._k)}
     <div class="t">${!s && e.t ? `<span class="num">${esc(e.t)}</span> · ` : ''}${esc(e.n)} ${s ? `<span class="pill ${s === 'נאסף' ? 'ok' : s === 'לא נאסף' ? 'err' : s === 'לא ענו' ? 'acc' : 'warn'}">${esc(s)}</span>` : ''}${e.h === 'קשה' ? ' <span class="pill err">קשה</span>' : ''}${e.pp ? ` <span class="pill acc">חלק ${esc(e.pp)}</span>` : ''}</div>
     ${(e._notes || []).length ? `<div class="wnotes">${e._notes.map(t => `<div class="wnote">✎ ${esc(t)}</div>`).join('')}</div>` : ''}
     <div class="a">${money(num(e.a))}${s === 'נאסף' && e.ga != null && e.ga !== '' ? `<div class="small muted">נגבה ${money(e.ga)}</div>` : ''}</div>
     <div class="m">${courier}${e.p ? `<a href="tel:${esc(e.p)}">${esc(fmtPhone(e.p))}</a>` : '<span class="neg">אין טלפון</span>'}${e.pmt ? `<span>${esc(e.pmt)}</span>` : ''}${e.mk ? `<span>סומן ע״י ${esc(e.mk.u)} ${when(e.mk.at)}</span>` : ''}</div>
-    <div class="st no-print">${['נאסף', 'לא נאסף', 'לעבור', 'לא ענו'].map(x => `<button data-s="${x}" aria-pressed="${s === x}" data-mark="${esc(e._k)}|${s === x ? '' : x}">${x}</button>`).join('')}</div>
+    <div class="st no-print"${busy ? ' aria-busy="true"' : ''}>${['נאסף', 'לא נאסף', 'לעבור', 'לא ענו'].map(x => `<button data-s="${x}" aria-pressed="${s === x}" data-mark="${esc(e._k)}|${s === x ? '' : x}"${busy ? ' disabled' : ''}>${x}</button>`).join('')}</div>
+    ${busy ? `<div class="mkst no-print" role="status">⏳ שומר ${mk.s ? '״' + esc(mk.s) + '״' : 'ביטול סימון'}…</div>` : ''}
+    ${mk && mk.st === 'err' ? `<div class="mkerr note err no-print" role="alert"><b>${mk.s ? '״' + esc(mk.s) + '״' : 'ביטול הסימון'} לא נשמר.</b> ${esc(mk.msg)}<div class="row" style="margin-top:6px"><button class="btn sm" data-mkretry="${esc(e._k)}">נסה שוב</button><button class="btn ghost sm" data-mkx="${esc(e._k)}">סגור</button></div></div>` : ''}
     ${App.can.finance ? `<div class="delent no-print"><button class="btn danger sm" data-delent="${esc(e._k)}" aria-label="מחק גבייה של ${esc(e.n)}">🗑 מחק גבייה</button></div>` : ''}</div>`;
 }
 // ״מחק גבייה״: מוחק רק את השורה שנבחרה (לפי המזהה שלה), בשרת. השורה יורדת מהמסך רק אחרי שהמחיקה נשמרה.
@@ -386,19 +390,55 @@ function delEntrySheet(ctx, key) {
     }
   };
 }
+// סימון מהיר בשורה (״נאסף״ וכו׳). לכל שורה שמירה אחת בכל רגע; לכל ניסיון מזהה פעולה קבוע (opId) — לחיצה כפולה
+// או ״נסה שוב״ אחרי תשובה שאבדה לא נרשמים פעמיים. בזמן השמירה השורה מציגה ״שומר…״ ורענון חי מחכה לסיומה,
+// כך שתשובה ישנה מהשרת לא מציירת מצב קודם מעל סימון חדש.
+const markBusy = (ctx) => !!ctx.mk && [...ctx.mk.values()].some(m => m.st === 'saving');
+function redraw(ctx) { const y = window.scrollY; draw(ctx); window.scrollTo(0, y); }
+// טעינה מחדש מהשרת: רק התשובה האחרונה, ורק אם היא לא ישנה ממה שכבר מוצג
+async function freshLoad(ctx, force = false) {
+  const my = ctx.loadSeq = (ctx.loadSeq || 0) + 1;
+  const a = await get('/api/accounts/' + ctx.id);
+  if (my !== ctx.loadSeq || (ctx.nav !== undefined && ctx.nav !== App.nav)) return false;
+  if (markBusy(ctx)) { ctx.liveLater = true; return false; }
+  if (!force && !(a._version > ctx.a._version)) return false;
+  if (a._version < ctx.a._version) return false;
+  ctx.a = a; redraw(ctx); return true;
+}
 async function quickMark(ctx, b) {
   const [key, s] = b.dataset.mark.split('|');
-  const e = ctx.a.entries.find(x => x._k === key);
+  const m0 = ctx.mk && ctx.mk.get(key);
+  if (m0 && (m0.st === 'saving' || (m0.st === 'done' && Date.now() < m0.until))) return; // לחיצה כפולה / לחיצה מיד אחרי השמירה
+  const e = (ctx.a.entries || []).find(x => x._k === key); if (!e) return;
   const prev = normStatus(e.s);
   // תיקון סימון קיים (למשל ״נאסף״ שסומן בטעות) — מבקשים סיבה ומתעדים
   let reason = '';
   if (prev === 'נאסף' && s !== 'נאסף') { reason = prompt(`לבטל את הסימון ״נאסף״ של ${e.n}? כתוב סיבה לתיעוד (לא חובה):`, ''); if (reason === null) return; }
-  b.disabled = true;
+  runMark(ctx, key, s, reason, m0 && m0.st === 'err' && m0.s === s ? m0.opId : uid());
+}
+async function runMark(ctx, key, s, reason, opId) {
+  ctx.mk = ctx.mk || new Map(); ctx.mkOwn = ctx.mkOwn || new Set();
+  if (ctx.mk.get(key)?.st === 'saving') return;
+  const name = ((ctx.a.entries || []).find(x => x._k === key) || {}).n || '';
+  ctx.mk.set(key, { st: 'saving', s, reason, opId }); redraw(ctx); SaveCtl.saving();
   try {
-    const r = await save('POST', `/api/accounts/${ctx.a.id}/mark`, { key, s, reason }, { label: 'סימון איסוף של ' + e.n });
-    Object.assign(e, r.entry); if (r.entry.ga === undefined) delete e.ga; ctx.a._version = r.version;
-    const y = window.scrollY; draw(ctx); window.scrollTo(0, y); toast(s ? `${e.n}: ${s}` : 'הסימון בוטל');
-  } catch (err) { b.disabled = false; toast(err.network ? 'לא נשמר — בעיית קליטה. לחץ ״נסה שוב״ למעלה' : err.message); }
+    const r = await save('POST', `/api/accounts/${ctx.a.id}/mark`, { key, s, reason, opId }, { queue: false, label: 'סימון איסוף של ' + name });
+    ctx.mkOwn.add(r.version);
+    const cur = (ctx.a.entries || []).find(x => x._k === key); // השורה ברשימה המוצגת עכשיו (לא עותק ישן)
+    if (cur && r.entry) { Object.assign(cur, r.entry); if (r.entry.ga === undefined) delete cur.ga; }
+    if (r.version > ctx.a._version) { if (r.version > ctx.a._version + 1) ctx.liveLater = true; ctx.a._version = r.version; } // שינויים אחרים שעוד לא הוצגו — נטען אחרי הסיום
+    if (r.replay) ctx.liveLater = true;
+    ctx.mk.set(key, { st: 'done', until: Date.now() + 700 });
+    SaveCtl.saved(); toast(s ? `${name}: ${s}` : 'הסימון בוטל');
+  } catch (err) {
+    SaveCtl.failed();
+    ctx.mk.set(key, { st: 'err', s, reason, opId, msg: err.network ? 'לא התקבל אישור מהשרת (בעיית קליטה). לחץ ״נסה שוב״ — הסימון לא יירשם פעמיים.' : err.message });
+    // כשהקליטה חוזרת — ניסיון חוזר אוטומטי מהשורה, עם אותו מזהה פעולה
+    if (err.network) window.addEventListener('online', () => { const m = ctx.mk.get(key); if (m && m.st === 'err' && m.opId === opId && ctx.nav === App.nav) runMark(ctx, key, s, reason, opId); }, { once: true });
+  }
+  if (ctx.nav !== undefined && ctx.nav !== App.nav) return;
+  redraw(ctx);
+  if (ctx.liveLater && !markBusy(ctx)) { ctx.liveLater = false; freshLoad(ctx).catch(() => {}); }
 }
 async function rowSheet(ctx, key) {
   const e = ctx.a.entries.find(x => x._k === key); if (!e) return;
@@ -426,8 +466,10 @@ async function rowSheet(ctx, key) {
     let by = $('#rb', s.el).value.trim(); if (by === 'הגובה עצמו') by = '@';
     try {
       const r = await save('POST', `/api/accounts/${ctx.a.id}/mark`, { opId, key, s: $('#rs', s.el).value, by, ga: $('#rga', s.el).value.trim(), pmt: $('#rp', s.el).value, nt: $('#rn', s.el).value, reason: $('#rr', s.el).value }, { label: 'עדכון איסוף של ' + e.n });
-      Object.keys(e).forEach(k => { if (!['_k', 'n', 'a', 't', 'p', 'c', 'h', 'pg', 'pp'].includes(k)) delete e[k]; }); Object.assign(e, r.entry); ctx.a._version = r.version;
-      s.close(); draw(ctx); toast('נשמר'); SaveCtl.saved();
+      const cur = (ctx.a.entries || []).find(x => x._k === key) || e; // השורה ברשימה המוצגת עכשיו (ייתכן שהתרעננה בזמן שהחלון היה פתוח)
+      Object.keys(cur).forEach(k => { if (!['_k', 'n', 'a', 't', 'p', 'c', 'h', 'pg', 'pp', 'sid', 'spl', '_notes'].includes(k)) delete cur[k]; }); Object.assign(cur, r.entry);
+      if (r.version > ctx.a._version) ctx.a._version = r.version;
+      s.close(); redraw(ctx); toast('נשמר'); SaveCtl.saved();
     } catch (err) { btn.disabled = false; $('#rerr', s.el).innerHTML = `<div class="note err">${esc(err.network ? 'לא נשמר בגלל בעיית קליטה. לחץ שוב ״שמור״ — הפעולה לא תירשם פעמיים.' : err.message)}</div>`; }
   };
 }
