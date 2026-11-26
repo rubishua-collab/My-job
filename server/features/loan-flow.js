@@ -14,13 +14,18 @@ export const LOAN_EXP = 'מתן הלוואה';
 export const expKey = (reqId) => 'xL' + reqId;
 
 // מה שמוצג בפיצול ובאיסוף היום (לתצוגה בלבד — לא נשמר בחשבון)
-const view = (x) => ({ id: x.id, name: x.data.name, amount: r2(num(x.data.amount)), date: x.data.date || '', note: x.data.note || '', phone: x.data.phone || '', xfer: x.data.xfer, given: x.data.given || null });
+const view = (x) => ({ id: x.id, name: x.data.name, amount: r2(num(x.data.amount)), date: x.data.date || '', note: x.data.note || '', phone: x.data.phone || '', chk: x.data.chk ?? '', xfer: x.data.xfer, given: x.data.given || null });
+export const chkOk = (v) => /^\d+$/.test(String(v ?? '').trim()) && +v >= 1 && +v <= 999;
 export function attachLoanReqs(listDocs, getDoc, a) {
   if (!a || (a.kind !== 'split' && a.kind !== 'work')) return;
-  const reqs = listDocs('loan_requests').filter(x => x.data && x.data.xfer && x.data.xfer.date === a.date);
+  const all = listDocs('loan_requests').filter(x => x.data && x.data.xfer);
+  const reqs = all.filter(x => x.data.xfer.date === a.date);
   let out;
-  if (a.kind === 'split') out = reqs.filter(x => x.data.xfer.splitId === a.id || !liveDoc(getDoc, x.data.xfer.splitId, 'split', a.date) && isNewestSplit(listDocs, a));
-  else { const main = mainWork(listDocs, a.date); out = reqs.filter(x => x.data.xfer.workId === a.id || (!liveDoc(getDoc, x.data.xfer.workId, 'work', a.date) && main && main.id === a.id)); }
+  if (a.kind === 'work') {
+    // שייכות לחשבון: הוצאת ״מתן הלוואה״ שנרשמה בו (lr = מזהה הבקשה), או המסירה/ההעברה שקושרו אליו — גם אם הבקשה נפתחה ביום קודם
+    const lrs = new Set((a.expenses || []).map(x => x && x.lr).filter(Boolean)); const main = mainWork(listDocs, a.date);
+    out = all.filter(x => lrs.has(x.id) || (x.data.given && x.data.given.workId === a.id) || x.data.xfer.workId === a.id || (x.data.xfer.date === a.date && !liveDoc(getDoc, x.data.xfer.workId, 'work', a.date) && main && main.id === a.id));
+  } else if (a.kind === 'split') out = reqs.filter(x => x.data.xfer.splitId === a.id || !liveDoc(getDoc, x.data.xfer.splitId, 'split', a.date) && isNewestSplit(listDocs, a));
   a._lreq = out.map(view).sort((p, q) => String(p.xfer.at || '').localeCompare(String(q.xfer.at || '')));
 }
 function liveDoc(getDoc, id, kind, date) { const d = id ? getDoc('accounts', id) : null; return !!(d && !d.deleted && d.data.kind === kind && d.data.date === date); }
@@ -60,6 +65,9 @@ export async function register(ctx) {
       const d = reqOf(body.id); const q = d.data;
       if (!q.xfer) throw err(409, 'הבקשה עוד לא הועברה לפיצול');
       if (q.given) return { ok: true, already: true, given: q.given, version: d.version }; // כבר אושרה — אין הוצאה נוספת
+      // מספר השיקים חובה לסגירת הבקשה: מהשדה שנשלח עם האישור, אחרת מה שכבר שמור בבקשה. בלי מספר תקין — לא נרשם כלום
+      const chk = body.chk !== undefined && String(body.chk).trim() !== '' ? String(body.chk).trim() : String(q.chk ?? '').trim();
+      if (!chkOk(chk)) { const e = err(400, 'כדי לסגור את הבקשה, יש להזין לכמה שיקים חולקה ההלוואה'); e.field = 'chk'; throw e; }
       const c = cleanColl(body.c); if (!c || c === CHANGE || c === NOC_SP) throw err(400, 'בחר איזה גובה מסר את הכסף');
       const a = r2(num(q.amount)); if (!(a > 0)) throw err(400, 'אין סכום הלוואה בבקשה');
       const date = q.xfer.date, t = now(), hh = hhmmIL(t), xk = expKey(d.id);
@@ -85,9 +93,9 @@ export async function register(ctx) {
         putDoc('accounts', C.id, { ...C.data, entries: (C.data.entries || []).concat([{ k: 'e', n, a, c, t: hh, xk }]), updatedAt: t }, { user, action: 'מתן הלוואה', item: c + ' · ' + q.name, note: a + ' ₪' });
       }
       const given = { c, at: t, t: hh, by: user.name, a, xk, workId };
-      const out = putDoc('loan_requests', d.id, { ...q, given, updated: new Date(t).toISOString() }, { user, action: 'אישור מסירת הלוואה', item: q.name, note: c + ' · ' + a + ' ₪' });
+      const out = putDoc('loan_requests', d.id, { ...q, chk: +chk, given, updated: new Date(t).toISOString() }, { user, action: 'אישור מסירת הלוואה', item: q.name, note: c + ' · ' + a + ' ₪' });
       logAudit({ user, action: 'מתן הלוואה', col: 'loan_requests', doc_id: d.id, item: q.name, after: given, note: c });
-      return { ok: true, given, workId, version: out.version };
+      return { ok: true, given, chk: +chk, workId, version: out.version };
     }));
   });
 }

@@ -2,6 +2,7 @@
 // הפונקציות שמייצרות את הדוח הועתקו כמו שהן; כל הסכומים מגיעים מפונקציות החישוב המקוריות ב-calc.js.
 import { calcMorning, calcCollectors, calcSplit, calcWork, workGroups, wExpList, num, r2, sum, normName, cleanPh, ST_GOT, ST_NOT, ST_NA, ST_PASS, CHANGE, NOC_SP } from '../calc.js';
 import { loadVendor } from '../registry.js';
+import { loansBoxHTML, givenOf, lgvStyle } from './loans-box.js';
 
 // ---- עזרים מקוריים (app.html 1842, 1856-1862, 1871-1872, 9845, 1923-1924) ----
 export const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -184,13 +185,13 @@ function workTableHTML(c,opts){
 export function workHTML(acc,opts){
   const es=acc.entries||[], xs=wExpList(acc), xt=sum(xs.map(x=>x.a)), c=calcWork(es), gs=workGroups(es,xs);
   let h='<header class="rhead">'+RSEAL+'<div class="rht"><span class="rbrand">יומן חשבון בוקר</span><h2 class="rtitle">רשימת חייבים · איסוף יומי</h2><div class="rsub">'+esc(weekday(acc.date))+' · '+esc(isoLabel(acc.date))+'</div></div></header>';
-  if(!gs) return h+(c.count?'<section class="rs">'+workTableHTML(c,opts)+'</section>':'')+(xs.length?'<section class="rs">'+expTableHTML(xs,xt,c.count?r2(c.total-xt):null,true)+'</section>':'');
+  if(!gs) return h+(c.count?'<section class="rs">'+workTableHTML(c,opts)+'</section>':'')+(xs.length?'<section class="rs">'+expTableHTML(xs,xt,c.count?r2(c.total-xt):null,true)+'</section>':'')+loansBoxHTML(givenOf(acc));
   h+=gs.map(g=>'<section class="cblock"><div class="cband"><span>'+esc(g.name)+'</span>'+(g.calc.count?'<span class="cbs">'+g.calc.count+' חייבים · '+money(g.calc.total)+'</span>':'')+'</div>'+(g.calc.count?workTableHTML(g.calc,opts):'')+(g.exp.length?expTableHTML(g.exp,g.expTotal,g.calc.count?g.net:null,false):'')+'</section>').join('');
   h+='<section class="rs"><table class="rt"><tbody><tr class="tot"><td>סה״כ כללי ('+c.count+' חייבים)</td><td class="a">'+money(c.total)+'</td></tr>'+
     (c.notGot.length?'<tr class="tot2"><td>לא נאסף ('+c.notGot.length+')</td><td class="a">'+money(c.notTotal)+'</td></tr>':'')+
     (c.got.length?'<tr class="tot2"><td>נאסף ('+c.got.length+')</td><td class="a">'+money(c.gotTotal)+'</td></tr><tr class="tot2"><td>נותר לאסוף ('+(c.count-c.got.length)+')</td><td class="a">'+money(c.left)+'</td></tr>':'')+
     (xs.length?'<tr class="tot2"><td>סה״כ הוצאות ('+xs.length+')</td><td class="a">'+money(xt)+'</td></tr><tr class="tot2"><td>נטו כללי (סה״כ חובות פחות הוצאות)</td><td class="a">'+money(r2(c.total-xt))+'</td></tr>':'')+'</tbody></table></section>';
-  return h;
+  return h+loansBoxHTML(givenOf(acc)); // ״פירוט הלוואות שנמסרו״ — תצוגה בלבד
 }
 
 /* ---- פיצול: דוח — app.html 3403-3404, 3831, 3430-3456 ---- */
@@ -228,17 +229,20 @@ export function splitHTML(acc,opts){
 function stageEl(){ let s=document.getElementById('pdf-stage'); if(!s){ s=document.createElement('div'); s.id='pdf-stage'; document.body.appendChild(s); } return s; }
 export async function buildPdf(html,acc){
   await Promise.all([loadVendor('html2canvas.min.js'),loadVendor('jspdf.umd.min.js')]);
-  const stage=stageEl(); stage.innerHTML='<article class="report">'+html+'</article>';
+  lgvStyle(); const stage=stageEl(); stage.innerHTML='<article class="report">'+html+'</article>';
   try{
     try{ await document.fonts.ready; }catch(e){}
-    const W=794, sRect=stage.getBoundingClientRect(), totalH=Math.ceil(stage.scrollHeight);
-    const cand=[];
-    stage.querySelectorAll('tbody tr, tfoot tr, .rl').forEach(tr=>cand.push(tr.getBoundingClientRect().bottom-sRect.top));
-    stage.querySelectorAll('.rs, .cblock').forEach(s=>cand.push(s.getBoundingClientRect().top-sRect.top));
-    cand.sort((a,b)=>a-b);
-    const scale=Math.max(1,Math.min(2,Math.sqrt(14e6/(W*totalH))));
-    const canvas=await window.html2canvas(stage,{scale,backgroundColor:'#ffffff',useCORS:true,logging:false});
+    const W=794;
+    /* נקודות החיתוך נמדדות בעותק שמצויר בפועל (onclone): באייפון הוא נפרס ברוחב אחר והשורות גבוהות יותר — אחרת סוף העמוד האחרון נחתך */
+    const measure=st=>{ const r=st.getBoundingClientRect(), c=[];
+      st.querySelectorAll('tbody tr, tfoot tr, .rl').forEach(tr=>c.push(tr.getBoundingClientRect().bottom-r.top));
+      st.querySelectorAll('.rs, .cblock').forEach(s=>c.push(s.getBoundingClientRect().top-r.top));
+      return {cand:c.sort((a,b)=>a-b),h:Math.ceil(st.scrollHeight)}; };
+    let M=measure(stage);
+    const scale=Math.max(1,Math.min(2,Math.sqrt(14e6/(W*M.h))));
+    const canvas=await window.html2canvas(stage,{scale,backgroundColor:'#ffffff',useCORS:true,logging:false,onclone:d=>{ const st=d.getElementById(stage.id); if(st) M=measure(st); }});
     const k=canvas.width/W, pageH=W*(277/190);
+    const cand=M.cand, totalH=Math.max(M.h,Math.ceil(canvas.height/k));
     const slices=[]; let y=0;
     while(y<totalH-1){
       const limit=y+pageH;

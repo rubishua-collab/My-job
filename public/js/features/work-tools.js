@@ -4,6 +4,7 @@
 // אין כאן נוסחה כספית חדשה: כל הסיכומים מ-calcWork/workGroups (calc.js), הטקסט וה-PDF הועתקו מהמקור.
 import { route, more, accountAction, accountPanel, editorAction, R } from '../registry.js';
 import { get, save, uid } from '../api.js';
+import { givenOf } from './loans-box.js';
 import { $, $$, esc, toast, openSheet } from '../ui.js';
 import { num, r2, sum, normName, normTime, normStatus, cleanColl, collKey, workGroups, wExpList, calcWork, ST_GOT, NOC_SP } from '../calc.js';
 import { BOOK, bookSize, knownCollectors, fillFromBook, workText, wCollText, wCollAcc, workHTML, parseWorkText, PROMPT_W, normalizeW, wDupKey, wSameKey, wDupInfo, lgx, LGF_W, LGF_X, fmt } from './work-tools-lib.js';
@@ -59,7 +60,7 @@ accountPanel('work', (ctx) => {
     const all = e.target.closest('[data-wpdf-all]');
     if (all) { // PDF של כל החשבון: מהנתונים השמורים בשרת, עם ״הלוואות שנמסרו ללקוחות״
       let src = ctx.a; try { src = await get('/api/accounts/' + ctx.a.id); } catch { /* בלי קליטה — מה שמוצג במסך */ }
-      const a = { ...accOf(src), loans: (src._lreq || []).filter(q => q && q.given) };
+      const a = { ...accOf(src), loans: givenOf(src) };
       await sharePdf(workHTML(a), a, workText(a), box, all); return;
     }
     if (e.target.closest('[data-wt-resave]')) resave();

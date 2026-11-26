@@ -43,8 +43,8 @@ const numOf = (t) => +String(t).replace(/[^\d.-]/g, '');
     await p.waitForSelector('#rq-xd'); assert.strictEqual(await p.inputValue('#rq-xd'), DATE);
     await p.waitForFunction((S) => [...document.querySelectorAll('#rq-xs option')].some(o => o.value === S), S);
     await card('איציק לחמני').locator('[data-rq-xgo]').dblclick();
-    await card('איציק לחמני').locator('.rq-flow').waitFor();
-    const t = await card('איציק לחמני').locator('.rq-flow').innerText();
+    await card('איציק לחמני').locator('.rq-flow:not(.rq-chk)').waitFor();
+    const t = await card('איציק לחמני').locator('.rq-flow:not(.rq-chk)').innerText();
     assert.ok(t.includes('הועברה לפיצול') && t.includes(DATE.split('-').reverse().join('.')) && t.includes('ממתינה למסירה'), t);
     assert.strictEqual(await card('איציק לחמני').locator('[data-rq-xfer]').count(), 0, 'הכפתור יורד אחרי ההעברה');
     const q = await api('GET', '/api/docs/loan_requests/Qitzik'); assert.strictEqual(q.xfer.splitId, S); assert.strictEqual(q.xfer.workId, W);
@@ -71,12 +71,12 @@ const numOf = (t) => +String(t).replace(/[^\d.-]/g, '');
   });
   await step('אי אפשר לאשר לפני בחירת גובה; אחרי בחירת אושר — לחיצה כפולה רושמת הוצאה אחת של 6,000 ₪, והנטו של אושר יורד בדיוק ב-6,000 מיד', async () => {
     const it = p.locator('#lrq-panel .lrq-item');
-    assert.match(await it.locator('label').innerText(), /איזה גובה מסר את הכסף\?/);
+    assert.match(await it.locator('label').first().innerText(), /איזה גובה מסר את הכסף\?/);
     await p.waitForFunction(() => [...document.querySelectorAll('[data-lrc] option')].some(o => o.textContent === 'אושר'));
     assert.ok(await it.locator('[data-lrok]').isDisabled(), 'כפתור נעול בלי גובה');
     await it.locator('[data-lrc]').selectOption('אושר');
     assert.ok(await it.locator('[data-lrok]').isEnabled());
-    await it.locator('[data-lrok]').dblclick();
+    await it.locator('[data-lrk]').fill('3'); await it.locator('[data-lrok]').dblclick();
     await p.waitForFunction(() => document.querySelector('#lrq-panel .lrq-item')?.textContent.includes('אושרה ונמסרה ללקוח'), null, { timeout: 8000 });
     await p.waitForFunction(() => /6,000/.test(document.querySelector('.wgcard[data-wg="אושר"] .wg-exp')?.textContent || ''), null, { timeout: 8000 });
     assert.strictEqual(await wg('אושר', '.wg-exp'), 6000); assert.strictEqual(await wg('אושר', '.wg-net'), netBefore - 6000);
@@ -98,8 +98,8 @@ const numOf = (t) => +String(t).replace(/[^\d.-]/g, '');
     assert.strictEqual(await p.locator('#lrq-panel .lrq-item').count(), 1); assert.strictEqual(await p.locator('[data-lrok]').count(), 0);
     await p.goto(URL + '/#/acc/' + S); await p.waitForSelector('#lrq-panel .lrq-item');
     assert.match(await p.locator('#lrq-panel .lrq-item').innerText(), /אושרה ונמסרה ללקוח[\s\S]*אושר[\s\S]*\d{2}:\d{2}/);
-    await p.goto(URL + '/#/requests-manage'); await card('איציק לחמני').locator('.rq-flow').waitFor();
-    assert.match(await card('איציק לחמני').locator('.rq-flow').innerText(), /אושרה ונמסרה ללקוח[\s\S]*אושר/);
+    await p.goto(URL + '/#/requests-manage'); await card('איציק לחמני').locator('.rq-flow:not(.rq-chk)').waitFor();
+    assert.match(await card('איציק לחמני').locator('.rq-flow:not(.rq-chk)').innerText(), /אושרה ונמסרה ללקוח[\s\S]*אושר/);
   });
   await step('חשבון גובים: ״מתן הלוואה — איציק לחמני״ 6,000 ₪ על שם אושר, פעם אחת', async () => {
     await p.goto(URL + '/#/acc/' + C); await p.waitForSelector('.band');
@@ -117,7 +117,7 @@ const numOf = (t) => +String(t).replace(/[^\d.-]/g, '');
     await p.waitForFunction(() => [...document.querySelectorAll('[data-lrc] option')].some(o => o.textContent === 'טל'));
     await it.locator('[data-lrc]').selectOption('טל');
     await p.route('**/api/loan-req/give', r => r.abort('internetdisconnected'));
-    await it.locator('[data-lrok]').click();
+    await it.locator('[data-lrk]').fill('2'); await it.locator('[data-lrok]').click();
     await it.locator('.note.err').waitFor(); assert.match(await it.locator('.note.err').innerText(), /לא נשמר/);
     assert.match(await it.innerText(), /ממתינה למסירה/); assert.strictEqual(await wg('טל', '.wg-exp'), 0);
     await p.unroute('**/api/loan-req/give');
@@ -133,7 +133,7 @@ const numOf = (t) => +String(t).replace(/[^\d.-]/g, '');
     await it.locator('[data-lrc]').selectOption('טל');
     let lost = true;
     await p.route('**/api/loan-req/give', async (route) => { if (lost) { lost = false; await route.fetch(); return route.abort('connectionreset'); } return route.continue(); }); // נשמר בשרת, התשובה אבדה
-    await it.locator('[data-lrok]').click();
+    await it.locator('[data-lrk]').fill('10'); await it.locator('[data-lrok]').click();
     // התשובה אבדה: או שמוצגת הודעה ו״נסה שוב״, או שהמסך כבר התעדכן מהשרת שהמסירה נשמרה
     await p.waitForFunction(() => { const el = [...document.querySelectorAll('#lrq-panel .lrq-item')].find(x => x.textContent.includes('ליאור נבא')); return el && (el.querySelector('.note.err') || el.textContent.includes('אושרה ונמסרה')); });
     if (await it.locator('.note.err').count()) { assert.match(await it.locator('.note.err').innerText(), /לא נשמר/); await it.locator('[data-lrok]').click(); }

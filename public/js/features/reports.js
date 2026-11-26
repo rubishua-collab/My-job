@@ -139,7 +139,11 @@ route('report', async (view, [id], query) => {
       <div class="sharebox no-print" id="s-share"></div>
       <article class="report" id="r-report">${reportHTML(v, { hit: hf })}${v.kind === 'morning' && !so ? mCompareHTML(v, S.s.list) : ''}</article></div>`;
     $('[data-back]', view).onclick = () => history.back();
-    $('#r-pdf', view).onclick = () => sharePdf(reportHTML(v), v, txt, $('#s-share', view), $('#r-pdf', view));
+    $('#r-pdf', view).onclick = async () => {
+      // איסוף יום: ״פירוט הלוואות שנמסרו״ מהבקשות השמורות בשרת (לפי מזהה הבקשה)
+      let x = v; if (v.kind === 'work' && !so && v.id) { try { const f = await get('/api/accounts/' + encodeURIComponent(v.id)); x = { ...v, _lreq: f._lreq || [] }; } catch { /* בלי קליטה — בלי התיבה */ } }
+      sharePdf(reportHTML(x), x, txt, $('#s-share', view), $('#r-pdf', view));
+    };
     $('#r-copy', view).onclick = async () => { try { await navigator.clipboard.writeText(txt); toast('הועתק'); } catch { toast('ההעתקה לא הצליחה'); } };
     const ob = $('#r-orig', view); if (ob) ob.onclick = () => { showOrig = !showOrig; draw(); };
     const h = view.querySelector('.report .hit'); if (h) h.scrollIntoView({ block: 'center' });

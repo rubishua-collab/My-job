@@ -1,4 +1,4 @@
-// בדיקת קבלה: ״PDF לוואטסאפ״ של כל החשבון באיסוף יום כולל ״הלוואות שנמסרו ללקוחות״ (הקובץ שמופק בפועל).
+// בדיקת קבלה: ״PDF לוואטסאפ״ של כל החשבון באיסוף יום כולל ״פירוט הלוואות שנמסרו״ (הקובץ שמופק בפועל).
 process.env.LC_ALL = process.env.LC_ALL || 'C.UTF-8';
 const { chromium, devices } = require('playwright');
 const { spawn, execFileSync } = require('child_process');
@@ -35,7 +35,7 @@ const wait = (ms) => new Promise(r => setTimeout(r, ms));
   for (const [id, name, amount, date, note, xd, c] of reqs) {
     await api('POST', '/api/docs/loan_requests', { id, data: { name, amount, date, note, phone: '', created: '', updated: '' }, opId: 'q' + id });
     await api('POST', '/api/loan-req/xfer', { id, date: xd, opId: 'x' + id });
-    if (c) await api('POST', '/api/loan-req/give', { id, c, opId: 'g' + id });
+    if (c) await api('POST', '/api/loan-req/give', { id, c, chk: 5, opId: 'g' + id });
   }
   const before = await api('GET', '/api/accounts/' + W);
   const nLoanExp = (a) => (a.expenses || []).filter(x => x.lr).length;
@@ -49,12 +49,12 @@ const wait = (ms) => new Promise(r => setTimeout(r, ms));
   await step('״PDF לוואטסאפ״ מפיק קובץ PDF אמיתי (עם הורדה), בלי שגיאות', async () => {
     pdf1 = await genPdf('acc.pdf'); const buf = fs.readFileSync(pdf1); assert.strictEqual(buf.slice(0, 5).toString(), '%PDF-');
   });
-  await step('התוכן של הקובץ: ״הלוואות שנמסרו ללקוחות״ — ליאור נבא 10,000 ״1650 כפול 10״, רונן בוריסוב 3,200 ״חידוש״, איציק לחמני (בקשה מוקדמת); בלי בקשה שלא נמסרה ובלי יום אחר; כל הלוואה פעם אחת', async () => {
+  await step('התוכן של הקובץ: ״פירוט הלוואות שנמסרו״ — ליאור נבא 10,000 ״1650 כפול 10״, רונן בוריסוב 3,200 ״חידוש״, איציק לחמני (בקשה מוקדמת); בלי בקשה שלא נמסרה ובלי יום אחר; כל הלוואה פעם אחת', async () => {
     const r = await p.evaluate(async (id) => { const m = await import('/js/features/work-tools-lib.js'); const a = await (await fetch('/api/accounts/' + id)).json(); const base = { kind: 'work', date: a.date, entries: a.entries.filter(e => e && (e.n || e.a)), expenses: (a.expenses || []).filter(x => x && (x.n || x.a)) }; return { with: m.workHTML({ ...base, loans: (a._lreq || []).filter(q => q.given) }), without: m.workHTML(base) }; }, W);
     html = r.with; htmlNoLoans = r.without;
     const box = await p.evaluate((h) => { const d = document.createElement('div'); d.innerHTML = h; document.body.appendChild(d); const el = d.querySelector('.lgv'); const t = [...el.querySelectorAll('.lgv-i')].map(i => i.querySelector('.lgv-top').innerText.replace(/\s+/g, ' ') + ' | ' + i.querySelector('.lgv-m').innerText.replace(/\s+/g, ' ') + ' | ' + (i.querySelector('.lgv-note')?.dataset.note || '') + ' | ' + (i.querySelector('.lgv-note')?.innerText || '')).join('\n'); const out = el.querySelector('.lgv-h').innerText + '\n' + t; d.remove(); return out; }, html);
     console.log('   ' + box.split('\n').join('\n   '));
-    assert.ok(box.includes('הלוואות שנמסרו ללקוחות'));
+    assert.ok(box.includes('פירוט הלוואות שנמסרו'));
     assert.ok(/ליאור נבא[\s\S]*10,000[\s\S]*אושר[\s\S]*20\.11\.2026[\s\S]*1650 כפול 10/.test(box), 'ליאור');
     assert.ok(/רונן בוריסוב[\s\S]*3,200[\s\S]*בן[\s\S]*25\.11\.2026[\s\S]*חידוש/.test(box), 'רונן');
     assert.ok(/איציק לחמני[\s\S]*6,000[\s\S]*טל[\s\S]*18\.11\.2026[\s\S]*2500 כפול 3\nלהתקשר לפני/.test(box), 'איציק — הפירוט המלא כולל מעבר שורה');
@@ -64,7 +64,7 @@ const wait = (ms) => new Promise(r => setTimeout(r, ms));
   });
   await step('סיכומי החשבון זהים לסכומים שלפני הוספת התיבה (התיבה רק נוספת אחרי הסיכום)', async () => {
     assert.ok(html.startsWith(htmlNoLoans), 'כל מה שלפני התיבה זהה');
-    assert.ok(html.indexOf('סה״כ כללי') < html.indexOf('הלוואות שנמסרו ללקוחות'), 'התיבה מתחת לסיכום');
+    assert.ok(html.indexOf('סה״כ כללי') < html.indexOf('פירוט הלוואות שנמסרו'), 'התיבה מתחת לסיכום');
     const tot = (s) => [...s.matchAll(/<tr class="tot2?">([\s\S]*?)<\/tr>/g)].map(m => m[1]).join('|');
     assert.strictEqual(tot(html), tot(htmlNoLoans));
     // הוצאות ״מתן הלוואה״: 19,200 (10,000 + 3,200 + 6,000), כל אחת פעם אחת

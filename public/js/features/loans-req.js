@@ -1,7 +1,8 @@
 // בקשות להלוואה — מי ביקש, כמה ומתי. רישום בלבד: לא נכנס להלוואות, לקרן או לגבייה.
 // מקור: app.html — לשונית 1492-1530, קוד 7088-7232, עיצוב 555-575. האוסף "loan_requests": name, amount, date, phone, note, created, updated.
 import { get, save, uid } from '../api.js';
-import { lreqStatus } from './loan-flow.js';
+import { lreqStatus, chkLine } from './loan-flow.js';
+import { chkOk } from './loans-box.js';
 import { $, $$, esc, fmt, money, dmy, todayISO, toast } from '../ui.js';
 import { App, onLive } from '../app.js';
 import { route, more } from '../registry.js';
@@ -61,7 +62,7 @@ function rqItemHTML(r, can) {
   }
   const flow = r.xfer ? '<div class="rq-flow"><span class="pill acc">הועברה לפיצול</span><span>תאריך עבודה: <b class="num">' + esc(isoLabel(r.xfer.date)) + '</b></span>' + lreqStatus(r) + '</div>' : '';
   return '<div class="rq-item' + (RQ.flash === r.id ? ' flash' : '') + (RQ.edit === r.id && !$('#rq-form').hidden ? ' editing' : '') + '" data-rq-id="' + esc(r.id) + '"><span class="rq-nm">' + esc(r.name) + '</span><span class="rq-amt">' + money(num(r.amount)) + '</span>' +
-    '<div class="rq-meta">' + meta.join('') + '</div>' + (String(r.note || '').trim() ? '<div class="rq-note">' + esc(r.note) + '</div>' : '') + flow + act + '</div>';
+    '<div class="rq-meta">' + meta.join('') + '</div>' + (String(r.note || '').trim() ? '<div class="rq-note">' + esc(r.note) + '</div>' : '') + (chkLine(r) ? '<div class="rq-flow rq-chk">' + chkLine(r) + '</div>' : '') + flow + act + '</div>';
 }
 // ״העבר ללשונית פיצול״: תאריך העבודה (ברירת מחדל היום) והפיצול של אותו תאריך
 function rqXferForm(r) {
@@ -131,6 +132,7 @@ function rqFillForm(r) {
   $('#rq-f-date').value = r && /^\d{4}-\d{2}-\d{2}$/.test(String(r.date || '')) ? r.date : todayISO();
   $('#rq-f-phone').value = r ? String(r.phone || '') : '';
   $('#rq-f-note').value = r ? String(r.note || '') : '';
+  $('#rq-f-chk').value = r && chkOk(r.chk) ? String(+r.chk) : '';
   rqFormTitles(); rqFormMsg(''); rqAmtPrev();
 }
 function rqOpenForm(r) {
@@ -146,11 +148,14 @@ async function rqSave() {
   const name = $('#rq-f-name').value.replace(/\s+/g, ' ').trim(), amtRaw = $('#rq-f-amount').value.trim(), amount = r2(num(amtRaw));
   const bad = []; if (!name) bad.push('שם המבקש'); if (!(amount > 0)) bad.push('הסכום המבוקש (מספר גדול מ-0)');
   if (bad.length) { rqFormMsg('חובה למלא: ' + bad.join(' ו') + '.'); (!name ? $('#rq-f-name') : $('#rq-f-amount')).focus(); return; }
+  const chkRaw = $('#rq-f-chk').value.trim();
+  if (chkRaw && !chkOk(chkRaw)) { rqFormMsg('מספר השיקים צריך להיות מספר שלם, 1 ומעלה (או להשאיר ריק ולהשלים בהמשך).'); $('#rq-f-chk').focus(); return; }
   const dRaw = $('#rq-f-date').value, date = /^\d{4}-\d{2}-\d{2}$/.test(dRaw) ? dRaw : todayISO();
   const old = RQ.edit ? rqGet(RQ.edit) : null;
   if (RQ.edit && !old) return rqFormMsg('הבקשה הזו כבר לא קיימת (אולי נמחקה). סגור את הטופס והוסף בקשה חדשה.');
   const now = new Date().toISOString(), id = old ? old.id : 'Q' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const doc = { name, amount, date, phone: $('#rq-f-phone').value.trim(), note: $('#rq-f-note').value.trim(), created: old && old.created ? old.created : now, updated: now };
+  doc.chk = chkRaw ? +chkRaw : '';
   if (old && old.xfer) doc.xfer = old.xfer; if (old && old.given) doc.given = old.given; // עריכה לא מבטלת העברה לפיצול או אישור מסירה
   const sb = $('#rq-save'); RQ.busy = true; sb.disabled = true; sb.textContent = 'שומר…';
   let out;
@@ -195,6 +200,7 @@ async function renderRequestsPage(view) {
       <label class="rq-fld" for="rq-f-phone">טלפון<input class="in n" id="rq-f-phone" type="tel" inputmode="tel" autocomplete="off" placeholder="050-0000000"></label>
     </div>
     <label class="rq-fld" for="rq-f-note" style="margin-top:10px">הערה<textarea class="in rq-note-in" id="rq-f-note" rows="2"></textarea></label>
+    <label class="rq-fld" for="rq-f-chk" style="margin-top:10px">לכמה שיקים חולקה ההלוואה?<input class="in n" id="rq-f-chk" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="למשל 10"><span class="small muted">אפשר לשמור בלי מספר ולהשלים בהמשך. חובה לפני אישור מסירה.</span></label>
     <p class="small muted"><span class="rq-req">*</span> שדה חובה. התאריך מתמלא בתאריך של היום, ואפשר לשנות אותו.</p>
     <div class="row"><button class="btn" id="rq-save" type="button">שמור בקשה</button><button class="btn plain" id="rq-cancel" type="button">ביטול</button></div>
     <div class="note err" id="rq-form-msg" role="alert" hidden></div>
