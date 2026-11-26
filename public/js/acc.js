@@ -199,7 +199,8 @@ function bind(ctx) {
   $$('[data-c]', view).forEach(b => b.onclick = () => { ctx.coll = b.dataset.c; persist(ctx); draw(ctx); });
   $$('input.ck[data-ref]', view).forEach(c => c.onchange = () => { c.checked ? ctx.sel.add(c.dataset.ref) : ctx.sel.delete(c.dataset.ref); persist(ctx); refreshBar(ctx); });
   bindBar(ctx);
-  $$('[data-row]', view).forEach(el => el.onclick = (e) => { if (e.target.closest('input,button,a')) return; rowSheet(ctx, el.dataset.row); });
+  $$('[data-row]', view).forEach(el => el.onclick = (e) => { if (e.target.closest('input,button,a,select,label,textarea,.ied')) return; rowSheet(ctx, el.dataset.row); });
+  bindInline(ctx);
   $$('[data-mark]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); quickMark(ctx, b); });
   $$('[data-mkretry]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); const m = ctx.mk?.get(b.dataset.mkretry); if (m) runMark(ctx, b.dataset.mkretry, m.s, m.reason, m.opId); });
   $$('[data-mkx]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); ctx.mk?.delete(b.dataset.mkx); redraw(ctx); });
@@ -357,14 +358,15 @@ function workRow(ctx, e, gname) {
   const s = normStatus(e.s); const mk = ctx.mk && ctx.mk.get(e._k); const busy = mk && mk.st === 'saving';
   const courier = e.by && e.by !== '@' ? `<span>גובה אחראי: <b>${esc(cleanColl(e.c) || gname)}</b> · אסף בפועל: <b>${esc(e.by)}</b></span>` : (e.by === '@' ? `<span>נאסף ע״י הגובה</span>` : '');
   return `<div class="li ${s === 'נאסף' ? 'got' : ''} ${ctx.sel.has(e._k) ? 'sel' : ''} link" data-row="${esc(e._k)}" data-key="${esc(e._k)}">${ck(ctx, e._k)}
-    <div class="t">${!s && e.t ? `<span class="num">${esc(e.t)}</span> · ` : ''}${esc(e.n)} ${s ? `<span class="pill ${s === 'נאסף' ? 'ok' : s === 'לא נאסף' ? 'err' : s === 'לא ענו' ? 'acc' : 'warn'}">${esc(s)}</span>` : ''}${e.h === 'קשה' ? ' <span class="pill err">קשה</span>' : ''}${e.pp ? ` <span class="pill acc">חלק ${esc(e.pp)}</span>` : ''}</div>
+    <div class="t">${!s && e.t ? (App.can.finance ? `<button type="button" class="ef num" data-ef="t" data-efk="${esc(e._k)}" aria-label="עריכת השעה ${esc(e.t)} של ${esc(e.n)}">${esc(e.t)}</button> · ` : `<span class="num">${esc(e.t)}</span> · `) : ''}${esc(e.n)} ${s ? `<span class="pill ${s === 'נאסף' ? 'ok' : s === 'לא נאסף' ? 'err' : s === 'לא ענו' ? 'acc' : 'warn'}">${esc(s)}</span>` : ''}${e.h === 'קשה' ? ' <span class="pill err">קשה</span>' : ''}${e.pp ? ` <span class="pill acc">חלק ${esc(e.pp)}</span>` : ''}</div>
     ${(e._notes || []).length ? `<div class="wnotes">${e._notes.map(t => `<div class="wnote">✎ ${esc(t)}</div>`).join('')}</div>` : ''}
-    <div class="a">${money(num(e.a))}${s === 'נאסף' && e.ga != null && e.ga !== '' ? `<div class="small muted">נגבה ${money(e.ga)}</div>` : ''}</div>
+    <div class="a">${App.can.finance ? `<button type="button" class="ef" data-ef="a" data-efk="${esc(e._k)}" aria-label="עריכת הסכום של ${esc(e.n)}">${money(num(e.a))}</button>` : money(num(e.a))}${s === 'נאסף' && e.ga != null && e.ga !== '' ? `<div class="small muted">נגבה ${money(e.ga)}</div>` : ''}</div>
     <div class="m">${courier}${e.p ? `<a href="tel:${esc(e.p)}">${esc(fmtPhone(e.p))}</a>` : '<span class="neg">אין טלפון</span>'}${e.pmt ? `<span>${esc(e.pmt)}</span>` : ''}${e.mk ? `<span>סומן ע״י ${esc(e.mk.u)} ${when(e.mk.at)}</span>` : ''}</div>
     <div class="st no-print"${busy ? ' aria-busy="true"' : ''}>${['נאסף', 'לא נאסף', 'לעבור', 'לא ענו'].map(x => `<button data-s="${x}" aria-pressed="${s === x}" data-mark="${esc(e._k)}|${s === x ? '' : x}"${busy ? ' disabled' : ''}>${x}</button>`).join('')}</div>
     ${busy ? `<div class="mkst no-print" role="status">⏳ שומר ${mk.s ? '״' + esc(mk.s) + '״' : 'ביטול סימון'}…</div>` : ''}
     ${mk && mk.st === 'err' ? `<div class="mkerr note err no-print" role="alert"><b>${mk.s ? '״' + esc(mk.s) + '״' : 'ביטול הסימון'} לא נשמר.</b> ${esc(mk.msg)}<div class="row" style="margin-top:6px"><button class="btn sm" data-mkretry="${esc(e._k)}">נסה שוב</button><button class="btn ghost sm" data-mkx="${esc(e._k)}">סגור</button></div></div>` : ''}
-    ${App.can.finance ? `<div class="delent no-print"><button class="btn sm${collKey(cleanColl(e.c)) ? ' ghost' : ''}" data-assign="${esc(e._k)}" aria-label="${collKey(cleanColl(e.c)) ? 'העבר לגובה אחר' : 'שייך לגובה'}: ${esc(e.n)}">${collKey(cleanColl(e.c)) ? '⇄ העבר לגובה אחר' : '👤 שייך לגובה'}</button><button class="btn danger sm" data-delent="${esc(e._k)}" aria-label="מחק גבייה של ${esc(e.n)}">🗑 מחק גבייה</button></div>` : ''}</div>`;
+    ${ctx.edit && ctx.edit.key === e._k ? inlineEditor(ctx, e) : ''}
+    ${App.can.finance ? `<div class="delent no-print"><button class="btn sm ghost" data-edrow="${esc(e._k)}" aria-label="ערוך גבייה של ${esc(e.n)}"${ctx.edit && ctx.edit.key === e._k && ctx.edit.fields.length > 1 ? ' aria-expanded="true"' : ''}>✎ ערוך גבייה</button><button class="btn sm${collKey(cleanColl(e.c)) ? ' ghost' : ''}" data-assign="${esc(e._k)}" aria-label="${collKey(cleanColl(e.c)) ? 'העבר לגובה אחר' : 'שייך לגובה'}: ${esc(e.n)}">${collKey(cleanColl(e.c)) ? '⇄ העבר לגובה אחר' : '👤 שייך לגובה'}</button><button class="btn danger sm" data-delent="${esc(e._k)}" aria-label="מחק גבייה של ${esc(e.n)}">🗑 מחק גבייה</button></div>` : ''}</div>`;
 }
 // ״מחק גבייה״: מוחק רק את השורה שנבחרה (לפי המזהה שלה), בשרת. השורה יורדת מהמסך רק אחרי שהמחיקה נשמרה.
 function delEntrySheet(ctx, key) {
@@ -441,7 +443,79 @@ async function runMark(ctx, key, s, reason, opId) {
   redraw(ctx);
   if (ctx.liveLater && !markBusy(ctx)) { ctx.liveLater = false; freshLoad(ctx).catch(() => {}); }
 }
-const hTxt = (b, af) => af.c !== undefined ? `גובה אחראי: ${esc(b.c || 'ללא גובה')} ← ${esc(af.c)}` : `${esc(b.s || 'ממתין')} ← ${esc(af.s || 'ממתין')}${af.by && af.by !== b.by ? ' · אסף: ' + esc(af.by === '@' ? 'הגובה' : af.by) : ''}`;
+const EF_NAMES = { n: 'שם', p: 'טלפון', a: 'סכום', t: 'שעה', h: 'קושי', c: 'גובה' };
+const hTxt = (b, af) => af._e ? Object.keys(af).filter(k => k !== '_e').map(k => `${EF_NAMES[k] || k}: ${esc(String(b[k] ?? '') || '—')} ← ${esc(String(af[k] ?? '') || '—')}`).join(' · ') : af.c !== undefined ? `גובה אחראי: ${esc(b.c || 'ללא גובה')} ← ${esc(af.c)}` : `${esc(b.s || 'ממתין')} ← ${esc(af.s || 'ממתין')}${af.by && af.by !== b.by ? ' · אסף: ' + esc(af.by === '@' ? 'הגובה' : af.by) : ''}`;
+// ---------- עריכה בתוך השורה ----------
+// לחיצה על השעה / הסכום פותחת את השדה הזה בלבד; ״ערוך גבייה״ פותח את כל השדות של אותה גבייה (כמו בעריכה הרגילה).
+// השמירה מעדכנת רק את הגבייה שנבחרה לפי המזהה שלה. בכישלון — השדות נשארים פתוחים עם מה שהוקלד, ו״שמור״ שוב.
+const ALL_EF = ['n', 'p', 'a', 't', 'h', 'c'];
+const efVal = (e, k) => k === 'a' ? String(num(e.a)) : k === 'c' ? cleanColl(e.c) : String(e[k] ?? '');
+function inlineEditor(ctx, e) {
+  const E = ctx.edit, v = (k) => E.vals[k] ?? efVal(e, k), dis = E.busy ? ' disabled' : '';
+  const L = (k, inner, wide) => `<label class="f${wide ? ' ied-w' : ''}">${EF_NAMES[k]}${inner}</label>`;
+  const fld = {
+    n: () => L('n', `<input class="in" data-ei="n" value="${esc(v('n'))}" autocomplete="off"${dis}>`, true),
+    p: () => L('p', `<input class="in num" data-ei="p" type="tel" inputmode="tel" value="${esc(v('p'))}" autocomplete="off"${dis}>`),
+    a: () => L('a', `<input class="in num" data-ei="a" inputmode="decimal" value="${esc(v('a'))}" autocomplete="off"${dis}>`),
+    t: () => L('t', `<input class="in num" data-ei="t" type="time" value="${esc(normTime(v('t')) || '')}"${dis}>`),
+    h: () => L('h', `<select class="in" data-ei="h"${dis}>${['', 'קשה', 'לא קשה'].map(x => `<option value="${x}" ${v('h') === x ? 'selected' : ''}>${x || '—'}</option>`).join('')}</select>`),
+    c: () => L('c', `<select class="in" data-ei="c"${dis}><option value="">ללא גובה</option>${[...new Set((ctx.collList || []).concat(v('c') ? [v('c')] : []))].map(x => `<option ${collKey(x) === collKey(v('c')) ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`),
+  };
+  return `<div class="ied no-print" data-ied="${esc(e._k)}">${E.fields.length > 1 ? '<b class="ied-h">עריכת גבייה</b>' : ''}<div class="ied-f">${E.fields.map(k => fld[k]()).join('')}</div>
+    ${E.err ? `<div class="note err" role="alert">${esc(E.err)}</div>` : ''}
+    <div class="row ied-b"><button type="button" class="btn" data-esave${dis}>${E.busy ? 'שומר…' : 'שמור'}</button><button type="button" class="btn ghost" data-ecancel${dis}>ביטול</button></div></div>`;
+}
+function openInline(ctx, key, fields) {
+  const e = (ctx.a.entries || []).find(x => x._k === key); if (!e) return;
+  if (ctx.edit && ctx.edit.busy) return;
+  ctx.edit = { key, fields, vals: {}, busy: false, err: '', opId: uid(), sent: '' };
+  if (fields.includes('c') && !ctx.collList) import('./expense-form.js').then(m => m.collectorsList()).then(l => { ctx.collList = l; if (ctx.edit && ctx.edit.key === key) { redraw(ctx); focusInline(ctx); } }).catch(() => {});
+  redraw(ctx); focusInline(ctx);
+}
+function focusInline(ctx) {
+  const box = ctx.edit && ctx.view.querySelector(`[data-ied="${CSS.escape(ctx.edit.key)}"]`); if (!box) return;
+  const f = ctx.edit.focus || ctx.edit.fields[0]; const el = $(`[data-ei="${f}"]`, box) || $('[data-ei]', box); if (!el) return;
+  try { el.focus({ preventScroll: true }); } catch { el.focus(); }
+  if (f === 'a' && el.select) el.select(); // הסכום הקיים מסומן ומוכן לעריכה
+  if (f === 't' && el.showPicker && !ctx.edit.picked) { ctx.edit.picked = true; try { el.showPicker(); } catch { /* */ } }
+  // השדה הפתוח צריך להיות גלוי: מתחת לשורת החיפוש הדביקה ומעל סרגל הלשוניות (פס הוואטסאפ מוסתר בזמן עריכה)
+  const top = (($('.search', ctx.view) || box).getBoundingClientRect().bottom || 0) + 8, bottom = innerHeight - 90, rc = box.getBoundingClientRect();
+  if (rc.bottom > bottom) window.scrollBy(0, Math.min(rc.bottom - bottom, rc.top - top)); else if (rc.top < top) window.scrollBy(0, rc.top - top);
+}
+async function saveInline(ctx) {
+  const E = ctx.edit; if (!E || E.busy) return;
+  const e = (ctx.a.entries || []).find(x => x._k === E.key); if (!e) { ctx.edit = null; return redraw(ctx); }
+  const set = {}; for (const k of E.fields) if (k in E.vals && String(E.vals[k]) !== efVal(e, k)) set[k] = E.vals[k];
+  if (!Object.keys(set).length) { ctx.edit = null; return redraw(ctx); } // לא שונה כלום
+  const sig = JSON.stringify(set); if (E.sent && E.sent !== sig) E.opId = uid(); E.sent = sig; // ניסיון חוזר עם אותם ערכים — אותו מזהה פעולה
+  E.busy = true; E.err = ''; redraw(ctx); SaveCtl.saving();
+  try {
+    const r = await save('POST', `/api/accounts/${ctx.a.id}/entry`, { key: E.key, set, opId: E.opId }, { queue: false, label: 'עריכת גבייה של ' + e.n });
+    const cur = (ctx.a.entries || []).find(x => x._k === E.key); // השורה ברשימה המוצגת עכשיו
+    if (cur && r.entry) { for (const k of ALL_EF) if (!(k in r.entry)) delete cur[k]; Object.assign(cur, r.entry); }
+    if (r.version > ctx.a._version) ctx.a._version = r.version;
+    ctx.edit = null; SaveCtl.saved(); toast('הגבייה של ' + ((cur || e).n) + ' עודכנה');
+  } catch (err) {
+    E.busy = false; SaveCtl.failed();
+    E.err = 'לא נשמר — ' + (err.network ? 'אין תשובה מהשרת (בעיית קליטה).' : err.message) + ' לחץ ״שמור״ כדי לנסות שוב.';
+  }
+  if (ctx.nav !== undefined && ctx.nav !== App.nav) return;
+  redraw(ctx); if (ctx.edit) focusInline(ctx);
+}
+function bindInline(ctx) {
+  const { view } = ctx;
+  $$('[data-ef]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); openInline(ctx, b.dataset.efk, [b.dataset.ef]); });
+  $$('[data-edrow]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); const k = b.dataset.edrow; if (ctx.edit && ctx.edit.key === k && ctx.edit.fields.length > 1 && !ctx.edit.busy) { ctx.edit = null; return redraw(ctx); } openInline(ctx, k, ALL_EF); });
+  const box = ctx.edit && view.querySelector(`[data-ied="${CSS.escape(ctx.edit.key)}"]`); if (!box) return;
+  box.onclick = (ev) => ev.stopPropagation();
+  $$('[data-ei]', box).forEach(i => {
+    const upd = () => { if (ctx.edit) { ctx.edit.vals[i.dataset.ei] = i.value; ctx.edit.focus = i.dataset.ei; } };
+    i.oninput = upd; i.onchange = upd;
+    i.onkeydown = (ev) => { if (ev.key === 'Enter' && i.tagName === 'INPUT') { ev.preventDefault(); upd(); saveInline(ctx); } else if (ev.key === 'Escape') { ctx.edit = null; redraw(ctx); } };
+  });
+  $('[data-esave]', box).onclick = () => { $$('[data-ei]', box).forEach(i => { ctx.edit.vals[i.dataset.ei] = i.value; }); saveInline(ctx); };
+  $('[data-ecancel]', box).onclick = () => { ctx.edit = null; redraw(ctx); };
+}
 // ״שייך לגובה״ / ״העבר לגובה אחר״: שומר רק את הגובה האחראי (c). ״אסף בפועל״, הסטטוס והסכום שנגבה לא משתנים.
 // אחרי שמירה מוצלחת הכרטיס עובר מיד לקבוצה של הגובה (וגם לסינון שלו), בלי לצאת מהמסך — גם כשיש חיפוש פעיל.
 async function assignSheet(ctx, key) {

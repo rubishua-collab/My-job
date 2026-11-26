@@ -11,7 +11,7 @@ import { listAccounts, filterForUser, search, clientCard, today, loansView, know
 import { importBackup } from './importer.js';
 import { reconcile, metrics, dbCols, dbFiles } from './reconcile.js';
 import * as wa from './wa.js';
-import { calcMorning, prevMorning, normStatus, collKey, cleanColl, ST_GOT, r2, normName } from '../public/js/calc.js';
+import { calcMorning, prevMorning, normStatus, collKey, cleanColl, ST_GOT, r2, normName, normTime, normHard, num } from '../public/js/calc.js';
 import { normPhone } from '../public/js/phone.js';
 import { dayInfo } from './features/day-expense.js';
 import { attachNotes } from './split-notes.js';
@@ -137,8 +137,33 @@ r.post('/api/accounts/:id/assign', (req, res, { user, params, body }) => {
     return { ok: true, version: out.version, entry: e };
   });
 });
+// עריכה בתוך השורה (״ערוך גבייה״ / לחיצה על שעה או סכום): מעדכן רק את השורה שנבחרה לפי המזהה שלה (_k).
+// שדות: שם, טלפון, סכום, שעה, קושי וגובה — אותם שדות שבעריכה הרגילה. הסטטוס, ״אסף בפועל״ והסכום שנגבה לא משתנים כאן.
+r.post('/api/accounts/:id/entry', (req, res, { user, params, body }) => {
+  need(can.finance(user), 'רק בעלים או מנהל יכולים לערוך גבייה');
+  return once(body.opId, user, () => {
+    const d = getDoc('accounts', params.id); if (!d || d.deleted || d.data.kind !== 'work') throw err(404, 'רשימת האיסוף לא נמצאה');
+    const e = (d.data.entries || []).find(x => x && x._k === body.key); if (!e) throw err(404, 'הגבייה לא נמצאה (אולי נמחקה). רענן את המסך.');
+    const set = body.set && typeof body.set === 'object' ? body.set : {};
+    const nv = {};
+    if ('n' in set) { const v = String(set.n ?? '').replace(/\s+/g, ' ').trim(); if (!v) throw err(400, 'שם הלקוח לא יכול להיות ריק'); nv.n = v; }
+    if ('p' in set) nv.p = String(set.p ?? '').trim();
+    if ('a' in set) { const raw = String(set.a ?? '').trim(); const v = r2(num(raw)); if (raw === '' || !isFinite(v) || v < 0 || !/\d/.test(raw)) throw err(400, 'הסכום לא מובן. כתוב מספר, למשל 12,000'); nv.a = v; }
+    if ('t' in set) { const raw = String(set.t ?? '').trim(); const v = raw ? normTime(raw) : ''; if (raw && !v) throw err(400, 'השעה לא מובנת. בחר שעה, למשל 18:30'); nv.t = v; }
+    if ('h' in set) nv.h = normHard(set.h);
+    if ('c' in set) nv.c = cleanColl(set.c);
+    const before = {}, after = {};
+    for (const k of Object.keys(nv)) { const old = e[k] ?? ''; if (String(old) !== String(nv[k])) { before[k] = old; after[k] = nv[k]; e[k] = nv[k]; if (nv[k] === '' && k !== 'n') delete e[k]; } }
+    if (!Object.keys(after).length) return { ok: true, version: d.version, entry: e, same: true };
+    e.ed = { u: user.name, at: now() };
+    d.data.updatedAt = now();
+    const out = putDoc('accounts', params.id, d.data, { user, action: 'עריכת גבייה', item: e.n + ' (' + body.key + ')' });
+    logAudit({ user, action: 'עריכת גבייה', col: 'accounts', doc_id: params.id, item: body.key, before: { ...before, _e: 1 }, after: { ...after, _e: 1 }, note: e.n });
+    return { ok: true, version: out.version, entry: e };
+  });
+});
 r.get('/api/accounts/:id/history',(req, res, { user, params }) => {
-  const rows = db.prepare("SELECT id,at,user_name,action,item,before,after,note FROM audit WHERE col='accounts' AND doc_id=? AND action IN ('שינוי סטטוס','שינוי גובה אחראי') ORDER BY id DESC LIMIT 500").all(params.id);
+  const rows = db.prepare("SELECT id,at,user_name,action,item,before,after,note FROM audit WHERE col='accounts' AND doc_id=? AND action IN ('שינוי סטטוס','שינוי גובה אחראי','עריכת גבייה') ORDER BY id DESC LIMIT 500").all(params.id);
   if (!can.finance(user)) { const d = getDoc('accounts', params.id); const keys = new Set((d?.data?.entries || []).filter(e => collKey(cleanColl(e.c)) === collKey(user.collector_name)).map(e => e._k)); return rows.filter(x => keys.has(x.item)); }
   return rows;
 });

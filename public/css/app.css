@@ -232,6 +232,12 @@ tr.mgpart td{background:color-mix(in srgb,var(--accent-soft) 25%,transparent)}
 .delent .btn{min-height:40px}
 .li.flash{box-shadow:0 0 0 3px var(--gold)}
 .delent{gap:8px}
+button.ef{all:unset;cursor:pointer;border-bottom:1px dashed var(--muted);padding:2px 0;min-height:24px}
+button.ef:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ied{grid-column:1/-1;margin-top:8px;padding:10px;border:2px solid var(--accent);border-radius:10px;background:var(--field);cursor:default}
+.ied-f{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}.ied-w{grid-column:1/-1}
+.view:has(.ied) .sendbar,body:has(.ied) .sendbar{display:none}
+.ied-h{display:block;margin-bottom:6px}.ied-b{margin-top:8px}.ied-b .btn{flex:1 1 0;min-height:44px}
 .mkst{grid-column:1/-1;margin-top:6px;font-weight:700;color:var(--muted)}
 .mkerr{grid-column:1/-1;margin-top:8px}
 .st[aria-busy=true] button{opacity:.55}
