@@ -240,6 +240,10 @@ button.ef:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .ied-f{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}.ied-w{grid-column:1/-1}
 .view:has(.ied) .sendbar,body:has(.ied) .sendbar{display:none}
 .ied-h{display:block;margin-bottom:6px}.ied-b{margin-top:8px}.ied-b .btn{flex:1 1 0;min-height:44px}
+.dgline{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;margin-top:6px;padding:6px 10px;border-radius:8px;background:var(--field);font-size:14px}
+.partbtn{margin-top:4px;white-space:nowrap}
+.pp .pp-sec{border-top:1px dashed var(--line);margin-top:8px;padding-top:8px}.pp .pp-sec h3{margin:0 0 6px;font-size:15px}
+.pp .pp-calc{margin:6px 0;font-size:15px}.pp .pp-sec>.btn{width:100%;min-height:44px}
 .mkst{grid-column:1/-1;margin-top:6px;font-weight:700;color:var(--muted)}
 .mkerr{grid-column:1/-1;margin-top:8px}
 .st[aria-busy=true] button{opacity:.55}

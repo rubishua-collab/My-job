@@ -122,6 +122,52 @@ r.post('/api/accounts/:id/mark', (req, res, { user, params, body }) => once(body
   logAudit({ user, action: 'שינוי סטטוס', col: 'accounts', doc_id: params.id, item: body.key, before, after, note: e.n });
   return { ok: true, version: out.version, entry: e };
 }));
+// ״פיצול / תשלום חלקי״ באיסוף יום. כל חוב שנחלק נשמר כחלקים תחת אותו מזהה חוב (dg), כל חלק שורה רגילה:
+// תשלום חלקי = חלק ״נאסף״ על שם מי שגבה + החלק הפתוח (היתרה) אצל הגובה שנבחר; פיצול = שני חלקים פתוחים אצל שני גובים.
+// כך ״צפוי״ (סכום החלקים) נשאר החוב המקורי ונספר פעם אחת, ו״נגבה״ / ״נשאר״ וחשבון כל גובה מתעדכנים בלי חישוב חדש.
+// opId: לחיצה חוזרת על שמירה לא רושמת פעמיים; סכום מעל היתרה הפתוחה נדחה.
+r.post('/api/accounts/:id/part', (req, res, { user, params, body }) => {
+  return once(body.opId, user, () => {
+    const d = getDoc('accounts', params.id); if (!d || d.deleted || d.data.kind !== 'work') throw err(404, 'רשימת האיסוף לא נמצאה');
+    const list = d.data.entries || [];
+    const i = list.findIndex(x => x && x._k === body.key); if (i < 0) throw err(404, 'השורה לא נמצאה (אולי נמחקה). רענן את המסך.');
+    const e = list[i];
+    const mine = collKey(cleanColl(e.c)) === collKey(user.collector_name || '');
+    if (!can.finance(user)) need(body.op === 'pay' && mine, 'אפשר לרשום תשלום רק על חלק שלך');
+    if (normStatus(e.s) === ST_GOT) throw err(409, 'החלק הזה כבר סומן ״נאסף״. רענן את המסך.');
+    const open = r2(num(e.a)), x = r2(num(body.amount));
+    if (!(x > 0)) throw err(400, 'הזן סכום גדול מ-0');
+    const clean = (v) => { const c = cleanColl(v); if (!c || c === 'לשנות' || c === 'ללא גובה') throw err(400, 'בחר גובה מהרשימה'); return c; };
+    const t = now(), dg = e.dg || ('d' + newId()), dgA = e.dgA != null ? e.dgA : open;
+    const base = { n: e.n, ...(e.p ? { p: e.p } : {}), ...(e.t ? { t: e.t } : {}), ...(e.h ? { h: e.h } : {}), ...(e.sid ? { sid: e.sid, spl: e.spl } : {}), ...(e.pg ? { pg: e.pg, pp: e.pp } : {}), ...(Array.isArray(e.sn) ? { sn: e.sn } : {}), dg, dgA };
+    let note, added = null;
+    if (body.op === 'pay') {
+      if (x > open) throw err(400, `הסכום גבוה מהיתרה הפתוחה (${open.toLocaleString('he-IL')} ₪)`);
+      const by = can.finance(user) ? clean(body.by) : cleanColl(e.c);
+      if (x === open) { // התשלום סוגר את החלק — ״נאסף״ על שם מי שגבה
+        e.s = 'נאסף'; e.ga = x; e.by = collKey(by) === collKey(cleanColl(e.c)) ? '@' : by;
+        e.mk = { u: user.name, at: t }; note = `${by} גבה ${x} ₪ — נסגר`;
+      } else {
+        added = { ...base, _k: 'e' + newId(), a: x, c: by, s: 'נאסף', ga: x, by: '@', pay: 1, mk: { u: user.name, at: t } };
+        e.a = r2(open - x); e.dg = dg; e.dgA = dgA;
+        if (body.rest !== undefined && String(body.rest).trim()) e.c = can.finance(user) ? clean(body.rest) : e.c; // היתרה אצל הגובה שנבחר
+        note = `${by} גבה ${x} ₪ · נשאר ${e.a} ₪ אצל ${cleanColl(e.c)}`;
+      }
+    } else if (body.op === 'split') {
+      need(can.finance(user), 'רק בעלים או מנהל יכולים לפצל חוב');
+      if (x >= open) throw err(400, `הסכום לגובה הראשון צריך להיות קטן מהיתרה הפתוחה (${open.toLocaleString('he-IL')} ₪)`);
+      const c1 = clean(body.c1), c2 = clean(body.c2); if (collKey(c1) === collKey(c2)) throw err(400, 'בחר שני גובים שונים');
+      e.a = x; e.c = c1; e.dg = dg; e.dgA = dgA;
+      added = { ...base, _k: 'e' + newId(), a: r2(open - x), c: c2 };
+      note = `פוצל: ${c1} ${x} ₪ · ${c2} ${added.a} ₪`;
+    } else throw err(400, 'פעולה לא מוכרת');
+    if (added) list.splice(i + 1, 0, added);
+    d.data.entries = list; d.data.updatedAt = t;
+    const out = putDoc('accounts', params.id, d.data, { user, action: body.op === 'pay' ? 'תשלום חלקי' : 'פיצול חוב', item: e.n + ' (' + body.key + ')', note });
+    logAudit({ user, action: body.op === 'pay' ? 'תשלום חלקי' : 'פיצול חוב', col: 'accounts', doc_id: params.id, item: body.key, after: { amount: x, by: body.by, rest: body.rest, c1: body.c1, c2: body.c2 }, note: e.n + ' · ' + note });
+    return { ok: true, version: out.version, entry: e, added, dg };
+  });
+});
 // ״שייך לגובה״ / ״העבר לגובה אחר״: משנה רק את הגובה האחראי על השורה (c). ״אסף בפועל״ (by), הסטטוס והסכום שנגבה לא משתנים
 r.post('/api/accounts/:id/assign', (req, res, { user, params, body }) => {
   need(can.finance(user), 'רק בעלים או מנהל יכולים לשייך לגובה');

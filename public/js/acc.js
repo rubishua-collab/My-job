@@ -201,7 +201,7 @@ function bind(ctx) {
   $$('input.ck[data-ref]', view).forEach(c => c.onchange = () => { c.checked ? ctx.sel.add(c.dataset.ref) : ctx.sel.delete(c.dataset.ref); persist(ctx); refreshBar(ctx); });
   bindBar(ctx);
   $$('[data-row]', view).forEach(el => el.onclick = (e) => { if (e.target.closest('input,button,a,select,label,textarea,.ied')) return; rowSheet(ctx, el.dataset.row); });
-  bindInline(ctx);
+  bindInline(ctx); bindPart(ctx);
   $$('[data-mark]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); quickMark(ctx, b); });
   $$('[data-mkretry]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); const m = ctx.mk?.get(b.dataset.mkretry); if (m) runMark(ctx, b.dataset.mkretry, m.s, m.reason, m.opId); });
   $$('[data-mkx]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); ctx.mk?.delete(b.dataset.mkx); redraw(ctx); });
@@ -362,7 +362,9 @@ function workRow(ctx, e, gname) {
   return `<div class="li ${s === 'נאסף' ? 'got' : ''} ${ctx.sel.has(e._k) ? 'sel' : ''} link" data-row="${esc(e._k)}" data-key="${esc(e._k)}">${ck(ctx, e._k)}
     <div class="t">${!s && e.t ? (App.can.finance ? `<button type="button" class="ef num" data-ef="t" data-efk="${esc(e._k)}" aria-label="עריכת השעה ${esc(e.t)} של ${esc(e.n)}">${esc(e.t)}</button> · ` : `<span class="num">${esc(e.t)}</span> · `) : ''}${esc(e.n)} ${s ? `<span class="pill ${s === 'נאסף' ? 'ok' : s === 'לא נאסף' ? 'err' : s === 'לא ענו' ? 'acc' : 'warn'}">${esc(s)}</span>` : ''}${e.h === 'קשה' ? ' <span class="pill err">קשה</span>' : ''}${e.pp ? ` <span class="pill acc">חלק ${esc(e.pp)}</span>` : ''}</div>
     ${(e._notes || []).length ? `<div class="wnotes">${e._notes.map(t => `<div class="wnote">✎ ${esc(t)}</div>`).join('')}</div>` : ''}
-    <div class="a">${App.can.finance ? `<button type="button" class="ef" data-ef="a" data-efk="${esc(e._k)}" aria-label="עריכת הסכום של ${esc(e.n)}">${money(num(e.a))}</button>` : money(num(e.a))}${s === 'נאסף' && e.ga != null && e.ga !== '' ? `<div class="small muted">נגבה ${money(e.ga)}</div>` : ''}</div>
+    <div class="a">${App.can.finance ? `<button type="button" class="ef" data-ef="a" data-efk="${esc(e._k)}" aria-label="עריכת הסכום של ${esc(e.n)}">${money(num(e.a))}</button>` : money(num(e.a))}${s === 'נאסף' && e.ga != null && e.ga !== '' && !e.pay ? `<div class="small muted">נגבה ${money(e.ga)}</div>` : ''}${s !== 'נאסף' ? `<div class="no-print"><button type="button" class="btn ghost sm partbtn" data-part="${esc(e._k)}" aria-expanded="${!!(ctx.part && ctx.part.key === e._k)}" aria-label="פיצול / תשלום חלקי — ${esc(e.n)}">פיצול / תשלום חלקי</button></div>` : ''}</div>
+    ${dgLine(ctx, e)}
+    ${ctx.part && ctx.part.key === e._k ? partPanel(ctx, e) : ''}
     <div class="m">${courier}${e.p ? `<a href="tel:${esc(e.p)}">${esc(fmtPhone(e.p))}</a>` : '<span class="neg">אין טלפון</span>'}${e.pmt ? `<span>${esc(e.pmt)}</span>` : ''}${e.mk ? `<span>סומן ע״י ${esc(e.mk.u)} ${when(e.mk.at)}</span>` : ''}</div>
     <div class="st no-print"${busy ? ' aria-busy="true"' : ''}>${['נאסף', 'לא נאסף', 'לעבור', 'לא ענו'].map(x => `<button data-s="${x}" aria-pressed="${s === x}" data-mark="${esc(e._k)}|${s === x ? '' : x}"${busy ? ' disabled' : ''}>${x}</button>`).join('')}</div>
     ${busy ? `<div class="mkst no-print" role="status">⏳ שומר ${mk.s ? '״' + esc(mk.s) + '״' : 'ביטול סימון'}…</div>` : ''}
@@ -447,6 +449,88 @@ async function runMark(ctx, key, s, reason, opId) {
 }
 const EF_NAMES = { n: 'שם', p: 'טלפון', a: 'סכום', t: 'שעה', h: 'קושי', c: 'גובה' };
 const hTxt = (b, af) => af._e ? Object.keys(af).filter(k => k !== '_e').map(k => `${EF_NAMES[k] || k}: ${esc(String(b[k] ?? '') || '—')} ← ${esc(String(af[k] ?? '') || '—')}`).join(' · ') : af.c !== undefined ? `גובה אחראי: ${esc(b.c || 'ללא גובה')} ← ${esc(af.c)}` : `${esc(b.s || 'ממתין')} ← ${esc(af.s || 'ממתין')}${af.by && af.by !== b.by ? ' · אסף: ' + esc(af.by === '@' ? 'הגובה' : af.by) : ''}`;
+// ---------- ״פיצול / תשלום חלקי״ ----------
+// כל חוב שנחלק = כמה שורות עם אותו מזהה חוב (dg). חוב מקורי = סכום כל החלקים; נגבה = החלקים שסומנו ״נאסף״; נשאר = החלקים הפתוחים.
+const dgParts = (ctx, e) => e && e.dg ? (ctx.a.entries || []).filter(x => x && x.dg === e.dg) : [];
+const gotOf = (x) => normStatus(x.s) === 'נאסף' ? (x.ga != null && x.ga !== '' ? num(x.ga) : num(x.a)) : 0;
+function dgSum(ctx, e) {
+  const P = dgParts(ctx, e); if (P.length < 1 || !e.dg) return null;
+  const orig = r2(sum(P.map(x => num(x.a)))), got = r2(sum(P.map(gotOf))), left = r2(sum(P.filter(x => normStatus(x.s) !== 'נאסף').map(x => num(x.a))));
+  return { P, orig, got, left, st: left <= 0 ? 'נאסף במלואו' : got > 0 ? 'שולם חלקית' : 'פוצל בין גובים' };
+}
+function dgLine(ctx, e) {
+  const D = dgSum(ctx, e); if (!D) return '';
+  const who = D.P.filter(x => x !== e).map(x => `${esc(cleanColl(x.c) || 'ללא גובה')} ${normStatus(x.s) === 'נאסף' ? 'גבה' : 'אחראי על'} ${money(normStatus(x.s) === 'נאסף' ? gotOf(x) : num(x.a))}`).join(' · ');
+  const mineGot = e.pay || normStatus(e.s) === 'נאסף';
+  return `<div class="dgline"><span><b>${esc(e.n)}</b></span><span>חוב מקורי ${money(D.orig)}</span><span>נגבה ${money(D.got)}</span><span>נשאר ${money(D.left)}</span><span class="pill ${D.left <= 0 ? 'ok' : D.got > 0 ? 'warn' : 'acc'}">${D.st}</span>${mineGot ? `<span class="small muted">החלק הזה: ${e.pay ? 'תשלום' : 'נגבה'} ${money(gotOf(e))} ע״י ${esc(cleanColl(e.c))}</span>` : ''}${who ? `<span class="small muted">${who}</span>` : ''}</div>`;
+}
+function partPanel(ctx, e) {
+  const P = ctx.part, open = r2(num(e.a)), dis = P.busy ? ' disabled' : '', L = ctx.collList || [], me = cleanColl(e.c);
+  const opts = (sel, none) => (none ? `<option value="">${none}</option>` : '') + [...new Set(L.concat(me ? [me] : []))].map(c => `<option ${collKey(c) === collKey(sel) ? 'selected' : ''}>${esc(c)}</option>`).join('');
+  const v = P.vals, amt = r2(num(v.amount)), typed = String(v.amount || '').trim() !== '';
+  const over = typed && amt > open, bad = typed && !(amt > 0);
+  const leftAfter = r2(open - (amt > 0 ? amt : 0));
+  const pay = `<div class="pp-sec"><h3>רישום תשלום חלקי</h3>
+    <div class="ied-f"><label class="f">כמה שולם עכשיו (₪)<input class="in num" data-pv="amount" inputmode="decimal" value="${esc(v.amount || '')}" placeholder="למשל 5,500" autocomplete="off"${dis}></label>
+    <label class="f">מי גבה את הכסף<select class="in" data-pv="by"${dis}>${opts(v.by ?? me, 'בחר גובה…')}</select></label>
+    ${typed && !over && !bad && leftAfter > 0 ? `<label class="f">היתרה (${money(leftAfter)}) אצל<select class="in" data-pv="rest"${dis}>${opts(v.rest ?? me)}</select></label>` : ''}</div>
+    <div class="pp-calc" data-ppcalc>${over ? `<span class="neg">הסכום גבוה מהיתרה הפתוחה (${money(open)})</span>` : bad ? '<span class="neg">הזן סכום גדול מ-0</span>' : typed ? (leftAfter > 0 ? `יישאר לגבייה: <b>${money(leftAfter)}</b>` : '<b>הסכום סוגר את החוב — ״נאסף במלואו״</b>') : `יתרה פתוחה: <b>${money(open)}</b>`}</div>
+    <button type="button" class="btn" data-psave="pay"${dis || over || bad || !typed ? ' disabled' : ''}>${P.busy === 'pay' ? 'שומר…' : 'שמור תשלום'}</button></div>`;
+  const a1 = r2(num(v.a1)), t1 = String(v.a1 || '').trim() !== '', sbad = t1 && !(a1 > 0 && a1 < open);
+  const split = App.can.finance ? `<div class="pp-sec"><h3>פיצול החוב בין שני גובים</h3>
+    <div class="ied-f"><label class="f">גובה ראשון<select class="in" data-pv="c1"${dis}>${opts(v.c1 ?? me, 'בחר גובה…')}</select></label>
+    <label class="f">סכום לגובה הראשון (₪)<input class="in num" data-pv="a1" inputmode="decimal" value="${esc(v.a1 || '')}" placeholder="מתוך ${esc(fmt(open))}" autocomplete="off"${dis}></label>
+    <label class="f">גובה שני<select class="in" data-pv="c2"${dis}>${opts(v.c2 ?? '', 'בחר גובה…')}</select></label>
+    <label class="f">לגובה השני (אוטומטי)<input class="in num" data-pp2 value="${t1 && !sbad ? esc(fmt(r2(open - a1))) : ''}" readonly tabindex="-1"></label></div>
+    <div class="pp-calc">${sbad ? `<span class="neg">הסכום לגובה הראשון צריך להיות בין 0 ל-${money(open)}</span>` : `סה״כ לפיצול: <b>${money(open)}</b> · נגבה בפועל אחרי הפיצול: 0 ₪`}</div>
+    <button type="button" class="btn" data-psave="split"${dis || sbad || !t1 || !(v.c1 ?? me) || !v.c2 || collKey(v.c1 ?? me) === collKey(v.c2) ? ' disabled' : ''}>${P.busy === 'split' ? 'שומר…' : 'שמור פיצול'}</button></div>` : '';
+  return `<div class="ied pp no-print" data-pp="${esc(e._k)}"><div class="row sp"><b>פיצול / תשלום חלקי · ${esc(e.n)} · יתרה פתוחה ${money(open)}</b><button type="button" class="btn ghost sm" data-pclose${dis}>סגור</button></div>
+    ${pay}${split}${P.err ? `<div class="note err" role="alert">${esc(P.err)}</div>` : ''}</div>`;
+}
+function repaintPart(ctx) { const k = ctx.part && ctx.part.key; const old = k && ctx.view.querySelector(`[data-pp="${CSS.escape(k)}"]`); const e = k && (ctx.a.entries || []).find(x => x._k === k); if (old && e) { old.outerHTML = partPanel(ctx, e); bindPartBox(ctx); } else redraw(ctx); const f = ctx.part && ctx.part.focus; if (k && f) { const el = ctx.view.querySelector(`[data-pp="${CSS.escape(k)}"] [data-pv="${f}"]`); if (el) { try { el.focus({ preventScroll: true }); if (el.setSelectionRange && ctx.part.caret != null) el.setSelectionRange(ctx.part.caret, ctx.part.caret); } catch { /* */ } } } }
+function bindPart(ctx) {
+  const { view } = ctx;
+  $$('[data-part]', view).forEach(b => b.onclick = async (ev) => {
+    ev.stopPropagation(); const k = b.dataset.part;
+    if (ctx.part && ctx.part.busy) return;
+    if (ctx.part && ctx.part.key === k) { ctx.part = null; return redraw(ctx); }
+    ctx.edit = null; ctx.part = { key: k, vals: {}, busy: false, err: '', op: {} };
+    if (!ctx.collList) { try { const m = await import('./expense-form.js'); ctx.collList = await m.collectorsList(); } catch { ctx.collList = []; } }
+    redraw(ctx); const box = view.querySelector(`[data-pp="${CSS.escape(k)}"]`); if (box) { const rc = box.getBoundingClientRect(); if (rc.bottom > innerHeight - 90) window.scrollBy(0, Math.min(rc.bottom - innerHeight + 110, rc.top - 140)); const i = box.querySelector('[data-pv="amount"]'); if (i) i.focus({ preventScroll: true }); }
+  });
+  bindPartBox(ctx);
+}
+function bindPartBox(ctx) {
+  const box = ctx.part && ctx.view.querySelector(`[data-pp="${CSS.escape(ctx.part.key)}"]`); if (!box) return;
+  box.onclick = (ev) => ev.stopPropagation();
+  $$('[data-pv]', box).forEach(i => {
+    const ev = i.tagName === 'SELECT' ? 'onchange' : 'oninput';
+    i[ev] = () => { const P = ctx.part; if (!P) return; P.vals[i.dataset.pv] = i.value; P.err = ''; P.focus = i.dataset.pv; P.caret = i.selectionStart ?? null; repaintPart(ctx); };
+  });
+  $('[data-pclose]', box).onclick = () => { if (ctx.part && !ctx.part.busy) { ctx.part = null; redraw(ctx); } };
+  $$('[data-psave]', box).forEach(b => b.onclick = () => savePart(ctx, b.dataset.psave));
+}
+async function savePart(ctx, op) {
+  const P = ctx.part; if (!P || P.busy) return; // לחיצה חוזרת בזמן שמירה — לא נשלחת שוב
+  const e = (ctx.a.entries || []).find(x => x._k === P.key); if (!e) { ctx.part = null; return redraw(ctx); }
+  const v = P.vals, me = cleanColl(e.c);
+  const body = op === 'pay' ? { op, key: P.key, amount: r2(num(v.amount)), by: v.by ?? me, rest: v.rest ?? me } : { op, key: P.key, amount: r2(num(v.a1)), c1: v.c1 ?? me, c2: v.c2 };
+  const sig = JSON.stringify(body); if (P.op.sig !== sig) P.op = { sig, id: uid() }; // אותם ערכים בניסיון חוזר — אותו מזהה פעולה
+  P.busy = op; P.err = ''; redraw(ctx); SaveCtl.saving();
+  try {
+    const r = await save('POST', `/api/accounts/${ctx.a.id}/part`, { ...body, opId: P.op.id }, { queue: false, label: op === 'pay' ? 'תשלום חלקי' : 'פיצול חוב' });
+    const list = ctx.a.entries || []; const i = list.findIndex(x => x._k === P.key);
+    if (i >= 0 && r.entry) { Object.keys(list[i]).forEach(k => { if (!(k in r.entry) && !k.startsWith('_')) delete list[i][k]; }); Object.assign(list[i], r.entry); }
+    if (r.added && !list.some(x => x._k === r.added._k)) list.splice(i + 1, 0, r.added);
+    if (r.version > ctx.a._version) ctx.a._version = r.version;
+    ctx.part = null; SaveCtl.saved();
+    toast(op === 'pay' ? (r.added ? `נרשם תשלום ${fmt(body.amount)} ₪ ע״י ${body.by} · נשאר ${fmt(num(r.entry.a))} ₪` : `נרשם תשלום ${fmt(body.amount)} ₪ — נאסף במלואו`) : `החוב פוצל: ${body.c1} ${fmt(body.amount)} ₪ · ${body.c2} ${fmt(num(r.added.a))} ₪`);
+  } catch (err) {
+    P.busy = false; SaveCtl.failed(); P.err = 'לא נשמר — ' + (err.network ? 'אין תשובה מהשרת (בעיית קליטה). לחץ שוב — לא יירשם פעמיים.' : err.message);
+  }
+  if (ctx.nav !== undefined && ctx.nav !== App.nav) return;
+  redraw(ctx);
+}
 // ---------- עריכה בתוך השורה ----------
 // לחיצה על השעה / הסכום פותחת את השדה הזה בלבד; ״ערוך גבייה״ פותח את כל השדות של אותה גבייה (כמו בעריכה הרגילה).
 // השמירה מעדכנת רק את הגבייה שנבחרה לפי המזהה שלה. בכישלון — השדות נשארים פתוחים עם מה שהוקלד, ו״שמור״ שוב.
