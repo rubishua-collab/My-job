@@ -30,7 +30,7 @@ const results = []; const step = async (n, f) => { try { await f(); results.push
     await p.goto(URL + '/#/acc/' + SP); await p.waitForSelector('#mgbtn'); await p.click('#mgbtn'); await p.waitForSelector('#mgall');
     await p.click('#mgmark'); await p.click('#mgall'); await p.waitForSelector('#spt-lists .mgp');
     assert.ok((await p.locator('#spt-lists .mgph').innerText()).includes('משויכים לכמה גובים · 3'));
-    for (const nm of ['אדיר לביא', 'אור פהר', 'דני כהן']) { assert.strictEqual(await mgp(nm).count(), 1, nm); assert.strictEqual(await p.locator('#spt-lists .pl', { hasText: nm }).count(), 0, nm + ' לא חוזר ברשימות הגובים'); }
+    for (const nm of ['אדיר לביא', 'אור פהר', 'דני כהן']) { assert.strictEqual(await mgp(nm).count(), 1, nm); assert.strictEqual(await p.locator('#spt-lists .pl:not(.mgstub)', { hasText: nm }).count(), 0, nm + ' לא חוזר כשורה מלאה ברשימות הגובים'); assert.ok(await p.locator('#spt-lists .mgstub', { hasText: nm }).count() >= 1, nm + ' — שורה קצרה עם השם אצל הגובה'); }
   });
   await step('הדוגמאות: סה״כ והערות לפי גובה (כמה שורות אצל אותו גובה מתחברות)', async () => {
     assert.ok((await mgp('אדיר לביא').locator('.mgp-h').innerText()).includes('אדיר לביא — סה״כ 5,400 ₪'));

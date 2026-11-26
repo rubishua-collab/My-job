@@ -631,7 +631,9 @@ function listsHTML(ctx, A, X) {
     h += '<div class="ph"><span>' + esc(blockTitle(b)) + ' · ' + b.count + (b.special ? ' <span class="pill">לא כלול בסה״כ</span>' : '') + '</span>' + allSel + '</div>';
     for (const x of b.sections) {
       if (x.t) h += '<div class="grp-h ' + x.cls + '">' + esc(x.t) + '</div>';
-      h += x.rows.map((r, i) => show(r) ? '<div class="pl">' + tmIn(r) + '<span class="pl-t">' + (i + 1) + '. ' + lineParts(r, wp) + shareTag(r) + '</span>' + hardB(r) + mvSel(r) + penBtn(r) + '</div>' + (X.spx.open === r._k ? spxHTML(A, X, r._k) : '') : '').join('');
+      // חלק של חוב מאוחד ב״כל הגובים״: מופיע במלואו למעלה ב״משויכים לכמה גובים״ — כאן שורה קצרה עם השם והסכום, כדי שהסה״כ והמספר של הגובה יהיו מובנים
+      const mgStub = (r, i) => '<div class="pl mgstub"><span class="pl-t">' + (i + 1) + '. ' + esc(r.n) + ' – ' + money(num(r.a)) + ' <span class="pill acc">חוב מאוחד</span><span class="small muted"> · מופיע למעלה ב״משויכים לכמה גובים״</span></span><button type="button" class="btn ghost sm" data-mgjump="' + esc(mgOf(r)) + '" aria-label="הצג את החוב המאוחד של ' + esc(r.n) + '">הצג ↑</button></div>';
+      h += x.rows.map((r, i) => show(r) ? '<div class="pl">' + tmIn(r) + '<span class="pl-t">' + (i + 1) + '. ' + lineParts(r, wp) + shareTag(r) + '</span>' + hardB(r) + mvSel(r) + penBtn(r) + '</div>' + (X.spx.open === r._k ? spxHTML(A, X, r._k) : '') : (allMode && show0(r) && mgOf(r) ? mgStub(r, i) : '')).join('');
       if (b.sections.length > 1) h += '<div class="sub">סה״כ ' + esc(x.t) + ': ' + money(x.total) + '</div>';
     }
     h += '<div class="sub">סה״כ ' + esc(blockTitle(b)) + ': ' + money(b.total) + '</div>';
@@ -735,6 +737,8 @@ function panelBind(ctx) {
     if (md) { delRow(md.dataset.mgdel); return; }
     const mda = e.target.closest('[data-mgdelall]');
     if (mda) { delAll(mda.dataset.mgdelall); return; }
+    const mj = e.target.closest('[data-mgjump]');
+    if (mj) { const box = L.querySelector(`[data-mgp="${CSS.escape(mj.dataset.mgjump)}"]`); if (box) { box.scrollIntoView({ block: 'center' }); box.classList.add('flash'); setTimeout(() => box.classList.remove('flash'), 2400); } return; }
     const mf = e.target.closest('[data-mgfull]');
     if (mf) { X.mgOpen = X.mgOpen === mf.dataset.mgfull ? null : mf.dataset.mgfull; ctx.reload(); return; }
     const nb = e.target.closest('[data-spna]');
