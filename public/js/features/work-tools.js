@@ -57,7 +57,11 @@ accountPanel('work', (ctx) => {
     const b = e.target.closest('[data-wper]');
     if (b) { const n = b.dataset.wper; const a = n ? wCollAcc(acc(), n) : acc(); await sharePdf(workHTML(a), a, workText(a), box, b); return; }
     const all = e.target.closest('[data-wpdf-all]');
-    if (all) { const a = acc(); await sharePdf(workHTML(a), a, workText(a), box, all); return; }
+    if (all) { // PDF של כל החשבון: מהנתונים השמורים בשרת, עם ״הלוואות שנמסרו ללקוחות״
+      let src = ctx.a; try { src = await get('/api/accounts/' + ctx.a.id); } catch { /* בלי קליטה — מה שמוצג במסך */ }
+      const a = { ...accOf(src), loans: (src._lreq || []).filter(q => q && q.given) };
+      await sharePdf(workHTML(a), a, workText(a), box, all); return;
+    }
     if (e.target.closest('[data-wt-resave]')) resave();
   });
 });

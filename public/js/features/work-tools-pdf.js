@@ -57,6 +57,15 @@ const CSS = `
 .wt-nc-c{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px;background:var(--surface,#fff);color:inherit;border:1px solid var(--line,#cfd6df);border-radius:6px;padding:8px 10px}
 .wt-nc-c .nm{font-weight:700}.wt-nc-c .src{opacity:.75;font-size:12.5px}
 .wt-ack{display:flex;align-items:center;gap:10px;font-weight:600;font-size:14px;cursor:pointer;background:var(--warn-bg,#fbefd0);color:var(--warn-fg,#6d4600);border-radius:8px;padding:10px 12px;margin-top:8px}
+.wt-rep .lgv{margin-top:22px;padding-top:4px}
+.wt-rep .lgv-box{font-variant-numeric:normal;direction:rtl;text-align:right;width:62%;margin-inline-end:auto;border:1.5px solid #1e4d8f;border-radius:10px;padding:10px 14px;background:#f6f9fd;font-size:16px;line-height:1.45}
+.wt-rep .lgv-h{font-weight:800;font-size:17px;color:#163a6b;margin-bottom:4px}.wt-rep .lgv-n{font-weight:600;color:#555}
+.wt-rep .lgv-i{padding:7px 0;border-top:1px solid #d6e0ee}.wt-rep .lgv-i:first-of-type{border-top:0}
+.wt-rep .lgv-top{display:flex;justify-content:space-between;gap:12px;align-items:baseline}.wt-rep .lgv-nm{font-size:17px}.wt-rep .lgv-a{white-space:nowrap;font-size:17px}
+.wt-rep .lgv-w{display:inline-block;unicode-bidi:isolate;white-space:nowrap}.wt-rep .lgv-ltr{direction:ltr}
+.wt-rep .lgv-note{white-space:normal}
+
+.wt-rep .lgv-m{font-size:14px;color:#444}.wt-rep .lgv-note{overflow-wrap:anywhere;font-size:15px;margin-top:3px;padding:3px 8px;background:#fff;border:1px solid #d6e0ee;border-radius:6px}
 .wt-ack input{width:22px;height:22px;flex:none;margin:0}
 .wt-phm{color:var(--neg,#b3261e);font-weight:600}
 .wt-dup ol{margin:6px 0 0;padding-inline-start:22px}
@@ -75,14 +84,18 @@ export async function buildPdf(html, acc) {
   stage.innerHTML = '<article class="report wt-rep">' + html + '</article>';
   try {
     try { await document.fonts.ready; } catch (e) { /* */ }
-    const W = 794, sRect = stage.getBoundingClientRect(), totalH = Math.ceil(stage.scrollHeight);
-    const cand = [];
-    stage.querySelectorAll('tbody tr, tfoot tr, .rl').forEach(tr => cand.push(tr.getBoundingClientRect().bottom - sRect.top));
-    stage.querySelectorAll('.rs, .cblock').forEach(s => cand.push(s.getBoundingClientRect().top - sRect.top));
-    cand.sort((a, b) => a - b);
-    const scale = Math.max(1, Math.min(2, Math.sqrt(14e6 / (W * totalH))));
-    const canvas = await window.html2canvas(stage, { scale, backgroundColor: '#ffffff', useCORS: true, logging: false });
+    const W = 794;
+    // נקודות החיתוך בין עמודים נמדדות בעותק שמצויר בפועל (onclone) — שם הגובה יכול להיות שונה מהמסך,
+    // וכך שום שורה או פירוט לא נחתכים ושום חלק בסוף העמוד האחרון לא הולך לאיבוד
+    const measure = (st) => { const r = st.getBoundingClientRect(), c = [];
+      st.querySelectorAll('tbody tr, tfoot tr, .rl').forEach(tr => c.push(tr.getBoundingClientRect().bottom - r.top));
+      st.querySelectorAll('.rs, .cblock').forEach(s => c.push(s.getBoundingClientRect().top - r.top));
+      return { cand: c.sort((a, b) => a - b), h: Math.ceil(st.scrollHeight) }; };
+    let M = measure(stage);
+    const scale = Math.max(1, Math.min(2, Math.sqrt(14e6 / (W * M.h))));
+    const canvas = await window.html2canvas(stage, { scale, backgroundColor: '#ffffff', useCORS: true, logging: false, onclone: (doc) => { const st = doc.getElementById('wt-pdf-stage'); if (st) M = measure(st); } });
     const k = canvas.width / W, pageH = W * (277 / 190);
+    const cand = M.cand, totalH = Math.max(M.h, Math.ceil(canvas.height / k));
     const slices = []; let y = 0;
     while (y < totalH - 1) {
       const limit = y + pageH;

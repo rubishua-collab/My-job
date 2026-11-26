@@ -166,15 +166,28 @@ function workTableHTML(c,opts){
     '<tr class="tot2"><td></td><td>נותר לאסוף ('+(c.count-c.got.length)+')</td><td class="a">'+money(c.left)+'</td><td></td></tr>';
   return '<table class="rt"><thead><tr><th class="ix">#</th><th>שם</th><th class="a">סכום</th><th class="a">שעה</th></tr></thead><tbody>'+body+'</tbody><tfoot>'+foot+'</tfoot></table>';
 }
+/* ״הלוואות שנמסרו ללקוחות״: תיבה קטנה מתחת לסיכום החשבון (רק ב-PDF של כל החשבון, ורק כשיש הלוואות שאושרו ונמסרו).
+   לעיון ולהקמת לקוח בלבד — לא נספרת בסיכומים; הוצאת ״מתן הלוואה״ כבר נמצאת בהוצאות השמורות של החשבון. */
+/* html2canvas לא מסדר נכון שורה שמערבבת מספרים ועברית (״1650 כפול 10״ יוצא הפוך) — כל מילה בתיבה נפרדת, בסדר של המסך */
+const bidiWords=t=>String(t==null?'':t).split('\n').map(line=>'<div class="lgv-ln">'+(line.trim()?line.split(/\s+/).filter(Boolean).map(w=>'<span class="lgv-w">'+esc(w)+'</span>').join(' '):'&nbsp;')+'</div>').join('');
+function loansGivenHTML(list){
+  const L=(list||[]).filter(q=>q&&q.given); if(!L.length) return '';
+  const seen=new Set(), U=L.filter(q=>!seen.has(q.id)&&seen.add(q.id));
+  return '<section class="rs lgv"><div class="lgv-box"><div class="lgv-h">הלוואות שנמסרו ללקוחות <span class="lgv-n">('+U.length+')</span></div>'+
+    U.map(q=>'<div class="rl lgv-i"><div class="lgv-top"><b class="lgv-nm">'+esc(q.name)+'</b><b class="lgv-a">'+money(q.given.a!=null?q.given.a:q.amount)+'</b></div>'+
+      '<div class="lgv-m"><span class="lgv-w">נמסר ע״י <b>'+esc(q.given.c)+'</b></span> · <span class="lgv-w">תאריך הבקשה <span class="num">'+esc(isoLabel(q.date))+'</span></span> · <span class="lgv-w">שעת מסירה <span class="num">'+esc(q.given.t||'')+'</span></span></div>'+
+      (String(q.note||'').trim()?'<div class="lgv-note" data-note="'+esc(q.note)+'">'+bidiWords(q.note)+'</div>':'')+'</div>').join('')+'</div></section>';
+}
 function workHTML(acc,opts){
   const es=acc.entries||[], xs=wExpList(acc), xt=sum(xs.map(x=>x.a)), c=calcWork(es), gs=workGroups(es,xs);
   let h='<header class="rhead">'+RSEAL+'<div class="rht"><span class="rbrand">יומן חשבון בוקר</span><h2 class="rtitle">רשימת חייבים · איסוף יומי</h2><div class="rsub">'+esc(weekday(acc.date))+' · '+esc(isoLabel(acc.date))+'</div></div></header>';
-  if(!gs) return h+(c.count?'<section class="rs">'+workTableHTML(c,opts)+'</section>':'')+(xs.length?'<section class="rs">'+expTableHTML(xs,xt,c.count?r2(c.total-xt):null,true)+'</section>':'');
+  if(!gs) return h+(c.count?'<section class="rs">'+workTableHTML(c,opts)+'</section>':'')+(xs.length?'<section class="rs">'+expTableHTML(xs,xt,c.count?r2(c.total-xt):null,true)+'</section>':'')+loansGivenHTML(acc.loans);
   h+=gs.map(g=>'<section class="cblock"><div class="cband"><span>'+esc(g.name)+'</span>'+(g.calc.count?'<span class="cbs">'+g.calc.count+' חייבים · '+money(g.calc.total)+'</span>':'')+'</div>'+(g.calc.count?workTableHTML(g.calc,opts):'')+(g.exp.length?expTableHTML(g.exp,g.expTotal,g.calc.count?g.net:null,false):'')+'</section>').join('');
   h+='<section class="rs"><table class="rt"><tbody><tr class="tot"><td>סה״כ כללי ('+c.count+' חייבים)</td><td class="a">'+money(c.total)+'</td></tr>'+
     (c.notGot.length?'<tr class="tot2"><td>לא נאסף ('+c.notGot.length+')</td><td class="a">'+money(c.notTotal)+'</td></tr>':'')+
     (c.got.length?'<tr class="tot2"><td>נאסף ('+c.got.length+')</td><td class="a">'+money(c.gotTotal)+'</td></tr><tr class="tot2"><td>נותר לאסוף ('+(c.count-c.got.length)+')</td><td class="a">'+money(c.left)+'</td></tr>':'')+
     (xs.length?'<tr class="tot2"><td>סה״כ הוצאות ('+xs.length+')</td><td class="a">'+money(xt)+'</td></tr><tr class="tot2"><td>נטו כללי (סה״כ חובות פחות הוצאות)</td><td class="a">'+money(r2(c.total-xt))+'</td></tr>':'')+'</tbody></table></section>';
+  h+=loansGivenHTML(acc.loans);
   return h;
 }
 function parseWorkText(text){
@@ -287,4 +300,4 @@ export function fillFromBook(entries){
   });
   return n;
 }
-export { nmTokens, nmKey, phbIngest, phLookup, collLookup, hardLookup, expLines, workLines, workText, expTableHTML, workTableHTML, workHTML, parseWorkText, PROMPT_W, normalizeW, wDupKey, wSameKey, wDupInfo, wCollAcc, wCollText, lgx, LGF_W, LGF_C, LGF_X, TOTAL_RE, RSEAL, fmt, money, isRealColl };
+export { loansGivenHTML, nmTokens, nmKey, phbIngest, phLookup, collLookup, hardLookup, expLines, workLines, workText, expTableHTML, workTableHTML, workHTML, parseWorkText, PROMPT_W, normalizeW, wDupKey, wSameKey, wDupInfo, wCollAcc, wCollText, lgx, LGF_W, LGF_C, LGF_X, TOTAL_RE, RSEAL, fmt, money, isRealColl };
