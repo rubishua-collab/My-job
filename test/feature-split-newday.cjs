@@ -1,5 +1,5 @@
 // בדיקת קבלה: חשבון פיצול חדש + ייבוא אקסל מציג רק את מה שבאקסל (ומה שנוסף ידנית) — לא לקוחות מאתמול.
-// אתמול: דני 1,000 + יוסי 800. היום: אקסל עם שתי שורות של דני (300 אושר, 200 רובי) → לווה אחד, 2 חובות, 500 ₪.
+// אתמול: דני 1,000 + יוסי 800. היום: אקסל עם שתי שורות של דני (300 אושר, 200 רובי) → שורה אחת של דני, 500 ₪, ״ללא גובה״ עם פירוט 2 חובות.
 process.env.LC_ALL = process.env.LC_ALL || 'C.UTF-8';
 const { chromium, devices } = require('playwright');
 const { spawn } = require('child_process');
@@ -46,15 +46,16 @@ const results = []; const step = async (n, f) => { try { await f(); results.push
     await p.goto(URL + '/#/acc/' + T + '?edit=1'); await p.waitForSelector('[data-eact]');
     await p.click('button[data-eact]:has-text("קליטה מקובץ אקסל")'); await p.setInputFiles('#imp-file', await makeXlsx('today.xlsx', XL));
     await p.waitForSelector('#sp-imp-ok'); await p.click('#sp-imp-ok'); await p.click('#ed-save'); await p.waitForURL(/#\/acc\/[^?]+$/);
-    const a = await api('GET', '/api/accounts/' + T); assert.deepStrictEqual(a.records.map(r => r.n + ':' + r.a + ':' + r.c).sort(), ['דני כהן:200:רובי', 'דני כהן:300:אושר']);
+    const a = await api('GET', '/api/accounts/' + T); assert.deepStrictEqual(a.records.map(r => r.n + ':' + r.a + ':' + r.c), ['דני כהן:500:']);
+    assert.deepStrictEqual(a.records[0].src.map(x => x.a + ':' + x.c), ['300:אושר', '200:רובי']);
   });
-  await step('״איחוד חובות לפי לווה״: לווה אחד (דני), שני חובות, סה״כ 500; יוסי לא מופיע', async () => {
-    await p.waitForSelector('#mgbtn'); await p.click('#mgbtn'); await p.waitForSelector('#mgall');
-    const sh = await p.locator('#sheet').innerText(); assert.ok(!sh.includes('יוסי') && sh.includes('500'), sh);
-    await p.click('#mgmark'); await p.click('#mgall'); await p.waitForSelector('.mgcard .mgrow');
-    assert.strictEqual(await p.locator('.mgcard .mgrow').count(), 1); assert.ok((await p.locator('.mgcard .mgrow .t').innerText()).includes('דני כהן — 500'));
-    assert.ok((await p.locator('.mgcard .mgrow').innerText()).includes('2 חובות'));
+  await step('שורה אחת לדני (500 ₪, 2 חובות בפירוט) תחת ״ללא גובה״; יוסי לא מופיע; בחירת רובי מעבירה את כל ה-500', async () => {
+    await p.waitForSelector('.li[data-key] [data-consd]'); assert.strictEqual(await p.locator('.li[data-key]', { hasText: 'דני כהן' }).count(), 1);
+    assert.ok((await p.locator('[data-consd]').first().innerText()).includes('פירוט חובות (2)'));
     assert.ok(!(await view()).includes('יוסי'));
+    const k = (await api('GET', '/api/accounts/' + T)).records[0]._k;
+    await p.selectOption(`#spt-lists [data-mv="${k}"]`, 'רובי'); await p.waitForFunction(() => /רובי · 1/.test(document.querySelector('#spt-lists').textContent));
+    const a = await api('GET', '/api/accounts/' + T); assert.strictEqual(a.records[0].c, 'רובי'); assert.strictEqual(a.records[0].a, 500);
   });
   await step('״בחר את כל תוצאות הסינון״ ונמעני וואטסאפ — רק דני (הודעה אחת, 500 ₪)', async () => {
     await p.check('#selall'); assert.ok((await p.locator('#sendpriv').innerText()).includes('ל־1 שורות'), await p.locator('#sendpriv').innerText());
@@ -63,11 +64,12 @@ const results = []; const step = async (n, f) => { try { await f(); results.push
     await p.click('#sheet [data-close]'); await p.uncheck('#selall');
   });
   await step('אחרי רענון, ייבוא חוזר של אותו קובץ, ומעבר ליום הקודם ובחזרה — אותה תוצאה; אתמול עדיין 1,800', async () => {
-    await p.reload(); await p.waitForSelector('.mgcard .mgrow'); assert.ok((await p.locator('.mgcard .mgrow .t').innerText()).includes('דני כהן — 500'));
+    await p.reload(); await p.waitForSelector('.li[data-key] [data-consd]'); assert.ok((await p.locator('.li[data-key]', { hasText: 'דני כהן' }).innerText()).includes('500'));
     await p.goto(URL + '/#/acc/' + T + '?edit=1'); await p.waitForSelector('[data-eact]');
     await p.click('button[data-eact]:has-text("קליטה מקובץ אקסל")'); await p.setInputFiles('#imp-file', await makeXlsx('today.xlsx', XL));
     await p.waitForSelector('#sp-imp-ok'); p.once('dialog', d => d.accept()); await p.click('#sp-imp-ok'); await p.click('#ed-save'); await p.waitForURL(/#\/acc\/[^?]+$/);
-    assert.strictEqual(await total(T), 500, 'ייבוא חוזר לא הכפיל'); assert.strictEqual((await api('GET', '/api/accounts/' + T)).records.length, 2);
+    assert.strictEqual(await total(T), 500, 'ייבוא חוזר לא הכפיל'); assert.strictEqual((await api('GET', '/api/accounts/' + T)).records.length, 1);
+    assert.strictEqual((await api('GET', '/api/accounts/' + T)).records[0].c, 'רובי', 'הגובה שנבחר נשמר בייבוא חוזר');
     await p.waitForSelector('#dprev'); await p.click('#dprev'); await p.waitForFunction((y) => location.hash.includes(y), Y); await p.waitForSelector('.card');
     assert.strictEqual(await total(Y), 1800); assert.ok((await view()).includes('יוסי לוי'));
     await p.click('#dnext'); await p.waitForFunction((t) => location.hash.includes(t), T); await p.waitForSelector('#sendbar');
@@ -78,16 +80,14 @@ const results = []; const step = async (n, f) => { try { await f(); results.push
     await p.goto(URL + '/#/acc/' + T + '?edit=1'); await p.waitForSelector('[data-add="records"]');
     await p.click('[data-add="records"]'); await p.locator('[data-l=records][data-k=n]').last().fill('רון ידני'); await p.locator('[data-l=records][data-k=a]').last().fill('100'); await p.locator('[data-l=records][data-k=c]').last().fill('אושר'); await p.locator('[data-l=records][data-k=c]').last().press('Tab');
     await p.click('#ed-save'); await p.waitForURL(/#\/acc\/[^?]+$/);
-    const a0 = await api('GET', '/api/accounts/' + T); const d = a0.records.find(r => r.n === 'דני כהן' && r.c === 'אושר');
+    const a0 = await api('GET', '/api/accounts/' + T); const d = a0.records.find(r => r.n === 'דני כהן');
     const data = { ...a0, records: a0.records.map(r => r._k === d._k ? { ...r, t: '17:15' } : r) }; ['prev', '_version', '_updatedAt', '_updatedBy', '_times', '_day', '_foreign', 'id'].forEach(k => delete data[k]); await api('PUT', '/api/accounts/' + T, { data, baseVersion: a0._version, opId: 'tm' });
     await p.goto(URL + '/#/acc/' + T + '?edit=1'); await p.waitForSelector('[data-eact]');
     await p.click('button[data-eact]:has-text("קליטה מקובץ אקסל")'); await p.setInputFiles('#imp-file', await makeXlsx('today.xlsx', XL));
     await p.waitForSelector('#sp-imp-ok'); let msg = ''; p.once('dialog', dl => { msg = dl.message(); dl.accept(); }); await p.click('#sp-imp-ok'); await p.click('#ed-save'); await p.waitForURL(/#\/acc\/[^?]+$/);
-    assert.ok(msg.includes('2 שורות מייבוא קודם') && msg.includes('1 שורות שהוספת ידנית'), msg);
-    const a = await api('GET', '/api/accounts/' + T); assert.deepStrictEqual(a.records.map(r => r.n + ':' + r.a).sort(), ['דני כהן:200', 'דני כהן:300', 'רון ידני:100'].sort());
-    assert.strictEqual(a.records.find(r => r.n === 'דני כהן' && r.c === 'אושר').t, '17:15', 'השעה עברה לשורה התואמת');
-    const dn = a.records.filter(r => r.n === 'דני כהן'); assert.ok(dn[0].mg && dn[0].mg === dn[1].mg, 'האיחוד נשמר');
-    await p.waitForSelector('.mgcard .mgrow'); assert.ok((await p.locator('.mgcard .mgrow .t').innerText()).includes('דני כהן — 500'));
+    assert.ok(msg.includes('1 שורות מייבוא קודם') && msg.includes('1 שורות שהוספת ידנית'), msg);
+    const a = await api('GET', '/api/accounts/' + T); assert.deepStrictEqual(a.records.map(r => r.n + ':' + r.a).sort(), ['דני כהן:500', 'רון ידני:100'].sort());
+    const dn = a.records.find(r => r.n === 'דני כהן'); assert.strictEqual(dn.t, '17:15', 'השעה עברה לשורה התואמת'); assert.strictEqual(dn.c, 'רובי'); assert.strictEqual(dn._k, d._k);
   });
   await step('שורה שהועתקה בטעות מאתמול (יוסי): אזהרה והסרה מהחשבון של היום בלבד; אתמול נשאר 1,800', async () => {
     const y = await api('GET', '/api/accounts/' + Y); const yos = y.records.find(r => r.n === 'יוסי לוי');

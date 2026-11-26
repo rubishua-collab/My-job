@@ -12,6 +12,7 @@ import { openRemoveSheet } from './acc-remove.js';
 import { openPdfSheet } from './acc-pdf.js';
 import { mgGroups, mgTotal, customerCount, unmerge, partStatus, collNotes, collShare } from './split-merge.js';
 import { SaveCtl, watchHeader, paintSave } from './savectl.js';
+import { consBtn, openConsDetail } from './split-cons-ui.js';
 import { timesHTML } from './acc-times.js';
 import { openExpenseForm } from './expense-form.js';
 
@@ -205,6 +206,7 @@ function bind(ctx) {
   $$('[data-mkretry]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); const m = ctx.mk?.get(b.dataset.mkretry); if (m) runMark(ctx, b.dataset.mkretry, m.s, m.reason, m.opId); });
   $$('[data-mkx]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); ctx.mk?.delete(b.dataset.mkx); redraw(ctx); });
   $$('[data-delent]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); delEntrySheet(ctx, b.dataset.delent); });
+  $$('[data-consd]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); openConsDetail((ctx.a.records || []).find(r => r._k === b.dataset.consd)); });
   $$('[data-assign]', view).forEach(b => b.onclick = (ev) => { ev.stopPropagation(); assignSheet(ctx, b.dataset.assign); });
 }
 function refreshBar(ctx) {
@@ -301,8 +303,8 @@ function splitView(ctx, vis) {
   const mrow = (it) => `<div class="li mgrow ${ctx.sel.has(it.ref) ? 'sel' : ''}" data-key="${esc(it.ref)}">${ck(ctx, it.ref)}<div class="t">${esc(it.name)} — ${money(it.amount)} <span class="pill acc">${it.parts.length} חובות</span></div><div class="a">${money(it.amount)}</div>
     <div class="m" style="flex-basis:100%"><div class="mgp-notes">הערות: ${esc(collNotes(it.parts))}</div></div>
     <div class="m" style="flex-basis:100%"><details class="mgdet2"><summary>פירוט</summary><div class="tbl-wrap"><table><thead><tr><th>גובה</th><th class="a">סכום</th><th>שעה</th><th>סטטוס</th></tr></thead><tbody>${it.parts.map(x => `<tr><td>${esc(String(x.c || '').trim() || 'ללא גובה')}</td><td class="a">${money(num(x.a))}</td><td>${esc(x.t || '')}</td><td>${esc(partStatus(x))}</td></tr>`).join('')}</tbody><tfoot><tr><td><b>סה״כ</b></td><td class="a"><b>${money(it.amount)}</b></td><td></td><td></td></tr></tfoot></table></div>${App.can.finance ? `<button class="btn plain sm" data-mgun="${esc(it.mg)}">בטל איחוד</button>` : ''}</details></div></div>`;
-  const rec = (r) => `<div class="li ${ctx.sel.has(r._k) ? 'sel' : ''}" data-key="${esc(r._k)}">${ck(ctx, r._k)}<div class="t">${esc(r.n)} ${r.pp ? `<span class="pill acc">חלק ${esc(r.pp)}</span>` : ''}${r.mg && MG.get(r.mg) ? ` <span class="pill acc">חוב מאוחד · סה״כ ${money(mgTotal(MG.get(r.mg)))}</span>${ctx.coll ? ` <span class="pill acc">חלקו של ${esc(String(r.c || '').trim())} ${money(collShare(MG.get(r.mg), r.c))}</span>` : ''}` : ''}${r.h === 'קשה' ? ' <span class="pill err">קשה</span>' : ''}${r.na ? ' <span class="pill acc">לא ענו</span>' : ''}</div><div class="a">${money(num(r.a))}</div>
-    <div class="m">${r.t ? `<span class="num">${esc(r.t)}</span>` : ''}${r.ph ? `<span>${esc(fmtPhone(r.ph))}</span>` : '<span class="neg">אין טלפון</span>'}${r.gnote ? `<span class="wnote">✎ ${esc(r.gnote)}</span>` : ''}${r.note ? `<span>${esc(r.note)}</span>` : ''}</div></div>`;
+  const rec = (r) => `<div class="li ${ctx.sel.has(r._k) ? 'sel' : ''}" data-key="${esc(r._k)}">${ck(ctx, r._k)}<div class="t">${esc(r.n)} ${r.pp ? `<span class="pill acc">חלק ${esc(r.pp)}</span>` : ''}${r.mg && MG.get(r.mg) ? ` <span class="pill acc">חוב מאוחד · סה״כ ${money(mgTotal(MG.get(r.mg)))}</span>${ctx.coll ? ` <span class="pill acc">חלקו של ${esc(String(r.c || '').trim())} ${money(collShare(MG.get(r.mg), r.c))}</span>` : ''}` : ''}${r.h === 'קשה' ? ' <span class="pill err">קשה</span>' : ''}${r.na ? ' <span class="pill acc">לא ענו</span>' : ''}${r.cons ? ' <span class="pill acc">מאוחד</span>' : ''}</div><div class="a">${money(num(r.a))}</div>
+    <div class="m">${consBtn(r)}${r.t ? `<span class="num">${esc(r.t)}</span>` : ''}${r.ph ? `<span>${esc(fmtPhone(r.ph))}</span>` : '<span class="neg">אין טלפון</span>'}${r.gnote ? `<span class="wnote">✎ ${esc(r.gnote)}</span>` : ''}${r.note ? `<span>${esc(r.note)}</span>` : ''}</div></div>`;
   const D = a._day; const dxOf = (cn) => D ? D.exp.filter(x => collKey(cleanColl(x.c)) === collKey(cn)) : [];
   const dayBox = (cn) => { if (!D) return ''; const xs = dxOf(cn), et = r2(sum(xs.map(x => num(x.a)))), got = D.got[collKey(cn)] || 0; if (!xs.length && !got) return '';
     return `<div class="dayx">${xs.length ? `<h3 style="margin:10px 0 4px">הוצאות</h3><div class="list">${xs.map(x => `<div class="li noc"><div class="t">${x.t ? `<span class="num">${esc(x.t)}</span> · ` : ''}${esc(String(x.n || '').trim() || 'הוצאה')}</div><div class="a">${money(num(x.a))}</div></div>`).join('')}</div>` : ''}

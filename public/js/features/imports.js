@@ -6,6 +6,7 @@ import { $, $$, esc, fmt, money, toast, openSheet } from '../ui.js';
 import { App } from '../app.js';
 import { calcSplit, sum, num, r2, normName } from '../calc.js';
 import { mergeSplit, findGroups } from '../split-merge.js';
+import { consolidate, consolidateAsk, consKey } from '../split-cons.js';
 import {
   readTables, readCsvText, cell, morningFromTables, morningStatus, extractRows, mCheckMsg, mRowsOf,
   findSplitHeader, extractSplit, mergeRecords, mergeDebts, compactRec, carrySpNotes, splitStatus, DEF_COLL,
@@ -174,33 +175,45 @@ editorAction('split', {
       ${dropHTML('בחר את קובץ החייבים', 'אפשר גם לגרור את הקובץ לכאן. השורות מתפצלות לפי עמודת הסוכן, כפי שנכתב בקובץ, ושורות של אותו שם ואותו גובה מתאחדות.')}
       <div id="sp-imp-body"></div>`);
     const el = s.el, body = $('#sp-imp-body', el); let P = null, list = null;
-    const compute = () => {
-      const ex = extractSplit(P.raw, P.hdrRow, P.map); const m = mergeRecords(ex.recs);
+    // לפני החלוקה לגובים: שורה אחת לכל לקוח (split-cons.js) — כל שורות החוב שלו בקובץ, עם פירוט; ואחר כך האיחוד הרגיל של שאר השורות
+    const compute = (cons) => {
+      const ex = extractSplit(P.raw, P.hdrRow, P.map);
+      const C = cons || consolidate(ex.recs, { same: new Set(state.mgSame || []), diff: new Set(state.mgDiff || []), consC: state.consC || {} });
+      const m0 = mergeRecords(C.recs.filter(r => !r.cons)); const keep = new Set(m0.recs);
+      const m = { ...m0, recs: C.recs.filter(r => r.cons || keep.has(r)) };
       const cy = carrySpNotes(list, m.recs, state.date, state.id);
-      return { ex, m, cy };
+      return { ex, m, cy, C };
     };
     const draw = () => {
-      const { ex, m, cy } = compute(); const st = splitStatus(ex, m, cy, P.map, P.agByContent); setSt(st.cls, st.html);
+      const { ex, m, cy, C } = compute(); const st = splitStatus(ex, m, cy, P.map, P.agByContent);
+      const cm = C.done.filter(d => d.multi).length, cs = C.done.length - cm;
+      if (C.done.length) st.html += '<br><b>שורה אחת לכל לקוח:</b> ' + C.done.length + ' לקוחות הופיעו בכמה שורות ואוחדו' + (cm ? ' · ' + cm + ' מהם אצל כמה גובים — נכנסים ל״ללא גובה״ עד שתבחר גובה' : '') + (cs ? ' · ' + cs + ' אצל אותו גובה — נשארים אצלו' : '') + '. ״פירוט חובות״ ליד הסכום מציג כל שורת מקור.';
+      if (C.ask.length) { st.cls = 'warn'; st.html += '<br>' + C.ask.length + ' שמות זהים עם טלפון או מזהה שונה (' + C.ask.map(g => esc(g.name)).join(' · ') + ') — תתבקש לאשר אם זה אותו לקוח לפני האיחוד.'; }
+      setSt(st.cls, st.html);
       const c = calcSplit(m.recs);
       body.innerHTML = `<details><summary>עריכת שורות (${m.recs.length}) והעמודות שנקראו</summary>
         ${mapHTML(P.raw, P.hdrRow, [['fn', 'שם פרטי', true], ['ln', 'שם משפחה (או הערה)', true], ['bal', 'יתרה', true], ['ag', 'סוכן (גובה)', true], ['ph', 'טלפון', true], ['hd', 'קשה / לא קשה', true]], P.map, 400)}
-        <div class="tbl-wrap imp-pv"><table><thead><tr><th>#</th><th>שם</th><th>יתרה</th><th>גובה</th><th>טלפון</th><th>הערה</th></tr></thead><tbody>${m.recs.map((r, i) => `<tr${r.byPhone ? ' style="background:var(--warn-bg)"' : ''}><td>${i + 1}</td><td>${esc(r.n)}</td><td class="n">${fmt(r.a)}</td><td>${esc(r.c)}</td><td dir="ltr">${esc(r.ph)}</td><td>${esc(r.note)}</td></tr>`).join('')}</tbody></table></div></details>
+        <div class="tbl-wrap imp-pv"><table><thead><tr><th>#</th><th>שם</th><th>יתרה</th><th>גובה</th><th>טלפון</th><th>הערה</th></tr></thead><tbody>${m.recs.map((r, i) => `<tr${r.byPhone ? ' style="background:var(--warn-bg)"' : ''}><td>${i + 1}</td><td>${esc(r.n)}${r.cons ? ` <span class="pill acc">מאוחד · ${r.src.length} שורות</span>` : ''}</td><td class="n">${fmt(r.a)}</td><td>${esc(r.c)}</td><td dir="ltr">${esc(r.ph)}</td><td>${esc(r.note)}</td></tr>`).join('')}</tbody></table></div></details>
         <div class="list" style="margin-top:8px">${c.blocks.map(b => `<div class="li noc"><div class="t">${esc(b.c)}</div><div class="a">${money(b.total)}</div><div class="m"><span>${b.count} שורות</span></div></div>`).join('')}
         <div class="li noc"><div class="t"><b>סה״כ כללי (גובים)</b></div><div class="a">${money(c.grand)}</div></div></div>
         <button class="btn xl" id="sp-imp-ok" style="margin-top:10px" ${m.recs.length ? '' : 'disabled'}>החלף את שורות הפיצול (${m.recs.length})</button>`;
       bindMap(body, P.map, (k) => { if (k === 'ag') P.agByContent = false; draw(); });
-      $('#sp-imp-ok', body).onclick = () => {
+      $('#sp-imp-ok', body).onclick = async () => {
         // השורות שייכות לחשבון הפתוח בלבד. ייבוא חוזר: מחליף את שורות הייבוא הקודם (בלי כפילות),
         // שומר שורות שהוספת ידנית, ומעביר לשורה התואמת (שם + גובה) שעה, ״לא ענו״, הערה, קושי, טלפון ואיחוד
         const cur = (state.records || []).filter(r => r && (r.n || r.a));
         const manual = cur.filter(r => r.man), old = cur.filter(r => !r.man);
         if (old.length && !confirm(`בפיצול כבר יש ${old.length} שורות מייבוא קודם — הן יוחלפו בשורות מהקובץ.${manual.length ? ` ${manual.length} שורות שהוספת ידנית יישמרו.` : ''} עריכות (שעה, הערה, איחוד) יועברו לשורות התואמות. להמשיך?`)) return;
-        const { m: mm } = compute();
-        const key = (r) => normName(r.n) + '|' + String(r.c || '').trim();
+        // לפני האיחוד: שם זהה עם טלפון / מזהה שונה — שואלים אם זה אותו לקוח
+        const ex0 = extractSplit(P.raw, P.hdrRow, P.map);
+        const CC = await consolidateAsk(state, askSame, ex0.recs); if (CC.cancelled) return;
+        const { m: mm } = compute(CC);
+        const key = (r) => r.cons ? 'C|' + consKey(r) : normName(r.n) + '|' + String(r.c || '').trim();
         const oldBy = new Map(); old.forEach(r => { const k = key(r); if (!oldBy.has(k)) oldBy.set(k, []); oldBy.get(k).push(r); });
         const impId = 'i' + Date.now().toString(36);
-        const fresh = mm.recs.map(compactRec).filter(r => r.n || r.a).map(r => {
+        const fresh = mm.recs.map(r => Object.assign(compactRec(r), r.cons ? { cons: 1, src: r.src, ...(r.gnote ? { gnote: r.gnote } : {}) } : {}, r.cid ? { cid: r.cid } : {})).filter(r => r.n || r.a).map(r => {
           const o = (oldBy.get(key(r)) || []).shift();
+          if (o && r.cons && o.cons) r.c = String(o.c || '').trim(); // הגובה שבחרת לשורה המאוחדת נשאר גם בייבוא חוזר
           if (o) { if (o._k) r._k = o._k; if (o.t && !r.t) r.t = o.t; if (o.na) r.na = true; if (o.note && !r.note) r.note = o.note; if (o.done) r.done = true; if (o.h && !r.h) r.h = o.h; if (o.ph && !r.ph) r.ph = o.ph; if (o.side) r.side = true; if (o.mg) r.mg = o.mg; }
           r.imp = impId; return r;
         });
@@ -237,7 +250,7 @@ editorAction('split', {
   },
 });
 // שם זהה אבל מזהים שונים / שני טלפונים תקינים ושונים — מציגים את השורות זו לצד זו ושואלים
-function askSame(groups) {
+export function askSame(groups) {
   return new Promise((resolve) => {
     const ok = new Set(); let done = false;
     const s = openSheet(`<div class="hd"><h2>אותו אדם?</h2><button class="x" data-close>×</button></div>

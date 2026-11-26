@@ -95,7 +95,7 @@ const COLL_TEXT = 'חובות\n1. ישראל ישראלי – 1,500 ₪ – רו
     await p.waitForSelector('#ed-save'); return p.url().split('/acc/')[1].split('?')[0];
   };
   const eact = (label) => p.click(`button[data-eact]:has-text("${label}")`);
-  const clean = (o) => JSON.parse(JSON.stringify(o, (k, v) => (k === '_k' || k === 'imp' || k === 'man') ? undefined : v));
+  const clean = (o) => JSON.parse(JSON.stringify(o, (k, v) => (k === '_k' || k === 'imp' || k === 'man' || k === 'cons' || k === 'src') ? undefined : v)); // cons/src: פירוט השורות המאוחדות (״פירוט חובות״) — הסכומים זהים למקור
 
   await step('כניסה', async () => {
     await p.goto(URL + '/#/login'); await p.fill('input[name=u]', 'owner'); await p.fill('input[name=p]', 'Owner-pass-1'); await p.click('form button');

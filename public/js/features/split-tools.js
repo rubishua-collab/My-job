@@ -10,6 +10,9 @@ import { get, save, uid } from '../api.js';
 import { $, $$, esc, money, dmy, todayISO, toast, openSheet } from '../ui.js';
 import { borrowerCandidates, applyMerge, unmerge, partStatus, mgGroups, mgTotal, collNotes, collShare, byCollector as byColl } from '../split-merge.js';
 import { App, onLive } from '../app.js';
+import { consolidateAsk, rememberColl } from '../split-cons.js';
+import { consBtn, openConsDetail } from '../split-cons-ui.js';
+import { askSame } from './imports.js';
 import { calcSplit, num, r2, sum, normName, normTime, timeMin, normStatus, ST_NA, ST_GOT, ST_NOT, cleanPh, phShow, normHard, cleanColl, isSagi, cmpRec, CHANGE, NOC_SP } from '../calc.js';
 
 // ---------- כלי עזר ----------
@@ -633,7 +636,7 @@ function listsHTML(ctx, A, X) {
       if (x.t) h += '<div class="grp-h ' + x.cls + '">' + esc(x.t) + '</div>';
       // חלק של חוב מאוחד ב״כל הגובים״: מופיע במלואו למעלה ב״משויכים לכמה גובים״ — כאן שורה קצרה עם השם והסכום, כדי שהסה״כ והמספר של הגובה יהיו מובנים
       const mgStub = (r, i) => '<div class="pl mgstub"><span class="pl-t">' + (i + 1) + '. ' + esc(r.n) + ' – ' + money(num(r.a)) + ' <span class="pill acc">חוב מאוחד</span><span class="small muted"> · מופיע למעלה ב״משויכים לכמה גובים״</span></span><button type="button" class="btn ghost sm" data-mgjump="' + esc(mgOf(r)) + '" aria-label="הצג את החוב המאוחד של ' + esc(r.n) + '">הצג ↑</button></div>';
-      h += x.rows.map((r, i) => show(r) ? '<div class="pl">' + tmIn(r) + '<span class="pl-t">' + (i + 1) + '. ' + lineParts(r, wp) + shareTag(r) + '</span>' + hardB(r) + mvSel(r) + penBtn(r) + '</div>' + (X.spx.open === r._k ? spxHTML(A, X, r._k) : '') : (allMode && show0(r) && mgOf(r) ? mgStub(r, i) : '')).join('');
+      h += x.rows.map((r, i) => show(r) ? '<div class="pl' + (byK.get(r._k) && byK.get(r._k).cons ? ' cons' : '') + '">' + tmIn(r) + '<span class="pl-t">' + (i + 1) + '. ' + lineParts(r, wp) + shareTag(r) + (byK.get(r._k) && byK.get(r._k).cons ? ' <span class="pill acc">מאוחד</span> ' + consBtn(byK.get(r._k)) : '') + '</span>' + hardB(r) + mvSel(r) + penBtn(r) + '</div>' + (X.spx.open === r._k ? spxHTML(A, X, r._k) : '') : (allMode && show0(r) && mgOf(r) ? mgStub(r, i) : '')).join('');
       if (b.sections.length > 1) h += '<div class="sub">סה״כ ' + esc(x.t) + ': ' + money(x.total) + '</div>';
     }
     h += '<div class="sub">סה״כ ' + esc(blockTitle(b)) + ': ' + money(b.total) + '</div>';
@@ -737,6 +740,7 @@ function panelBind(ctx) {
     if (md) { delRow(md.dataset.mgdel); return; }
     const mda = e.target.closest('[data-mgdelall]');
     if (mda) { delAll(mda.dataset.mgdelall); return; }
+    const cd = e.target.closest('[data-consd]'); if (cd) { openConsDetail(rec(cd.dataset.consd)); return; }
     const mj = e.target.closest('[data-mgjump]');
     if (mj) { const box = L.querySelector(`[data-mgp="${CSS.escape(mj.dataset.mgjump)}"]`); if (box) { box.scrollIntoView({ block: 'center' }); box.classList.add('flash'); setTimeout(() => box.classList.remove('flash'), 2400); } return; }
     const mf = e.target.closest('[data-mgfull]');
@@ -771,8 +775,8 @@ function panelBind(ctx) {
       H.later('שעת איסוף'); timeSeq.touched = true; return;
     }
     const one = e.target.closest('[data-mv]'), all = e.target.closest('[data-mvall]');
-    if (one) { const r = rec(one.dataset.mv); if (!r) return; r.c = one.value === '__none' ? '' : one.value; commit(ctx, H, 'שינוי גובה'); return; }
-    if (all && all.value) { const v = all.value; let n = 0; (A().records || []).forEach(r => { if (!r.side && !String(r.c || '').trim()) { r.c = v; n++; } }); commit(ctx, H, 'שיוך לגובה', 'שויכו ' + n + ' שורות ל' + v); return; }
+    if (one) { const r = rec(one.dataset.mv); if (!r) return; r.c = one.value === '__none' ? '' : one.value; rememberColl(A(), r); commit(ctx, H, 'שינוי גובה', r.cons ? `${r.n}: כל הגבייה המאוחדת (${fmt(num(r.a))} ₪) עברה ל${String(r.c || '').trim() || '״ללא גובה״'}` : undefined); return; }
+    if (all && all.value) { const v = all.value; let n = 0; (A().records || []).forEach(r => { if (!r.side && !String(r.c || '').trim()) { r.c = v; rememberColl(A(), r); n++; } }); commit(ctx, H, 'שיוך לגובה', 'שויכו ' + n + ' שורות ל' + v); return; }
     const box = e.target.closest('[data-spx]'); if (!box) return;
     const xf = e.target.dataset.xf;
     if (xf === 'side') { const r = rec(box.dataset.spx); if (r) { r.side = e.target.checked; commit(ctx, H, 'לא נגבה היום'); } return; }
@@ -1180,3 +1184,21 @@ route('xfer', xferView);
 accountAction('split', { label: 'הוצאות של גובה', can: (App) => App.can.finance, run: async (ctx) => { const { openExpensesCard } = await import('../expenses-card.js'); openExpensesCard({ date: ctx.a.date, preColl: ctx.coll || '', onChange: () => ctx.reload() }); } });
 accountAction('split', { label: 'העברה לאיסוף יומי', can: (App) => App.can.finance, run: (ctx) => { location.hash = '#/xfer/' + ctx.a.id; } });
 accountPanel('split', panelRender, panelBind);
+
+// ״שורה אחת לכל לקוח״ על הרשימה שכבר נטענה: כל שורות החוב של אותו לקוח מתאחדות לשורה אחת עם הסכום הכולל ופירוט.
+// לקוח שהופיע אצל כמה גובים עובר ל״ללא גובה״ עד שבוחרים גובה בשורה; שם זהה עם טלפון / מזהה שונה — שואלים קודם.
+accountAction('split', {
+  label: 'שורה אחת לכל לקוח',
+  can: (A) => A.can.finance,
+  async run(ctx) {
+    let a; try { a = await get('/api/accounts/' + ctx.a.id); } catch (e) { return toast(e.message); }
+    const res = await consolidateAsk(a, askSame, a.records || []); if (res.cancelled) return;
+    if (!res.done.length) return toast(res.skipped.length ? 'לא אוחד: ' + res.skipped.map(g => g.name).join(', ') + ' (סומנו כאנשים שונים)' : 'כל לקוח כבר מופיע בשורה אחת');
+    const multi = res.done.filter(d => d.multi);
+    if (!confirm(`לאחד ${res.done.length} לקוחות לשורה אחת לכל לקוח?\n` + res.done.slice(0, 8).map(d => `${d.name}: ${d.n} שורות, ${fmt(d.total)} ₪${d.multi ? ' → ללא גובה' : ' → ' + d.c}`).join('\n') + (res.done.length > 8 ? `\nועוד ${res.done.length - 8}` : '') + (multi.length ? `\n\n${multi.length} לקוחות שהופיעו אצל כמה גובים יעברו ל״ללא גובה״ — בחר גובה בשורה.` : ''))) return;
+    const data = { ...a, records: res.recs }; ['prev', '_version', '_updatedAt', '_updatedBy', '_times', '_day', '_foreign', '_lreq', 'id'].forEach(k => delete data[k]);
+    try { await save('PUT', '/api/accounts/' + a.id, { data, baseVersion: a._version, note: 'שורה אחת לכל לקוח' }, { label: 'שורה אחת לכל לקוח', queue: false }); }
+    catch (e) { return toast(e.status === 409 ? 'הפיצול עודכן בינתיים. נסה שוב.' : 'לא נשמר: ' + (e.network ? 'בעיית קליטה' : e.message)); }
+    await ctx.reload(); toast(`אוחדו ${sum(res.done.map(d => d.n))} שורות ל־${res.done.length} לקוחות${multi.length ? ` · ${multi.length} ב״ללא גובה״ — בחר גובה` : ''}`, 7000);
+  },
+});
