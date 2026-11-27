@@ -1,4 +1,4 @@
-// צילומי מסך לחנויות עם נתוני דוגמה (לא נתונים אמיתיים): App Store ‏1290×2796 ו-Google Play ‏1080×2400.
+// צילומי מסך לחנויות עם נתוני דוגמה (לא נתונים אמיתיים): App Store ‏1290×2796 + iPad 13″ ‏2064×2752, ו-Google Play ‏1080×2400.
 import { createRequire } from 'node:module'; import { spawn } from 'node:child_process';
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'; import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url); const { chromium } = require('playwright');
@@ -21,9 +21,10 @@ await api('POST', '/api/chat', { message: 'יש לי בבית ביצים, קוט
 
 const b = await chromium.launch();
 const sets = [['ios', { width: 430, height: 932, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' }],
+  ['ios-ipad13', { width: 1032, height: 1376, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: 'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' }],
   ['android', { width: 412, height: 915, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true, userAgent: 'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Mobile Safari/537.36' }]];
 for (const [name, vp] of sets) {
-  const out = path.join(ROOT, 'store', name, 'screenshots'); fs.mkdirSync(out, { recursive: true });
+  const out = name === 'ios-ipad13' ? path.join(ROOT, 'store', 'ios', 'screenshots-ipad13') : path.join(ROOT, 'store', name, 'screenshots'); fs.mkdirSync(out, { recursive: true });
   const ctx = await b.newContext({ viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: vp.deviceScaleFactor, isMobile: vp.isMobile, hasTouch: vp.hasTouch, userAgent: vp.userAgent, locale: 'he-IL', timezoneId: 'Asia/Jerusalem' });
   const p = await ctx.newPage();
   await p.goto(BASE + '/#/login'); await p.fill('#em', email); await p.fill('#pw', pw); await p.click('#f button'); await p.getByText('היום שלי').first().waitFor();
