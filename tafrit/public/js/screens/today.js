@@ -1,7 +1,7 @@
 // "היום שלי": סיכום, שקילת בוקר, שלוש פעולות, הארוחות עם תכננתי / אכלתי / ערוך כמות
 import { route, go } from '../app.js';
 import { D, refresh, profile, baseProfile, planOn, today, food, foodOf, targetOn, slots, entriesOn, dayDoc, dayTotals, recentComps, waterGoalMl, CUP_ML } from '../data.js';
-import { TRAIN_BONUS } from '/shared/nutrition.js';
+import { TRAIN_BONUS, SLOT_ORDER } from '/shared/nutrition.js';
 import { save, del, get } from '../api.js';
 import { $, $$, esc, n0, n1, kg, toast, openSheet, meter, on, confirmSheet } from '../ui.js';
 import { nutrients, qtyText, unitsFor, STATE, isVegFruit } from '/shared/foods.js';
@@ -44,6 +44,7 @@ export async function draw() {
       <button class="btn xl soft" data-act="next"><span class="ic">✨</span><span class="t">הצע לי את הארוחה הבאה<small>לפי מה שנשאר לך היום</small></span></button>
     </div>
     <button class="btn block plain" data-act="eating">🍽️ בנה מחדש את פרופיל האכילה שלי<small style="display:block;font-weight:400" class="muted">${esc(eatingSummary(date))}</small></button>
+    ${mealCountHtml(date)}
     ${slots(date).map(s => mealCard(s, date, day)).join('')}
     ${waterCard(date, day)}
     <label class="card tight row" style="gap:12px;cursor:pointer"><input type="checkbox" id="complete" style="width:26px;height:26px" ${day.complete ? 'checked' : ''}><span class="grow"><b>תיעדתי את כל מה שאכלתי היום</b><br><span class="tiny muted">רק ימים מסומנים נכנסים לממוצע האכילה השבועי. יום לא מסומן לא נחשב כ"אפס".</span></span></label>
@@ -88,6 +89,7 @@ function bind(el, date) {
   on(el, '[data-wset]', 'click', () => openWaterSettings(date, redraw));
   on(el, '[data-pdf]', 'click', async (e, b) => { const { sendDayPdf } = await import('./pdf.js'); sendDayPdf(date, b.dataset.pdf, $('#pdfmsg', el)); });
   $('#complete', el).addEventListener('change', async e => { await save('PUT', '/api/days/' + date, { complete: e.target.checked }); await refresh(); toast(e.target.checked ? 'היום סומן כמתועד במלואו' : 'הסימון הוסר'); });
+  on(el, '[data-mc]', 'click', async (e, b) => { if (await changeMealCount(date, +b.dataset.mc)) { await redraw(); $(`[data-mc="${b.dataset.mc}"]`, el)?.focus(); } });
   on(el, '[data-act]', 'click', (e, b) => {
     const a = b.dataset.act;
     if (a === 'self') openFoodPicker({ date, meal: nextSlot(profile(date), entriesOn(date), date === today() ? israelMinutes() : 0) || slots(date)[0].id, onAdded: () => draw() });
@@ -196,6 +198,59 @@ function openSwap(e, done) {
     const item = { ...nutrients(nf, g) };
     apply({ foodId: nf.id, grams: g, unit: 'g', qty: null }, item);
   } }));
+}
+
+// ---- מספר ארוחות ביום ----
+function mealCountHtml(date) {
+  const n = slots(date).length;
+  return `<div class="card tight row between" id="mealcount" role="group" aria-labelledby="mc-lbl">
+    <div><b id="mc-lbl">מספר ארוחות ביום</b><div class="tiny muted">נשמר כברירת מחדל לימים הבאים</div></div>
+    <div class="row" style="gap:10px">
+      <button type="button" class="iconbtn" data-mc="-1" aria-label="פחות ארוחות" ${n <= 2 ? 'disabled' : ''}>−</button>
+      <b class="num" style="font-size:22px;min-width:24px;text-align:center" aria-live="polite" aria-label="${n} ארוחות">${n}</b>
+      <button type="button" class="iconbtn" data-mc="1" aria-label="עוד ארוחה" ${n >= 6 ? 'disabled' : ''}>+</button>
+    </div></div>`;
+}
+// סדר הוספה והסרה: קודם ארוחות ביניים, צהריים בסוף; בוקר וערב תמיד נשארים
+const ADD_ORDER = ['lunch', 'snack', 'snack1', 'night'];
+const REMOVE_ORDER = ['night', 'snack1', 'snack', 'lunch'];
+/** משנה את מספר הארוחות בכרטיס אחד; מחזיר true אם נשמר */
+async function changeMealCount(date, delta) {
+  const cur = slots(date).map(s => s.id);
+  let ids;
+  if (delta > 0) {
+    if (cur.length >= 6) return false;
+    const add = ADD_ORDER.find(id => !cur.includes(id)); if (!add) return false;
+    ids = SLOT_ORDER.filter(id => cur.includes(id) || id === add);
+  } else {
+    if (cur.length <= 2) return false;
+    const es = entriesOn(date); const locked = new Set(dayDoc(date).locked || []);
+    const cands = REMOVE_ORDER.filter(id => cur.includes(id));
+    // קודם ארוחה ריקה ולא נעולה; אחרת — שואלים לאן להעביר את מה שבה
+    let rm = cands.find(id => !locked.has(id) && !es.some(e => e.meal === id));
+    if (!rm) {
+      rm = cands.find(id => !locked.has(id) && !es.some(e => e.meal === id && e.status === 'eaten')) || cands[0];
+      const label = slots(date).find(s => s.id === rm)?.label || rm;
+      const items = es.filter(e => e.meal === rm);
+      const target = await new Promise(res => {
+        let done = false;
+        const left = slots(date).filter(s => s.id !== rm);
+        const sh = openSheet({ title: `להסיר את ${label}?`, body: `<p>ב${esc(label)} יש ${items.length} פריטים${items.some(e => e.status === 'eaten') ? ' (חלקם סומנו "אכלתי")' : ''}. לאיזו ארוחה להעביר אותם?</p>
+          <div class="stack">${left.map(s => `<button type="button" class="btn block soft" data-to="${s.id}">העבר ל${esc(s.label)} · ${esc(s.time)}</button>`).join('')}</div>`,
+          foot: '<button class="btn plain" data-cancel>ביטול — השאר את מספר הארוחות</button>', onClose: () => { if (!done) res(null); } });
+        on(sh.el, '[data-to]', 'click', (e, b) => { done = true; sh.close(); res(b.dataset.to); });
+        on(sh.el, '[data-cancel]', 'click', () => { done = true; sh.close(); res(null); });
+      });
+      if (!target) return false;
+      for (const x of items) await save('PUT', '/api/entries/' + x.id, { meal: target });
+      if (locked.has(rm)) { locked.delete(rm); locked.add(target); await save('PUT', '/api/days/' + date, { locked: [...locked] }); }
+      toast(`${items.length} פריטים הועברו`);
+    }
+    ids = cur.filter(id => id !== rm);
+  }
+  await save('PUT', '/api/profile', { profile: { ...(baseProfile() || {}), mealIds: ids, mealIdsAt: Date.now() } });
+  await refresh();
+  return true;
 }
 
 // ---- הצעות: כרטיסי ארוחה עם החלפת רכיב ----

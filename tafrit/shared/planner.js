@@ -272,6 +272,9 @@ function scoreOption(items, keys, tpl, budget, ctx, filt) {
     const short = Math.max(0, budget.protein - tot.protein) / budget.protein;
     s -= short * 90;
   }
+  // פחמימות ושומן קרובים לחלק של הארוחה מהיעד (משקל קטן — הקלוריות והחלבון קובעים)
+  if (budget.carbs > 0) s -= Math.min(12, Math.abs(tot.carbs - budget.carbs) / Math.max(budget.carbs, 20) * 12);
+  if (budget.fat > 0) s -= Math.min(8, Math.abs(tot.fat - budget.fat) / Math.max(budget.fat, 10) * 8);
   s += Math.min(10, tot.fiber * 0.8);
   s += Math.min(8, tot.vegFruitG / 40);
   const satiety = tot.kcal > 0 ? (tot.protein * 4 + tot.fiber * 2) / tot.kcal * 100 : 0; // חלבון וסיבים ל-100 קק״ל
@@ -422,20 +425,22 @@ export function budgetForSlot({ profile, target, entries, foods, slot, openSlots
   const weights = mealWeights(profile);
   const slotsWithItems = new Set(entries.map(e => e.meal));
   const open = (openSlots || weights.filter(w => !slotsWithItems.has(w.id) || w.id === slot).map(w => w.id));
-  const used = { kcal: 0, protein: 0 };
+  const used = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
   for (const e of entries) {
     if (e.meal === slot && e.status !== 'eaten') continue; // את התכנון של הארוחה הזו מחליפים
     const f = foods.get(e.foodId) || e.snapshot; if (!f) continue;
     const n = nutrients(f, e.status === 'eaten' ? (e.eatenGrams ?? e.grams) : e.grams);
-    used.kcal += n.kcal; used.protein += n.protein;
+    used.kcal += n.kcal; used.protein += n.protein; used.carbs += n.carbs || 0; used.fat += n.fat || 0;
   }
-  const remain = { kcal: Math.max(0, (target?.kcal || 0) - used.kcal), protein: Math.max(0, (target?.protein || 0) - used.protein) };
+  const remain = { kcal: Math.max(0, (target?.kcal || 0) - used.kcal), protein: Math.max(0, (target?.protein || 0) - used.protein),
+    ...(target?.carbs ? { carbs: Math.max(0, target.carbs - used.carbs) } : {}), ...(target?.fat ? { fat: Math.max(0, target.fat - used.fat) } : {}) };
   const shares = weights.filter(w => open.includes(w.id));
   const tot = shares.reduce((a, b) => a + b.share, 0) || 1;
   const me = weights.find(w => w.id === slot)?.share || 0.3;
   const frac = open.includes(slot) ? me / tot : 1;
   const kcal = Math.max(slot.startsWith('snack') || slot === 'night' ? 120 : 250, Math.round(remain.kcal * frac));
-  return { kcal, protein: Math.round(remain.protein * frac), remain, frac, open };
+  // יתרת הקלוריות, החלבון, הפחמימות והשומן מתחלקת בין הארוחות הפתוחות לפי גודלן
+  return { kcal, protein: Math.round(remain.protein * frac), ...(remain.carbs != null ? { carbs: Math.round(remain.carbs * frac) } : {}), ...(remain.fat != null ? { fat: Math.round(remain.fat * frac) } : {}), remain, frac, open };
 }
 
 /** "בנה לי יום שלם": ממלא את כל הארוחות הפתוחות (שלא ננעלו ואין בהן אוכל שנאכל) */

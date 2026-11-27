@@ -13,9 +13,9 @@ import { newId, listDocs } from './db.js';
 const r = x => Math.round(x);
 const SLOT_WORDS = [[/בוקר/, 'breakfast'], [/צהר/, 'lunch'], [/ערב/, 'dinner'], [/ביניים|נשנוש|חטיף/, 'snack'], [/לילה/, 'night']];
 
-function slotLabel(profile, id) { return mealSlots(profile?.meals, profile?.mealTimes).find(s => s.id === id)?.label || id; }
+function slotLabel(profile, id) { return mealSlots(profile?.meals, profile?.mealTimes, profile?.mealIds).find(s => s.id === id)?.label || id; }
 function resolveSlot(profile, wanted) {
-  const slots = mealSlots(profile?.meals, profile?.mealTimes).map(s => s.id);
+  const slots = mealSlots(profile?.meals, profile?.mealTimes, profile?.mealIds).map(s => s.id);
   if (wanted && slots.includes(wanted)) return wanted;
   if (wanted === 'snack' && slots.includes('snack1')) return israelMinutes() < 12 * 60 ? 'snack1' : (slots.includes('snack') ? 'snack' : 'snack1');
   if (wanted === 'night' && !slots.includes('night')) return 'dinner';
@@ -32,7 +32,7 @@ function recentUse(uid, today) {
 export function getStatus(uid, { date } = {}) {
   const d = date || israelDate(); const profile = S.profileOnDate(uid, d); const foods = S.foodsFor(uid);
   const sum = S.daySummary(uid, d); const day = S.days(uid, d, d)[d] || {};
-  const meals = mealSlots(profile?.meals, profile?.mealTimes).map(s => {
+  const meals = mealSlots(profile?.meals, profile?.mealTimes, profile?.mealIds).map(s => {
     const es = sum.entries.filter(e => e.meal === s.id);
     return { slot: s.id, label: s.label, time: s.time, locked: (day.locked || []).includes(s.id), items: es.map(e => ({ name: e.snapshot.n, grams: e.grams, status: e.status === 'eaten' ? 'אכלתי' : 'תכננתי', ...pick(nutrients(foods.get(e.foodId) || e.snapshot, e.grams)) })) };
   });

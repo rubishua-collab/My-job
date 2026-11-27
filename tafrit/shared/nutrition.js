@@ -114,8 +114,23 @@ export function proteinTarget(p, weightKg) {
   return { grams, range: [round(lo * ref.kg, 5), round(hi * ref.kg, 5)], perKg: per, ref, why, sources: src };
 }
 
-export function mealSlots(count, times = {}) {
-  const n = Math.min(6, Math.max(2, +count || 3));
+// כל הארוחות האפשריות לפי סדר היום; רשימה מותאמת (mealIds) בוחרת מתוכן
+export const SLOT_ORDER = ['breakfast', 'snack1', 'lunch', 'snack', 'dinner', 'night'];
+const SLOT_DEF = { breakfast: ['ארוחת בוקר', '08:00'], snack1: ['ביניים בוקר', '10:30'], lunch: ['ארוחת צהריים', '13:00'], snack: ['ביניים אחה״צ', '16:30'], dinner: ['ארוחת ערב', '19:30'], night: ['ארוחת לילה', '21:30'] };
+/** רשימת המזהים הסטנדרטית לכל מספר ארוחות */
+export const standardIds = n => ({ 2: ['breakfast', 'dinner'], 3: ['breakfast', 'lunch', 'dinner'], 4: ['breakfast', 'lunch', 'snack', 'dinner'], 5: ['breakfast', 'snack1', 'lunch', 'snack', 'dinner'], 6: SLOT_ORDER })[Math.min(6, Math.max(2, +n || 3))];
+/** מנקה רשימה מותאמת: מזהים מוכרים, בלי כפילויות, לפי סדר היום, 2–6 ארוחות; אחרת null */
+export function cleanMealIds(ids) {
+  if (!Array.isArray(ids)) return null;
+  const out = SLOT_ORDER.filter(id => ids.includes(id));
+  return out.length >= 2 && out.length <= 6 ? out : null;
+}
+export function mealSlots(count, times = {}, ids = null) {
+  const custom = cleanMealIds(ids);
+  if (custom && custom.join() !== standardIds(custom.length).join()) {
+    return custom.map(id => { const [label, time] = SLOT_DEF[id]; return { id, label: id === 'snack' && !custom.includes('snack1') ? 'ארוחת ביניים' : label, time: /^\d{2}:\d{2}$/.test(times?.[id] || '') ? times[id] : time, snack: /snack|night/.test(id) }; });
+  }
+  const n = custom ? custom.length : Math.min(6, Math.max(2, +count || 3));
   const sets = {
     2: [['breakfast', 'ארוחה ראשונה', '10:00'], ['dinner', 'ארוחת ערב', '18:30']],
     3: [['breakfast', 'ארוחת בוקר', '08:00'], ['lunch', 'ארוחת צהריים', '13:00'], ['dinner', 'ארוחת ערב', '19:00']],
@@ -128,7 +143,7 @@ export function mealSlots(count, times = {}) {
 
 /** משקל יחסי לכל ארוחה (ביניים קטנות יותר, תוספת לשעות הרעב) */
 export function mealWeights(p) {
-  const slots = mealSlots(p.meals, p.mealTimes);
+  const slots = mealSlots(p.meals, p.mealTimes, p.mealIds);
   const hunger = new Set(p.hungerTimes || []);
   const period = s => s.id === 'breakfast' || s.id === 'snack1' ? 'morning' : s.id === 'lunch' ? 'noon' : s.id === 'snack' ? 'afternoon' : 'evening';
   const w = slots.map(s => (s.snack ? 0.5 : 1) * (hunger.has(period(s)) ? 1.25 : 1));

@@ -25,6 +25,11 @@ export function planFor(plans, iso) {
 export function profileOn(profile, plans, iso) {
   if (!profile) return null;
   const pl = planFor(plans, iso);
-  return pl ? { ...profile, ...pl.settings, goal: pl.goal, planId: pl.id } : profile;
+  const out = pl ? { ...profile, ...pl.settings, goal: pl.goal, planId: pl.id } : { ...profile };
+  // "מספר ארוחות ביום" שנבחר במסך היום — גובר על התוכנית אם נבחר אחריה
+  const ids = Array.isArray(profile.mealIds) && profile.mealIds.length >= 2 ? profile.mealIds : null;
+  if (ids && (!pl || (profile.mealIdsAt || 0) >= (pl.createdAt || 0))) { out.mealIds = ids; out.meals = ids.length; }
+  else delete out.mealIds;
+  return out;
 }
 export const goalLabel = g => GOALS[g] || g;

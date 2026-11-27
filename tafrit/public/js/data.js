@@ -3,7 +3,7 @@ import { get } from './api.js';
 import { FoodIndex, customFood, recipeFood, nutrients, isVegFruit } from '/shared/foods.js';
 import { COMMON_IDS } from '/shared/catalog.js';
 import { israelDate, addDays } from '/shared/dates.js';
-import { targetFor, mealSlots, withTraining, waterGoalMl, CUP_ML } from '/shared/nutrition.js';
+import { targetFor, mealSlots, withTraining, waterGoalMl, CUP_ML, SLOT_ORDER, standardIds, cleanMealIds } from '/shared/nutrition.js';
 export { waterGoalMl, CUP_ML };
 import { profileOn, planFor, planPeriods } from '/shared/plans.js';
 
@@ -28,7 +28,14 @@ export async function refresh() {
 }
 export const today = () => israelDate();
 /** הפרופיל האפקטיבי לתאריך (פרטים קבועים + התוכנית שבתוקף באותו יום) */
-export const profile = (date = today()) => profileOn(D.state?.profile || null, D.state?.plans || [], date);
+/** הפרופיל בתאריך — כולל מספר הארוחות שנבחר; ארוחה שיש בה אוכל באותו יום תמיד מוצגת (גם אם הקטינו את המספר) */
+export const profile = (date = today()) => {
+  const p = profileOn(D.state?.profile || null, D.state?.plans || [], date); if (!p) return p;
+  const ids = [...(cleanMealIds(p.mealIds) || standardIds(p.meals || 3))];
+  for (const e of D.state?.entries || []) if (e.date === date && SLOT_ORDER.includes(e.meal) && !ids.includes(e.meal)) ids.push(e.meal);
+  const mealIds = SLOT_ORDER.filter(id => ids.includes(id)).slice(0, 6);
+  return { ...p, mealIds, meals: mealIds.length };
+};
 export const baseProfile = () => D.state?.profile || null;
 export const planOn = (date = today()) => planFor(D.state?.plans || [], date);
 export const plans = () => planPeriods(D.state?.plans || []);
@@ -39,7 +46,7 @@ export const searchFoods = (q, limit = 40) => D.foods.search(q, { limit, boost: 
 /** היעד שבתוקף בתאריך — כולל תוספת יום אימון אם סומן (כמו ביומן הקודם: +150 קק״ל כפחמימה) */
 export const targetOn = date => withTraining(targetFor(D.state?.targets || [], date), D.state?.days?.[date]);
 export const baseTargetOn = date => targetFor(D.state?.targets || [], date);
-export const slots = (date = today()) => { const p = profile(date); return mealSlots(p?.meals || 3, p?.mealTimes); };
+export const slots = (date = today()) => { const p = profile(date); return mealSlots(p?.meals || 3, p?.mealTimes, p?.mealIds); };
 export const entriesOn = date => (D.state?.entries || []).filter(e => e.date === date);
 export const dayDoc = date => D.state?.days?.[date] || { locked: [], complete: false };
 
