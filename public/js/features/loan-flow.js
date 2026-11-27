@@ -12,6 +12,8 @@ export const chkLine = (q) => chkOk(q.chk) ? `מספר שיקים: <b class="num
 
 const ST = new Map(); // מזהה בקשה -> { c, op, busy, err }
 let COLLS = null;
+import { onColls } from '../colls.js';
+onColls(() => { COLLS = null; });
 const st = (id, q) => { if (!ST.has(id)) ST.set(id, { c: '', k: q && chkOk(q.chk) ? String(+q.chk) : '', op: uid(), busy: false, err: '', chkErr: false }); return ST.get(id); };
 
 export const lreqStatus = (q) => q.given

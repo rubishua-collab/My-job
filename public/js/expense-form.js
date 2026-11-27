@@ -4,11 +4,9 @@ import { get, save, uid } from './api.js';
 import { $, $$, esc, dmy, toast, openSheet } from './ui.js';
 import { num, collKey, cleanColl, CHANGE, NOC_SP } from './calc.js';
 
-let COLLS = null;
-export async function collectorsList() {
-  if (!COLLS) COLLS = (await get('/api/collectors').catch(() => [])).map(cleanColl).filter(c => c && c !== CHANGE && c !== NOC_SP);
-  return COLLS;
-}
+// רשימת הגובים המשותפת (colls.js): מתעדכנת מיד אחרי הוספה / תיקון שם / לא פעיל, בכל הלשוניות
+import { activeColls } from './colls.js';
+export async function collectorsList() { return activeColls(); }
 // התאמות: שם מלא זהה → נבחר אוטומטית; אחרת הצעות (מתחיל ב… קודם, ואז מכיל)
 export function matchCollectors(list, typed) {
   const q = collKey(typed); if (!q) return { exact: null, sugg: [] };

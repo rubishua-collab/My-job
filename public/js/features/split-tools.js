@@ -11,6 +11,7 @@ import { $, $$, esc, money, dmy, todayISO, toast, openSheet } from '../ui.js';
 import { borrowerCandidates, applyMerge, unmerge, partStatus, mgGroups, mgTotal, collNotes, collShare, byCollector as byColl } from '../split-merge.js';
 import { App, onLive } from '../app.js';
 import { consolidateAsk, rememberColl } from '../split-cons.js';
+import { onColls } from '../colls.js';
 import { consBtn, openConsDetail } from '../split-cons-ui.js';
 import { askSame } from './imports.js';
 import { calcSplit, num, r2, sum, normName, normTime, timeMin, normStatus, ST_NA, ST_GOT, ST_NOT, cleanPh, phShow, normHard, cleanColl, isSagi, cmpRec, CHANGE, NOC_SP } from '../calc.js';
@@ -98,7 +99,8 @@ function knownCollectors(recs) {
   const st = CO.d && CO.d.coll, s = new Set(DEF_COLL), del = collDeleted();
   (Array.isArray(st) ? st : []).forEach(x => { if (isRealColl(x)) s.add(x); });
   spCollectors(recs).filter(isRealColl).forEach(c => s.add(c));
-  const all = Array.from(s).filter(c => !del.has(c));
+  const off = new Set((Array.isArray(CO.d && CO.d.off) ? CO.d.off : []).map(x => String(x).trim()));
+  const all = Array.from(s).filter(c => !del.has(c) && !off.has(c));
   const def = DEF_COLL.filter(c => all.indexOf(c) >= 0);
   const rest = all.filter(c => DEF_COLL.indexOf(c) < 0).sort((a, b) => a.localeCompare(b, 'he'));
   return def.concat(rest);
@@ -1202,3 +1204,8 @@ accountAction('split', {
     await ctx.reload(); toast(`אוחדו ${sum(res.done.map(d => d.n))} שורות ל־${res.done.length} לקוחות${multi.length ? ` · ${multi.length} ב״ללא גובה״ — בחר גובה` : ''}`, 7000);
   },
 });
+
+// שינוי ברשימת הגובים (הוספה / תיקון שם / לא פעיל) — הרשימות בפיצול מתעדכנות בלי לצאת מהמסך
+let SPT_CTX = null;
+accountPanel('split', () => '', (ctx) => { SPT_CTX = ctx; });
+onColls(async () => { await loadColl(true); const c = SPT_CTX; if (!c || !c.view || !c.view.isConnected || !document.querySelector('#spt-lists')) return; const ae = document.activeElement; if (ae && c.view.contains(ae) && ae.matches('input,textarea')) return; c.reload && c.reload(); });

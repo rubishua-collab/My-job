@@ -13,6 +13,7 @@ import { openPdfSheet } from './acc-pdf.js';
 import { mgGroups, mgTotal, customerCount, unmerge, partStatus, collNotes, collShare } from './split-merge.js';
 import { SaveCtl, watchHeader, paintSave } from './savectl.js';
 import { consBtn, openConsDetail } from './split-cons-ui.js';
+import { activeColls, enhanceCollSelect } from './colls.js';
 import { timesHTML } from './acc-times.js';
 import { openExpenseForm } from './expense-form.js';
 
@@ -495,7 +496,7 @@ function bindPart(ctx) {
     if (ctx.part && ctx.part.busy) return;
     if (ctx.part && ctx.part.key === k) { ctx.part = null; return redraw(ctx); }
     ctx.edit = null; ctx.part = { key: k, vals: {}, busy: false, err: '', op: {} };
-    if (!ctx.collList) { try { const m = await import('./expense-form.js'); ctx.collList = await m.collectorsList(); } catch { ctx.collList = []; } }
+    ctx.collList = await activeColls();
     redraw(ctx); const box = view.querySelector(`[data-pp="${CSS.escape(k)}"]`); if (box) { const rc = box.getBoundingClientRect(); if (rc.bottom > innerHeight - 90) window.scrollBy(0, Math.min(rc.bottom - innerHeight + 110, rc.top - 140)); const i = box.querySelector('[data-pv="amount"]'); if (i) i.focus({ preventScroll: true }); }
   });
   bindPartBox(ctx);
@@ -555,7 +556,7 @@ function openInline(ctx, key, fields) {
   const e = (ctx.a.entries || []).find(x => x._k === key); if (!e) return;
   if (ctx.edit && ctx.edit.busy) return;
   ctx.edit = { key, fields, vals: {}, busy: false, err: '', opId: uid(), sent: '' };
-  if (fields.includes('c') && !ctx.collList) import('./expense-form.js').then(m => m.collectorsList()).then(l => { ctx.collList = l; if (ctx.edit && ctx.edit.key === key) { redraw(ctx); focusInline(ctx); } }).catch(() => {});
+  if (fields.includes('c')) activeColls().then(l => { const ch = JSON.stringify(l) !== JSON.stringify(ctx.collList || []); ctx.collList = l; if (ch && ctx.edit && ctx.edit.key === key) { redraw(ctx); focusInline(ctx); } }).catch(() => {});
   redraw(ctx); focusInline(ctx);
 }
 function focusInline(ctx) {
@@ -601,6 +602,7 @@ function bindInline(ctx) {
   });
   $('[data-esave]', box).onclick = () => { $$('[data-ei]', box).forEach(i => { ctx.edit.vals[i.dataset.ei] = i.value; }); saveInline(ctx); };
   $('[data-ecancel]', box).onclick = () => { ctx.edit = null; redraw(ctx); };
+  const cs = $('[data-ei="c"]', box); if (cs && App.can.finance) enhanceCollSelect(cs, { emptyLabel: 'ללא גובה' }); // ״+ הוסף גובה״ בלי לאבד את מה שכבר הוקלד בשדות האחרים
 }
 // ״שייך לגובה״ / ״העבר לגובה אחר״: שומר רק את הגובה האחראי (c). ״אסף בפועל״, הסטטוס והסכום שנגבה לא משתנים.
 // אחרי שמירה מוצלחת הכרטיס עובר מיד לקבוצה של הגובה (וגם לסינון שלו), בלי לצאת מהמסך — גם כשיש חיפוש פעיל.
@@ -616,6 +618,7 @@ async function assignSheet(ctx, key) {
     <div id="aerr" role="alert"></div>
     <div class="row"><button class="btn ghost xl" data-close style="flex:1">ביטול</button><button class="btn xl" id="asave" style="flex:1" disabled>שמור שיוך</button></div>`);
   const sel = $('#asel', s.el), btn = $('#asave', s.el);
+  enhanceCollSelect(sel, { emptyLabel: 'בחר גובה…' });
   sel.onchange = () => { chosen = sel.value; btn.disabled = !chosen || busy; $('#aerr', s.el).innerHTML = ''; };
   btn.onclick = async () => {
     if (!chosen || busy) return;
