@@ -5,6 +5,7 @@
 // באיסוף היום ובחשבון הגובים (עותק מקושר xk), כמו ״הוסף הוצאה״. מזהה ההוצאה נגזר ממזהה הבקשה (xL + מזהה),
 // כך שלחיצה כפולה, ניסיון חוזר אחרי ניתוק או פתיחה משני מכשירים לא יוצרים הוצאה נוספת.
 import { num, r2, cleanColl, CHANGE, NOC_SP } from '../../public/js/calc.js';
+import { loanOwe, renewCalc, termsFrom, solveRate } from '../../public/js/loan-renew.js';
 import { mainWork } from './day-expense.js';
 import { KIND_NAMES } from '../data.js';
 
@@ -15,7 +16,8 @@ export const LOAN_EXP = 'מתן הלוואה';
 export const expKey = (reqId) => 'xL' + reqId;
 
 // מה שמוצג בפיצול ובאיסוף היום (לתצוגה בלבד — לא נשמר בחשבון)
-const view = (x) => ({ id: x.id, name: x.data.name, amount: r2(num(x.data.amount)), date: x.data.date || '', note: x.data.note || '', phone: x.data.phone || '', chk: x.data.chk ?? '', xfer: x.data.xfer, given: x.data.given || null });
+let LOANS = () => []; // נקבע ב-register (getDoc) — לחישוב יתרת ההלוואה הקודמת בחידוש
+const view = (x) => { const R = renewCalc({ ...x.data, id: x.id }, LOANS); return { id: x.id, name: x.data.name, amount: r2(num(x.data.amount)), date: x.data.date || '', note: x.data.note || '', phone: x.data.phone || '', chk: x.data.chk ?? '', lk: x.data.lk || 'new', prevLoan: x.data.prevLoan || '', offset: R.offset, hand: R.hand, xfer: x.data.xfer, given: x.data.given || null }; };
 export const chkOk = (v) => /^\d+$/.test(String(v ?? '').trim()) && +v >= 1 && +v <= 999;
 // לאיזו לשונית הבקשה שובצה (xfer.kind; בקשה ישנה בלי kind = פיצול). הבקשה מוצגת רק בלשונית שנבחרה (בחשבון שנבחר, או בחשבון העדכני של אותו סוג ותאריך אם הוא נמחק).
 // אחרי אישור המסירה, איסוף היום שבו נרשמה הוצאת ״מתן הלוואה״ מציג אותה גם (המסירה והרישום הכספי שם).
@@ -40,6 +42,7 @@ const isNewest = (listDocs, a) => { const s = newestOf(listDocs, a.kind, a.date)
 export async function register(ctx) {
   const { r, err, need, can, db, getDoc, listDocs, putDoc, once, newId, now, logAudit } = ctx;
   const tx = (fn) => { db.exec('BEGIN IMMEDIATE'); try { const out = fn(); db.exec('COMMIT'); return out; } catch (e) { try { db.exec('ROLLBACK'); } catch { /* */ } throw e; } };
+  LOANS = (id) => { const d = getDoc('loans', String(id || '')); return d && !d.deleted ? { id: d.id, ...d.data } : null; };
   const reqOf = (id) => { const d = getDoc('loan_requests', String(id || '')); if (!d || d.deleted) throw err(404, 'הבקשה לא נמצאה (אולי נמחקה). רענן את המסך.'); return d; };
 
   // הלשוניות שאפשר לשבץ אליהן בקשה — בשמות שמופיעים בתוכנה (KIND_NAMES), כך שהרשימה מתעדכנת עם התוכנה
@@ -84,7 +87,11 @@ export async function register(ctx) {
       const chk = body.chk !== undefined && String(body.chk).trim() !== '' ? String(body.chk).trim() : String(q.chk ?? '').trim();
       if (!chkOk(chk)) { const e = err(400, 'כדי לסגור את הבקשה, יש להזין לכמה שיקים חולקה ההלוואה'); e.field = 'chk'; throw e; }
       const c = cleanColl(body.c); if (!c || c === CHANGE || c === NOC_SP) throw err(400, 'בחר איזה גובה מסר את הכסף');
-      const a = r2(num(q.amount)); if (!(a > 0)) throw err(400, 'אין סכום הלוואה בבקשה');
+      const loanA = r2(num(q.amount)); if (!(loanA > 0)) throw err(400, 'אין סכום הלוואה בבקשה');
+      // חידוש: יתרת החוב של ההלוואה הקודמת (לפי התשלומים ששולמו בפועל) מקוזזת; ללקוח נמסר ההפרש
+      const R = renewCalc({ ...q, id: d.id }, LOANS);
+      if (R.err) throw err(400, R.err);
+      const a = R.hand, offset = R.offset;
       const date = q.xfer.date, t = now(), hh = hhmmIL(t), xk = expKey(d.id);
       const n = LOAN_EXP + ' — ' + String(q.name || '').trim();
       let W = q.xfer.workId ? getDoc('accounts', q.xfer.workId) : null;
@@ -92,7 +99,8 @@ export async function register(ctx) {
       if (!W) W = mainWork(listDocs, date);
       let workId = W && W.id;
       const x = { _k: xk, n, a, c, t: hh, at: t, by: user.name, lr: d.id, lk: LOAN_EXP };
-      if (W) {
+      if (!(a > 0)) { /* חידוש שכל הסכום שלו מקוזז — אין כסף שיוצא מהגובה, אין הוצאה */ }
+      else if (W) {
         if (!(W.data.expenses || []).some(e => e && e._k === xk)) {
           const data = { ...W.data, expenses: (W.data.expenses || []).concat([x]), updatedAt: t };
           putDoc('accounts', W.id, data, { user, action: 'מתן הלוואה', item: c + ' · ' + q.name, note: a + ' ₪' });
@@ -101,13 +109,30 @@ export async function register(ctx) {
         workId = newId('a');
         putDoc('accounts', workId, { kind: 'work', date, title: 'איסוף יום ' + dmyT(date), createdAt: t, v: 1, entries: [], expenses: [x] }, { user, action: 'מתן הלוואה', item: c + ' · ' + q.name });
       }
+      // ההלוואה החדשה (מזהה לפי הבקשה — לחיצה חוזרת לא יוצרת שנייה): הסכום שנרשם, ותנאי ההחזר מהפירוט (״750 כפול 10״) או ממספר השיקים
+      const newLoanId = 'LR' + d.id;
+      if (!getDoc('loans', newLoanId)) {
+        const T = termsFrom(q, loanA);
+        const L = { name: String(q.name || '').trim(), phone: q.phone || '', amount: loanA, rate: T.rate, n: T.n, type: 'month', date, mode: 'n', paid: {}, created: new Date(t).toISOString(), fromReq: d.id, ...(T.need ? { needTerms: 1 } : {}), ...(R.prev ? { renewOf: R.prev.id, offsetIn: offset } : {}), note: q.note || '' };
+        putDoc('loans', newLoanId, L, { user, action: R.prev ? 'הלוואה חדשה (חידוש)' : 'הלוואה חדשה', item: L.name, note: loanA + ' ₪' });
+      }
+      // ההלוואה הקודמת: היתרה ״קוזזה בחידוש״ — כל תשלום פתוח מסומן כסגור, כדי שלא יישאר לגבייה
+      if (R.prev) {
+        const P = getDoc('loans', R.prev.id), L = { ...P.data };
+        if (!(L.offsetBy && L.offsetBy.req === d.id)) {
+          const paid = { ...(L.paid || {}) }, hist = Array.isArray(L.hist) ? L.hist.slice() : [], day = date, now2 = new Date(t).toISOString();
+          for (const row of R.rows) { paid[row.i] = day; hist.push({ t: 'offset', i: row.i, a: row.left, d: day, at: now2, n: 'קוזזה בחידוש', req: d.id }); }
+          L.paid = paid; L.hist = hist.slice(-500); L.offsetBy = { req: d.id, newLoan: newLoanId, a: offset, at: t, by: user.name };
+          putDoc('loans', P.id, L, { user, action: 'קיזוז בחידוש', item: L.name, note: offset + ' ₪ קוזזו בהלוואה ' + newLoanId });
+        }
+      }
       // אותה הוצאה בחשבון הגובים של התאריך (אם יש) — עותק מקושר, כמו ״הוסף הוצאה״
       const colls = listDocs('accounts').filter(z => z.data.kind === 'collectors' && z.data.date === date).sort((p, o) => (o.data.updatedAt || o.data.createdAt || 0) - (p.data.updatedAt || p.data.createdAt || 0));
       const C = colls[0];
-      if (C && !(C.data.entries || []).some(e => e && e.xk === xk)) {
+      if (a > 0 && C && !(C.data.entries || []).some(e => e && e.xk === xk)) {
         putDoc('accounts', C.id, { ...C.data, entries: (C.data.entries || []).concat([{ k: 'e', n, a, c, t: hh, xk }]), updatedAt: t }, { user, action: 'מתן הלוואה', item: c + ' · ' + q.name, note: a + ' ₪' });
       }
-      const given = { c, at: t, t: hh, by: user.name, a, xk, workId };
+      const given = { c, at: t, t: hh, by: user.name, a, loanA, offset, xk: a > 0 ? xk : null, workId, newLoan: newLoanId, ...(R.prev ? { prevLoan: R.prev.id } : {}) };
       const out = putDoc('loan_requests', d.id, { ...q, chk: +chk, given, updated: new Date(t).toISOString() }, { user, action: 'אישור מסירת הלוואה', item: q.name, note: c + ' · ' + a + ' ₪' });
       logAudit({ user, action: 'מתן הלוואה', col: 'loan_requests', doc_id: d.id, item: q.name, after: given, note: c });
       return { ok: true, given, chk: +chk, workId, version: out.version };

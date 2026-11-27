@@ -64,7 +64,7 @@ const numOf = (t) => +String(t).replace(/[^\d.-]/g, '');
     await p.goto(URL + '/#/acc/' + W); await p.waitForSelector('#lrq-panel .lrq-item');
     assert.strictEqual(await p.locator('#lrq-panel .lrq-item').count(), 1);
     const t = await p.locator('#lrq-panel .lrq-item').innerText();
-    assert.ok(t.includes('איציק לחמני') && t.includes('סכום המסירה') && t.includes('6,000') && t.includes('2500 כפול 3') && t.includes('ממתינה למסירה'), t);
+    assert.ok(t.includes('איציק לחמני') && t.includes('סכום למסירה ללקוח') && t.includes('6,000') && t.includes('2500 כפול 3') && t.includes('ממתינה למסירה'), t);
     assert.strictEqual(await wg('אושר', '.wg-exp'), 0); assert.strictEqual(numOf(await p.locator('.kpi', { hasText: 'הוצאות' }).locator('.v').innerText()), 0);
     gotBefore = await wg('אושר', '.wg-got'); netBefore = await wg('אושר', '.wg-net');
     assert.strictEqual(gotBefore, 3500); assert.strictEqual(netBefore, 3500);

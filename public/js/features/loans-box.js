@@ -17,6 +17,7 @@ export function loansBoxHTML(list) {
       const a = q.given.a != null ? q.given.a : q.amount;
       const chk = chkOk(q.chk) ? '<span class="lgv-w lgv-chk">מספר שיקים: ' + num(String(+q.chk)) + '</span>' : '<span class="lgv-w lgv-chk lgv-miss">מספר שיקים לא הוזן</span>';
       return '<div class="rl lgv-i" data-lr="' + esc(q.id) + '"><div class="lgv-top"><b class="lgv-nm">' + esc(q.name) + '</b><b class="lgv-a">' + num(fmt(a) + ' ₪') + '</b></div>' +
+        (q.given.offset ? '<div class="lgv-m"><span class="lgv-w">חידוש: הלוואה ' + num(fmt(q.given.loanA) + ' ₪') + '</span> · <span class="lgv-w">קיזוז חוב קודם ' + num(fmt(q.given.offset) + ' ₪') + '</span></div>' : '') +
         '<div class="lgv-m"><span class="lgv-w">נמסר ע״י <b>' + esc(q.given.c) + '</b></span> · <span class="lgv-w">תאריך הבקשה ' + num(dmy(q.date)) + '</span> · <span class="lgv-w">שעת מסירה ' + num(q.given.t || '') + '</span></div>' +
         '<div class="lgv-note" data-note="' + esc(q.note || '') + '">' + (String(q.note || '').trim() ? '<div class="lgv-pt">' + words(q.note) + '</div>' : '') + '<div class="lgv-ln">' + chk + '</div></div></div>';
     }).join('') + '</div></section>';

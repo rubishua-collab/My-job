@@ -248,7 +248,7 @@ export function lnStatus(L){
   const s=lnSchedule(L);if(!s)return {cls:'',txt:'',s,late:0,paidN:0};
   const paid=L.paid||{}, paidN=s.rows.filter(x=>paid[x.i]).length, t=todayISO();
   const late=s.rows.filter(x=>!paid[x.i]&&x.date<t).length;
-  if(paidN>=s.rows.length)return {cls:'ok',txt:'סולקה',s,late,paidN};
+  if(paidN>=s.rows.length)return {cls:'ok',txt:L.offsetBy?'קוזזה בחידוש':'סולקה',s,late,paidN}; /* חידוש: היתרה קוזזה בהלוואה החדשה */
   if(late)return {cls:'err',txt:late+' בפיגור',s,late,paidN};
   return {cls:'act',txt:'פעילה',s,late,paidN};
 }

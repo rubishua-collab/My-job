@@ -36,7 +36,7 @@ function itemHTML(q, work) {
       <button class="btn" data-lrok="${esc(q.id)}" ${!s.c || s.busy ? 'disabled' : ''}>${s.busy ? 'שומר…' : 'אשר שההלוואה ניתנה ללקוח'}</button>
       ${s.err ? `<div class="note err lrq-full" role="alert" style="flex-basis:100%">${esc(s.err)}${s.chkErr ? '' : ' לחץ שוב ״אשר שההלוואה ניתנה ללקוח״ — ההוצאה לא תירשם פעמיים.'}</div>` : ''}</div>` : '';
   return `<div class="lrq-item${q.given ? ' given' : ''}" data-lrq="${esc(q.id)}"><span class="lrq-nm">${esc(q.name)}</span><span class="lrq-amt">${money(num(q.amount))}</span>
-    <div class="lrq-full small muted">${work ? 'סכום המסירה' : 'סכום ההלוואה'}: <b>${money(num(q.amount))}</b> · תאריך הבקשה: <span class="num">${esc(dmy(q.date))}</span>${q.phone ? ` · <a href="tel:${esc(q.phone)}">${esc(q.phone)}</a>` : ''}</div>
+    <div class="lrq-full small muted">סכום ההלוואה שנרשם: <b>${money(num(q.amount))}</b>${q.lk === 'renew' ? ` · קיזוז חוב קודם: <b>${money(num(q.offset))}</b>` : ''} · ${q.given ? `הלקוח קיבל בפועל: <b>${money(num(q.given.a))}</b>` : `סכום למסירה ללקוח: <b>${money(num(q.hand ?? q.amount))}</b>`} · תאריך הבקשה: <span class="num">${esc(dmy(q.date))}</span>${q.phone ? ` · <a href="tel:${esc(q.phone)}">${esc(q.phone)}</a>` : ''}</div>
     ${String(q.note || '').trim() ? `<div class="lrq-full lrq-note">${esc(q.note)}</div>` : ''}
     ${chkLine(q) ? `<div class="lrq-full small">${chkLine(q)}</div>` : ''}
     <div class="lrq-full lrq-st">${lreqStatus(q)}</div>${give}</div>`;

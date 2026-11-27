@@ -285,7 +285,7 @@ function lnHistHTML(L) {
   const H = Array.isArray(L.hist) ? L.hist.slice().reverse() : [];
   if (!H.length) return '';
   const w = iso => { try { const d = new Date(iso); return d.toLocaleDateString('he-IL') + ' ' + d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
-  const T = { pay: 'רישום תשלום', undo: 'ביטול תשלום', part: 'תשלום חלקי', partundo: 'ביטול תשלום חלקי' };
+  const T = { pay: 'רישום תשלום', undo: 'ביטול תשלום', part: 'תשלום חלקי', partundo: 'ביטול תשלום חלקי', offset: 'קוזזה בחידוש' };
   return '<details class="ln-hist" id="ln-hist"' + (H.length <= 6 ? ' open' : '') + '><summary>יומן תשלומים (' + H.length + ')</summary><div class="tbl-wrap"><table class="ln-tbl"><thead><tr><th>מתי</th><th>פעולה</th><th>תשלום</th><th>סכום</th><th>תאריך תשלום</th><th>פירוט / סיבה</th></tr></thead><tbody>' +
     H.map(h => '<tr class="' + (/undo/.test(h.t) ? 'late' : 'paid') + '"><td><span class="num">' + esc(w(h.at)) + '</span></td><td>' + (T[h.t] || esc(h.t)) + (h.e ? ' (מוקדם)' : '') + '</td><td><span class="num">' + esc(h.i) + '</span></td><td>' + lnMoney(h.a) + '</td><td><span class="num">' + esc(lnD(h.d)) + '</span></td><td>' +
       esc([(h.t === 'part' || h.t === 'partundo') ? 'קרן ' + lnFmt(h.p) + ' · ריבית ' + lnFmt(h.ii) : '', h.r, h.n].filter(Boolean).join(' · ')) + '</td></tr>').join('') +

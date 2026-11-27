@@ -3,13 +3,20 @@
 import { get, save, uid } from '../api.js';
 import { lreqStatus, chkLine } from './loan-flow.js';
 import { chkOk } from './loans-box.js';
+import { renewCalc, loanOwe } from '../loan-renew.js';
 import { $, $$, esc, fmt, money, dmy, todayISO, toast } from '../ui.js';
 import { App, onLive } from '../app.js';
 import { route, more } from '../registry.js';
 import { r2, sum, num, normName } from '../calc.js';
 
 const isoLabel = dmy;
-const RQ = { list: [], state: 'wait', edit: null, delFor: null, q: '', busy: false, flash: null, flT: null, xFor: null, xDate: '', xKind: '', xAcc: '', xOp: '', xBusy: false, xErr: '', accs: null, targets: null };
+const RQ = { list: [], state: 'wait', edit: null, delFor: null, q: '', busy: false, flash: null, flT: null, xFor: null, xDate: '', xKind: '', xAcc: '', xOp: '', xBusy: false, xErr: '', accs: null, targets: null, loans: null };
+const loanBy = (id) => (RQ.loans || []).find(l => l.id === id) || null;
+// שלושת הסכומים לכרטיס: נרשם, קיזוז, למסירה / קיבל בפועל
+const amountsHTML = (r) => { const R = renewCalc(r, loanBy); const p = R.prev || (r.prevLoan ? loanBy(r.prevLoan) : null);
+  return '<div class="rq-amts"><span>סכום ההלוואה שנרשם: <b>' + money(R.amount) + '</b></span>' + (R.kind === 'renew' ? '<span>קיזוז חוב קודם: <b>' + money(R.offset) + '</b>' + (p ? ' <span class="small muted">(' + esc(p.name || '') + ' · ' + esc(lnLabel(p)) + ')</span>' : '') + '</span>' : '') +
+    (r.given ? '<span class="rq-got">הלקוח קיבל בפועל: <b>' + money(R.hand) + '</b></span>' : '<span class="rq-hand">סכום למסירה ללקוח: <b>' + money(R.hand) + '</b></span>') + (R.err && !r.given ? '<span class="neg small">' + esc(R.err) + '</span>' : '') + '<span class="pill ' + (R.kind === 'renew' ? 'acc' : '') + '">' + (R.kind === 'renew' ? 'חידוש הלוואה' : 'הלוואה חדשה') + '</span></div>'; };
+const lnLabel = (L) => (L.date ? (L.date.split('-').reverse().join('.')) + ' · ' : '') + (+L.amount || 0).toLocaleString('he-IL') + ' ₪' + (L.n ? ' · ' + L.n + ' תשלומים' : '');
 // שם הלשונית כפי שמופיע בתוכנה (נטען מהשרת — /api/loan-req/targets)
 const tabName = (k) => ((RQ.targets || []).find(t => t.kind === k) || {}).name || ({ split: 'פיצול', work: 'איסוף יום', morning: 'חשבון בוקר', collectors: 'חשבון גובים' })[k] || k;
 const rqCanWrite = () => !!App.can.finance;
@@ -34,6 +41,8 @@ textarea.in.rq-note-in{min-height:64px}
 .rq-meta a{color:var(--accent-ink);font-weight:600}
 .rq-note{grid-column:1/-1;font-size:13.5px;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--field);border:1px solid var(--line);border-radius:6px;padding:6px 10px}
 .rq-act{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.rq-amts{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;font-size:14px;background:var(--field);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+.rq-amts .rq-got b{color:var(--ok-fg)}.rq-lk{display:flex;gap:14px;flex-wrap:wrap;font-weight:600}.rq-lk label{display:flex;gap:6px;align-items:center}
 .rq-flow{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;font-size:13.5px}
 .rq-xf{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px}
 .rq-xf label{flex:1 1 160px}
@@ -64,7 +73,7 @@ function rqItemHTML(r, can) {
   }
   const flow = r.xfer ? '<div class="rq-flow rq-dest"><span class="pill acc">הועברה ל' + esc(tabName(r.xfer.kind || 'split')) + '</span>' + '<span>תאריך עבודה: <b class="num">' + esc(isoLabel(r.xfer.date)) + '</b></span>' + lreqStatus(r) + '</div>' : '';
   return '<div class="rq-item' + (RQ.flash === r.id ? ' flash' : '') + (RQ.edit === r.id && !$('#rq-form').hidden ? ' editing' : '') + '" data-rq-id="' + esc(r.id) + '"><span class="rq-nm">' + esc(r.name) + '</span><span class="rq-amt">' + money(num(r.amount)) + '</span>' +
-    '<div class="rq-meta">' + meta.join('') + '</div>' + (String(r.note || '').trim() ? '<div class="rq-note">' + esc(r.note) + '</div>' : '') + (chkLine(r) ? '<div class="rq-flow rq-chk">' + chkLine(r) + '</div>' : '') + flow + act + '</div>';
+    '<div class="rq-meta">' + meta.join('') + '</div>' + (String(r.note || '').trim() ? '<div class="rq-note">' + esc(r.note) + '</div>' : '') + amountsHTML(r) + (chkLine(r) ? '<div class="rq-flow rq-chk">' + chkLine(r) + '</div>' : '') + flow + act + '</div>';
 }
 // ״העבר ללשונית״ / ״שנה לשונית״: בוחרים לשונית (מהרשימה של התוכנה), תאריך עבודה וחשבון של אותו תאריך, ומאשרים ״העבר ל…״
 function rqXferForm(r) {
@@ -99,6 +108,26 @@ async function rqXferGo(id) {
     toast(out.already ? 'הבקשה כבר נמצאת ב' + name + ' של ' + isoLabel(out.xfer.date) : 'הבקשה של ' + r.name + (out.moved ? ' עברה ל' : ' הועברה ל') + name + ' של ' + isoLabel(out.xfer.date));
     clearTimeout(RQ.flT); RQ.flT = setTimeout(() => { RQ.flash = null; rqRender(); }, 2600);
   } catch (e) { RQ.xBusy = false; RQ.xErr = 'ההעברה לא נשמרה: ' + failMsg(e).replace(/ הפעולה תישלח.*$/, '') + ' לחץ שוב — הבקשה לא תועבר פעמיים.'; rqRender(); }
+}
+// חידוש: רשימת ההלוואות הפתוחות (קודם של אותו לקוח לפי השם), ושלושת הסכומים בזמן ההקלדה
+async function rqLoadLoans(force) { if (RQ.loans && !force) return RQ.loans; try { RQ.loans = await get('/api/docs/loans'); } catch { RQ.loans = RQ.loans || []; } return RQ.loans; }
+function rqLoanForm() {
+  const lk = ($('input[name="rq-f-lk"]:checked') || {}).value || 'new', w = $('#rq-f-prevw'), sel = $('#rq-f-prev'), calc = $('#rq-f-calc'); if (!w) return;
+  w.hidden = lk !== 'renew';
+  if (lk === 'renew') {
+    if (!RQ.loans) { sel.innerHTML = '<option value="">טוען הלוואות…</option>'; rqLoadLoans().then(rqLoanForm); }
+    else {
+      const nm = normName($('#rq-f-name').value), open = RQ.loans.filter(L => !L.offsetBy && loanOwe(L).owe > 0);
+      const mine = open.filter(L => nm && normName(L.name) === nm), others = open.filter(L => !mine.includes(L)).sort((a, b) => String(a.name).localeCompare(String(b.name), 'he'));
+      const opt = (L) => '<option value="' + esc(L.id) + '"' + (RQ.fPrev === L.id ? ' selected' : '') + '>' + esc(L.name) + ' · ' + esc(lnLabel(L)) + ' · יתרה ' + loanOwe(L).owe.toLocaleString('he-IL') + ' ₪</option>';
+      const cur = RQ.fPrev && !open.some(L => L.id === RQ.fPrev) && loanBy(RQ.fPrev) ? opt(loanBy(RQ.fPrev)) : '';
+      sel.innerHTML = '<option value="">בחר הלוואה…</option>' + cur + (mine.length ? '<optgroup label="של הלקוח">' + mine.map(opt).join('') + '</optgroup>' : '') + (others.length ? '<optgroup label="הלוואות פתוחות אחרות">' + others.map(opt).join('') + '</optgroup>' : '');
+      if (!RQ.fPrev && mine.length === 1) { RQ.fPrev = mine[0].id; sel.value = RQ.fPrev; }
+    }
+  }
+  const amount = r2(num($('#rq-f-amount').value)), r = { amount, lk, prevLoan: lk === 'renew' ? (sel.value || RQ.fPrev) : '' };
+  if (!(amount > 0)) { calc.innerHTML = '<span class="small muted">הזן סכום כדי לראות את הסכום למסירה</span>'; return; }
+  calc.innerHTML = amountsHTML(Object.assign({ id: RQ.edit }, r));
 }
 // שורת הסיכום: תמיד הסכום של כל הבקשות, ובזמן חיפוש גם הסכום של הבקשות שתואמות
 function rqRenderSum(all, hits, q) {
@@ -143,6 +172,8 @@ function rqFillForm(r) {
   $('#rq-f-phone').value = r ? String(r.phone || '') : '';
   $('#rq-f-note').value = r ? String(r.note || '') : '';
   $('#rq-f-chk').value = r && chkOk(r.chk) ? String(+r.chk) : '';
+  $$('input[name="rq-f-lk"]').forEach(i => { i.checked = i.value === ((r && r.lk) || 'new'); i.disabled = !!(r && r.given); });
+  RQ.fPrev = (r && r.prevLoan) || ''; rqLoanForm();
   rqFormTitles(); rqFormMsg(''); rqAmtPrev();
 }
 function rqOpenForm(r) {
@@ -151,7 +182,7 @@ function rqOpenForm(r) {
   setTimeout(() => { const f = $('#rq-form'); if (f) f.scrollIntoView({ behavior: 'smooth', block: 'start' }); const n = $('#rq-f-name'); if (n) { try { n.focus({ preventScroll: true }); } catch (e) { n.focus(); } } }, 60);
 }
 function rqCloseForm() { if (RQ.busy) return; $('#rq-form').hidden = true; RQ.edit = null; rqFormMsg(''); rqRender(); }
-async function rqReload() { try { RQ.list = await get('/api/docs/loan_requests'); RQ.state = 'on'; } catch (e) { RQ.state = 'err'; if (e.status === 401) throw e; } }
+async function rqReload() { try { [RQ.list] = await Promise.all([get('/api/docs/loan_requests'), rqLoadLoans(true)]); RQ.state = 'on'; } catch (e) { RQ.state = 'err'; if (e.status === 401) throw e; } }
 async function rqSave() {
   if (RQ.busy) return;
   if (!rqCanWrite()) return rqFormMsg('אין לך הרשאה לשמור בקשות.');
@@ -166,6 +197,9 @@ async function rqSave() {
   const now = new Date().toISOString(), id = old ? old.id : 'Q' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const doc = { name, amount, date, phone: $('#rq-f-phone').value.trim(), note: $('#rq-f-note').value.trim(), created: old && old.created ? old.created : now, updated: now };
   doc.chk = chkRaw ? +chkRaw : '';
+  const lk = ($('input[name="rq-f-lk"]:checked') || {}).value || 'new';
+  if (old && old.given) { doc.lk = old.lk || 'new'; if (old.prevLoan) doc.prevLoan = old.prevLoan; } // אחרי המסירה סוג ההלוואה והקיזוז נעולים
+  else { doc.lk = lk; if (lk === 'renew') { const pv = $('#rq-f-prev').value; if (!pv) { rqFormMsg('בחידוש הלוואה — בחר את ההלוואה הקודמת של הלקוח.'); $('#rq-f-prev').focus(); RQ.busy = false; $('#rq-save').disabled = false; rqFormTitles(); return; } doc.prevLoan = pv; } }
   if (old && old.xfer) doc.xfer = old.xfer; if (old && old.given) doc.given = old.given; // עריכה לא מבטלת העברה לפיצול או אישור מסירה
   const sb = $('#rq-save'); RQ.busy = true; sb.disabled = true; sb.textContent = 'שומר…';
   let out;
@@ -210,6 +244,9 @@ async function renderRequestsPage(view) {
       <label class="rq-fld" for="rq-f-phone">טלפון<input class="in n" id="rq-f-phone" type="tel" inputmode="tel" autocomplete="off" placeholder="050-0000000"></label>
     </div>
     <label class="rq-fld" for="rq-f-note" style="margin-top:10px">הערה<textarea class="in rq-note-in" id="rq-f-note" rows="2"></textarea></label>
+    <div class="rq-fld" style="margin-top:10px"><span>סוג ההלוואה</span><div class="rq-lk" role="radiogroup"><label><input type="radio" name="rq-f-lk" value="new" checked> הלוואה חדשה</label><label><input type="radio" name="rq-f-lk" value="renew"> חידוש הלוואה</label></div></div>
+    <label class="rq-fld" id="rq-f-prevw" hidden style="margin-top:6px">ההלוואה הקודמת של הלקוח<select class="in" id="rq-f-prev"><option value="">בחר הלוואה…</option></select></label>
+    <div class="rq-amts" id="rq-f-calc" style="margin-top:6px"></div>
     <label class="rq-fld" for="rq-f-chk" style="margin-top:10px">לכמה שיקים חולקה ההלוואה?<input class="in n" id="rq-f-chk" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="למשל 10"><span class="small muted">אפשר לשמור בלי מספר ולהשלים בהמשך. חובה לפני אישור מסירה.</span></label>
     <p class="small muted"><span class="rq-req">*</span> שדה חובה. התאריך מתמלא בתאריך של היום, ואפשר לשנות אותו.</p>
     <div class="row"><button class="btn" id="rq-save" type="button">שמור בקשה</button><button class="btn plain" id="rq-cancel" type="button">ביטול</button></div>
@@ -227,7 +264,10 @@ async function renderRequestsPage(view) {
   $('#rq-form').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT') { e.preventDefault(); rqSave(); } });
   $('#rq-f-amount').addEventListener('input', () => { rqAmtPrev(); rqFormMsg(''); });
   $('#rq-f-amount').addEventListener('blur', e => { const v = e.target.value.trim(), a = r2(num(v)); if (v && a > 0) { const f = fmt(a); if (f !== v) e.target.value = f; } });
-  $('#rq-f-name').addEventListener('input', () => rqFormMsg(''));
+  $('#rq-f-name').addEventListener('input', () => { rqFormMsg(''); rqLoanForm(); });
+  $('#rq-f-amount').addEventListener('input', () => rqLoanForm());
+  $$('input[name="rq-f-lk"]').forEach(i => i.addEventListener('change', () => rqLoanForm()));
+  $('#rq-f-prev').addEventListener('change', () => { RQ.fPrev = $('#rq-f-prev').value; rqLoanForm(); });
   const qi = $('#rq-q');
   qi.addEventListener('input', () => { RQ.q = qi.value; RQ.delFor = null; rqRender(); });
   $('#rq-qclr').onclick = () => { qi.value = ''; RQ.q = ''; rqRender(); qi.focus(); };
