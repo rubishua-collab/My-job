@@ -88,3 +88,40 @@ export async function lnBuildPdf(L,opts={}){
   } finally { h.innerHTML=''; }
   return pdf.output('blob');
 }
+
+// ״שליחת לוח תשלומים ללקוח״: מסמך מסונן — רק שם הלקוח, מספר התשלומים, ולכל תשלום: מספר, תאריך וסכום; ושורת ״סה״כ לתשלום״.
+// בלי ריבית, קרן, יתרות או סכום ההלוואה — גם לא בכותרות, בסיכומים או בטקסט נסתר. rows = הלוח השמור של הבקשה (סכומים מדויקים)
+export function lnPayOnlyPages({ name, rows }) {
+  const total = Math.round(rows.reduce((a, x) => a + Math.round((+x.payment || 0) * 100), 0)) / 100;
+  const first = 24, rest = 32, chunks = [rows.slice(0, first)];
+  for (let i = first; i < rows.length; i += rest) chunks.push(rows.slice(i, i + rest));
+  const m = n => '<span class="num">' + lnFmt(n) + '</span>';
+  const head = '<thead><tr><th>מספר תשלום</th><th>תאריך תשלום</th><th>סכום לתשלום</th></tr></thead>';
+  return { total, pages: chunks.map((part, pi) => {
+    const last = pi === chunks.length - 1;
+    return '<div class="ln-sheet ln-payonly">' +
+      (pi === 0 ? '<div class="hd"><div><h3>לוח תשלומים</h3></div><div class="who"><div class="dt">לקוח</div><b>' + esc(name) + '</b></div></div>' +
+        '<div class="info" style="grid-template-columns:repeat(2,1fr)"><div><span>מספר תשלומים</span><b class="num">' + rows.length + '</b></div></div>'
+        : '<div class="hd cont"><h3>לוח תשלומים · ' + esc(name) + ' (המשך)</h3></div>') +
+      '<table>' + head + '<tbody>' + part.map(x => '<tr><td><span class="num">' + x.i + '</span></td><td><span class="num">' + lnD(x.date) + '</span></td><td>' + m(x.payment) + '</td></tr>').join('') + '</tbody>' +
+      (last ? '<tfoot><tr><td colspan="2">סה״כ לתשלום</td><td>' + m(total) + '</td></tr></tfoot>' : '') + '</table>' +
+      '<div class="ft"><span></span><span>עמוד ' + (pi + 1) + ' מתוך ' + chunks.length + '</span></div></div>';
+  }) };
+}
+// מהדפים ל-PDF: מחזיר גם את תמונות העמודים שהוטמעו בקובץ — התצוגה המקדימה מציגה בדיוק אותן
+export async function lnPagesPdf(pages) {
+  await Promise.all([loadVendor('html2canvas.min.js'), loadVendor('jspdf.umd.min.js')]);
+  if (!window.html2canvas || !window.jspdf) throw new Error('ספריית ה-PDF לא נטענה');
+  try { await document.fonts.ready; } catch (e) { /* */ }
+  const h = host(), pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' }), imgs = [];
+  try {
+    for (let i = 0; i < pages.length; i++) {
+      h.innerHTML = pages[i];
+      const c = await window.html2canvas(h.firstElementChild, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
+      const url = c.toDataURL('image/jpeg', 0.92); imgs.push(url);
+      if (i) pdf.addPage();
+      pdf.addImage(url, 'JPEG', 0, 0, 210, 297);
+    }
+  } finally { h.innerHTML = ''; }
+  return { blob: pdf.output('blob'), imgs };
+}

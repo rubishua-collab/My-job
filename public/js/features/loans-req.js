@@ -6,7 +6,7 @@ import { chkOk } from './loans-box.js';
 import { renewCalc, loanOwe, loanFromTerms, schedSnap } from '../loan-renew.js';
 import { termsFieldsHTML, termsOutHTML, mountTerms, tableHTML } from './loan-terms.js';
 import { lnCss } from './loans.js';
-import { lnBuildPdf, lnFmt, lnD } from './loans-pdf.js';
+import { lnBuildPdf, lnFmt, lnD, lnPayOnlyPages, lnPagesPdf } from './loans-pdf.js';
 import { openSheet } from '../ui.js';
 import { $, $$, esc, fmt, money, dmy, todayISO, toast } from '../ui.js';
 import { App, onLive } from '../app.js';
@@ -45,6 +45,7 @@ textarea.in.rq-note-in{min-height:64px}
 .rq-meta a{color:var(--accent-ink);font-weight:600}
 .rq-note{grid-column:1/-1;font-size:13.5px;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--field);border:1px solid var(--line);border-radius:6px;padding:6px 10px}
 .rq-act{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.rqpo-pv{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow:auto;background:#eef1f5;border-radius:8px;padding:8px}.rqpo-pv img{width:100%;height:auto;box-shadow:0 1px 4px rgba(0,0,0,.2);background:#fff}
 .rq-amts{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;font-size:14px;background:var(--field);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
 .rq-amts .rq-got b{color:var(--ok-fg)}.rq-lk{display:flex;gap:14px;flex-wrap:wrap;font-weight:600}.rq-lk label{display:flex;gap:6px;align-items:center}
 .rq-flow{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;font-size:13.5px}
@@ -73,7 +74,7 @@ function rqItemHTML(r, can) {
   if (can) {
     act = RQ.delFor === r.id
       ? '<div class="ln-confirm"><span>למחוק את הבקשה של ' + esc(r.name) + ' על ' + money(num(r.amount)) + '?</span><button class="btn danger sm" type="button" data-rq-yes="' + esc(r.id) + '"' + (RQ.busy ? ' disabled' : '') + '>' + (RQ.busy ? 'מוחק…' : 'כן, מחק') + '</button><button class="btn plain sm" type="button" data-rq-no="1"' + (RQ.busy ? ' disabled' : '') + '>ביטול</button></div>'
-      : (RQ.xFor === r.id ? rqXferForm(r) : '<div class="rq-act">' + '<button class="btn sm' + (r.xfer ? ' ghost' : '') + '" type="button" data-rq-xfer="' + esc(r.id) + '">' + (r.xfer ? 'שנה לשונית' : 'העבר ללשונית') + '</button>' + (r.sched ? '<button class="btn sm" type="button" data-rq-pdf="' + esc(r.id) + '">שלח ללקוח PDF</button>' : '') + '<button class="btn ghost sm" type="button" data-rq-edit="' + esc(r.id) + '">עריכה</button>' + (rqCanDel() ? '<button class="btn danger sm" type="button" data-rq-del="' + esc(r.id) + '">מחיקה</button>' : '') + '</div>');
+      : (RQ.xFor === r.id ? rqXferForm(r) : '<div class="rq-act">' + '<button class="btn sm' + (r.xfer ? ' ghost' : '') + '" type="button" data-rq-xfer="' + esc(r.id) + '">' + (r.xfer ? 'שנה לשונית' : 'העבר ללשונית') + '</button>' + (r.sched ? '<button class="btn sm" type="button" data-rq-pdf="' + esc(r.id) + '">שלח ללקוח PDF</button><button class="btn sm ghost" type="button" data-rq-pay="' + esc(r.id) + '">שליחת לוח תשלומים ללקוח</button>' : '') + '<button class="btn ghost sm" type="button" data-rq-edit="' + esc(r.id) + '">עריכה</button>' + (rqCanDel() ? '<button class="btn danger sm" type="button" data-rq-del="' + esc(r.id) + '">מחיקה</button>' : '') + '</div>');
   }
   const flow = r.xfer ? '<div class="rq-flow rq-dest"><span class="pill acc">הועברה ל' + esc(tabName(r.xfer.kind || 'split')) + '</span>' + '<span>תאריך עבודה: <b class="num">' + esc(isoLabel(r.xfer.date)) + '</b></span>' + lreqStatus(r) + '</div>' : '';
   return '<div class="rq-item' + (RQ.flash === r.id ? ' flash' : '') + (RQ.edit === r.id && !$('#rq-form').hidden ? ' editing' : '') + '" data-rq-id="' + esc(r.id) + '"><span class="rq-nm">' + esc(r.name) + '</span><span class="rq-amt">' + money(num(r.amount)) + '</span>' +
@@ -159,6 +160,32 @@ async function rqPdf(id) {
     try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
     s.el.querySelector('#rqp-dl').click(); const ph = String(r.phone || '').replace(/\D/g, '').replace(/^0/, '972');
     window.open('https://wa.me/' + (ph.length >= 11 ? ph : '') + '?text=' + encodeURIComponent(text + ' (הקובץ ירד — צרף אותו בשיחה)'), '_blank', 'noopener');
+  };
+}
+// ״שליחת לוח תשלומים ללקוח״: PDF מסונן מהלוח השמור — מספר, תאריך וסכום לכל תשלום, וסה״כ לתשלום. בלי ריבית, קרן ויתרות.
+// תצוגה מקדימה = תמונות העמודים שבתוך הקובץ עצמו; ״שלח PDF ללקוח״ שולח את אותו קובץ (לא מפיק מחדש), לבקשה הזו בלבד.
+async function rqPayPdf(id) {
+  const r = rqGet(id); if (!r || !r.sched || !Array.isArray(r.sched.rows)) return;
+  const fname = 'לוח-תשלומים-' + String(r.name || '').replace(/[\\/:*?"<>|\s]+/g, '-') + '.pdf';
+  const ph = String(r.phone || '').trim();
+  const s = openSheet('<div class="hd"><h2>שליחת לוח תשלומים ללקוח</h2><button class="x" data-close>×</button></div>' +
+    '<div class="rqpo-to"><span class="small muted">נמען:</span> <b>' + esc(r.name) + '</b>' + (ph ? ' · <span class="num">' + esc(ph) + '</span>' : ' · <span class="neg small">אין טלפון בבקשה</span>') + '</div>' +
+    '<div id="rqpo-st" class="small muted" style="margin:6px 0">מכין תצוגה מקדימה…</div><div id="rqpo-pv" class="rqpo-pv"></div>' +
+    '<div class="row" style="flex-wrap:wrap;gap:8px;margin-top:10px"><button class="btn wa xl" type="button" id="rqpo-send" disabled>שלח PDF ללקוח</button><a class="btn ghost" id="rqpo-dl" hidden>הורדה</a></div>');
+  const el = s.el;
+  let out; try { const P = lnPayOnlyPages({ name: r.name, rows: r.sched.rows }); out = await lnPagesPdf(P.pages); out.total = P.total; }
+  catch (e) { el.querySelector('#rqpo-st').innerHTML = '<span class="neg">לא הצלחתי ליצור PDF: ' + esc(e.message || '') + '</span>'; return; }
+  const file = new File([out.blob], fname, { type: 'application/pdf' }), url = URL.createObjectURL(out.blob);
+  window.__rqPayPdf = { blob: out.blob, imgs: out.imgs, name: fname }; // לבדיקות: הקובץ ותמונות התצוגה המקדימה
+  el.querySelector('#rqpo-st').textContent = 'תצוגה מקדימה של הקובץ שיישלח: ' + fname + ' · ' + r.sched.rows.length + ' תשלומים';
+  el.querySelector('#rqpo-pv').innerHTML = out.imgs.map((u, i) => '<img src="' + u + '" alt="עמוד ' + (i + 1) + ' של לוח התשלומים">').join('');
+  const dl = el.querySelector('#rqpo-dl'); dl.href = url; dl.download = fname; dl.hidden = false;
+  const send = el.querySelector('#rqpo-send'); send.disabled = false;
+  const text = 'לוח תשלומים — ' + r.name;
+  send.onclick = async () => {
+    try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text }); toast('נפתח חלון השיתוף עם לוח התשלומים'); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+    dl.click(); const d = ph.replace(/\D/g, '').replace(/^0/, '972');
+    window.open('https://wa.me/' + (d.length >= 11 ? d : '') + '?text=' + encodeURIComponent(text + ' (הקובץ ירד — צרף אותו בשיחה)'), '_blank', 'noopener');
   };
 }
 // שורת הסיכום: תמיד הסכום של כל הבקשות, ובזמן חיפוש גם הסכום של הבקשות שתואמות
@@ -320,6 +347,7 @@ async function renderRequestsPage(view) {
   $('#rq-qclr').onclick = () => { qi.value = ''; RQ.q = ''; rqRender(); qi.focus(); };
   $('#rq-list').addEventListener('click', e => {
     const ed = e.target.closest('[data-rq-edit]'); if (ed) { const r = rqGet(ed.getAttribute('data-rq-edit')); if (r) { RQ.delFor = null; rqOpenForm(r); } return; }
+    const py = e.target.closest('[data-rq-pay]'); if (py) { rqPayPdf(py.getAttribute('data-rq-pay')); return; }
     const pf = e.target.closest('[data-rq-pdf]'); if (pf) { rqPdf(pf.getAttribute('data-rq-pdf')); return; }
     const xf = e.target.closest('[data-rq-xfer]'); if (xf) { RQ.delFor = null; rqXferOpen(xf.getAttribute('data-rq-xfer')); return; }
     const xg = e.target.closest('[data-rq-xgo]'); if (xg) { rqXferGo(xg.getAttribute('data-rq-xgo')); return; }
