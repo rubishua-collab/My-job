@@ -71,8 +71,15 @@ export function anCollectors(from,to){
     for(const e of a.entries||[]){const x=g(C,cleanColl(e.c));x.lists.add(a.date);
       if(e.k==='e')x.exp=r2(x.exp+num(e.a));else{x.n++;x.total=r2(x.total+num(e.a));}}
   }
+  /* ימים בלי חשבון גובים (מעכשיו לא מעבירים — ״סיכום גובים לסוף היום״ באיסוף): מהאיסוף היומי — מה שנגבה בפועל, פחות ההוצאות (נטו למסירה) */
+  const cd=new Set(cs.map(a=>a.date)); let nf=0;
+  for(const a of ws){
+    if(cd.has(a.date)) continue; nf++;
+    for(const e of a.entries||[]){ if(normStatus(e.s)!==ST_GOT) continue; const x=g(C,cleanColl(e.c)); x.lists.add(a.date); x.n++; x.total=r2(x.total+((e.ga!==undefined&&e.ga!==null&&e.ga!=='')?num(e.ga):num(e.a))); x.fw=1; }
+    for(const e of a.expenses||[]){const x=g(C,cleanColl(e.c));x.lists.add(a.date);x.exp=r2(x.exp+num(e.a));x.fw=1;}
+  }
   const fin=m=>Array.from(m.values()).map(x=>Object.assign(x,{days:x.lists.size,net:r2(x.total-x.exp),rate:x.n?Math.round(100*x.got/x.n):0})).sort((x,y)=>y.total-x.total);
-  return {work:fin(W),coll:fin(C),nw:ws.length,nc:cs.length};
+  return {work:fin(W),coll:fin(C),nw:ws.length,nc:cs.length+nf,ncf:nf};
 }
 /* the newest saved split (פיצול): who owes what today, per collector */
 export function anLatestSplit(){
@@ -202,10 +209,11 @@ export function anBody(){
   }
   /* 6. collectors */
   const KW=AN.coll==='coll'?K.coll:K.work;
-  h+='<div class="panel" id="an-colls"><div class="row sp"><h2>גובים</h2><span class="row"><button class="rchip" type="button" data-coll="work" aria-pressed="'+(AN.coll!=='coll')+'">לפי איסוף יומי ('+K.nw+')</button><button class="rchip" type="button" data-coll="coll" aria-pressed="'+(AN.coll==='coll')+'">לפי חשבון גובים ('+K.nc+')</button></span></div>'+
+  h+='<div class="panel" id="an-colls"><div class="row sp"><h2>גובים</h2><span class="row"><button class="rchip" type="button" data-coll="work" aria-pressed="'+(AN.coll!=='coll')+'">לפי איסוף יומי ('+K.nw+')</button><button class="rchip" type="button" data-coll="coll" aria-pressed="'+(AN.coll==='coll')+'">לפי חשבון גובים ('+K.nc+(K.ncf?' · '+K.ncf+' מהאיסוף':'')+')</button></span></div>'+
     (KW.length?chartBars(KW.map(x=>({l:x.c,v:x.total,sub:x.n+' חייבים'})),{title:'סה״כ לגובה',labels:true}):'')+
     (AN.coll==='coll'?tbl(['גובה','ימים','חובות','סה״כ','הוצאות','נטו','ממוצע ליום'],KW.map(x=>'<tr>'+td(esc(x.c))+td(x.days)+td(x.n)+tdn(x.total)+tdn(x.exp)+tdn(x.net)+tdn(x.days?r2(x.net/x.days):0)+'</tr>')):
       tbl(['גובה','ימים','חייבים','סה״כ','נאסף','אחוז נאסף','לא נאסף','לעבור','הוצאות','נטו'],KW.map(x=>'<tr>'+td(esc(x.c))+td(x.days)+td(x.n)+tdn(x.total)+tdn(x.gotA)+td('<span class="stl '+(x.rate>=70?'got':(x.rate>=40?'pass':'hard'))+'">'+x.rate+'%</span>')+td(x.ng||0)+td(x.pass)+tdn(x.exp)+tdn(x.net)+'</tr>')))+
+    (AN.coll==='coll'&&K.ncf?'<p class="small muted" style="margin:0">'+K.ncf+' ימים בלי חשבון גובים חושבו מהאיסוף היומי: מה שנגבה בפועל פחות ההוצאות (נטו למסירה).</p>':'')+
     '<p class="small muted" style="margin:0">״נאסף״ נספר רק אם סימנת אותו ברשימת האיסוף לפני השמירה. אם לא מסמנים, האחוז לא אומר כלום.</p></div>';
   /* 7. client card (שמות: לקוחות מחשבונות הבוקר ומהפיצול האחרון; כרטיס הלקוח המלא נמצא במסך ״לקוחות״) */
   const names=new Map(); anMorning('0000-01-01','9999-12-31').clients.forEach(c=>names.set(c.k,c.n)); const lsp=anLatestSplit(); if(lsp)(lsp.records||[]).forEach(r=>{const k=normName(r.n);if(k&&!names.has(k))names.set(k,String(r.n).trim());});

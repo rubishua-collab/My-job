@@ -80,8 +80,15 @@ export function anCollectors(list,from,to){
     for(const e of a.entries||[]){const x=g(C,cleanColl(e.c));x.lists.add(a.date);
       if(e.k==='e')x.exp=r2(x.exp+num(e.a));else{x.n++;x.total=r2(x.total+num(e.a));}}
   }
+  /* ימים בלי חשבון גובים (מעכשיו לא מעבירים — ״סיכום גובים לסוף היום״ באיסוף): מהאיסוף היומי — מה שנגבה בפועל, פחות ההוצאות (נטו למסירה) */
+  const cd=new Set(cs.map(a=>a.date)); let nf=0;
+  for(const a of ws){
+    if(cd.has(a.date)) continue; nf++;
+    for(const e of a.entries||[]){ if(normStatus(e.s)!==ST_GOT) continue; const x=g(C,cleanColl(e.c)); x.lists.add(a.date); x.n++; x.total=r2(x.total+((e.ga!==undefined&&e.ga!==null&&e.ga!=='')?num(e.ga):num(e.a))); x.fw=1; }
+    for(const e of a.expenses||[]){const x=g(C,cleanColl(e.c));x.lists.add(a.date);x.exp=r2(x.exp+num(e.a));x.fw=1;}
+  }
   const fin=m=>Array.from(m.values()).map(x=>Object.assign(x,{days:x.lists.size,net:r2(x.total-x.exp),rate:x.n?Math.round(100*x.got/x.n):0})).sort((x,y)=>y.total-x.total);
-  return {work:fin(W),coll:fin(C),nw:ws.length,nc:cs.length};
+  return {work:fin(W),coll:fin(C),nw:ws.length,nc:cs.length+nf,ncf:nf};
 }
 function anLatestSplit(list){
   const sps=(list||[]).filter(a=>a&&a.kind==='split'&&a.date).sort(byDateAsc);

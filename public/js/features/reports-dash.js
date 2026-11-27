@@ -88,7 +88,7 @@ export function dashHTML(pendingN){
     m:a=>cm?'ריבית '+money(cm.interest)+' · קרן '+money(cm.principal)+' · '+(mSrc.rows||[]).length+' לקוחות':'העלה את דו״ח ההכנסות של היום',
     sp:a=>{const rs=((a&&a.records)||[]).filter(r=>!r.side); if(!rs.length) return 'העלה את קובץ החייבים של היום'; const cs=new Set(rs.map(r=>String(r.c||'').trim()).filter(Boolean)); return rs.length+' לווים · '+cs.size+' גובים';},
     w:a=>pd.all.n?'נאסף '+pd.all.got+' מתוך '+pd.all.n+' חייבים · נותר '+money(left):'העבר מהפיצול או העלה צילום של הרשימה',
-    c:a=>{const es=(a&&a.entries)||[]; if(!es.length) return 'בסוף היום: ״העבר לחשבון גובים״ מהאיסוף היומי'; try{return 'נטו '+money(calcCollectors(es).totalNet);}catch(e){return es.length+' שורות';}}
+    c:a=>{const es=(a&&a.entries)||[]; if(!es.length) return 'מחושב מהאיסוף היומי: ״סיכום גובים לסוף היום״ (אין צורך להעביר)'; try{return 'נטו '+money(calcCollectors(es).totalNet);}catch(e){return es.length+' שורות';}}
   };
   const defs=[{k:'m',t:'חשבון בוקר',kind:'morning'},{k:'sp',t:'פיצול לגובים',kind:'split'},{k:'w',t:'איסוף יומי',kind:'work'},{k:'c',t:'חשבון גובים',kind:'collectors'}];
   let done=0;
