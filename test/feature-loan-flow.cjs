@@ -34,20 +34,21 @@ const numOf = (t) => +String(t).replace(/[^\d.-]/g, '');
   const collExp = async () => (await api('GET', '/api/accounts/' + C)).entries.filter(e => e.xk === 'xLQitzik');
   let netBefore, gotBefore, splitBefore;
 
-  await step('בקשות להלוואה: ״העבר ללשונית פיצול״ ליד עריכה ומחיקה, גם בבקשה שכבר שמורה; אחרי ההעברה — ״הועברה לפיצול״ ותאריך העבודה', async () => {
+  await step('בקשות להלוואה: ״העבר ללשונית״ → ״פיצול״ ליד עריכה ומחיקה, גם בבקשה שכבר שמורה; אחרי ההעברה — ״הועברה לפיצול״ ותאריך העבודה', async () => {
     splitBefore = JSON.stringify((await api('GET', '/api/accounts/' + S)).records);
     await p.goto(URL + '/#/requests-manage'); await card('איציק לחמני').waitFor();
     const acts = await card('איציק לחמני').locator('.rq-act button').allInnerTexts();
-    assert.deepStrictEqual(acts.map(s => s.trim()), ['העבר ללשונית פיצול', 'עריכה', 'מחיקה']);
+    assert.deepStrictEqual(acts.map(s => s.trim()), ['העבר ללשונית', 'עריכה', 'מחיקה']);
     await card('איציק לחמני').locator('[data-rq-xfer]').click();
     await p.waitForSelector('#rq-xd'); assert.strictEqual(await p.inputValue('#rq-xd'), DATE);
-    await p.waitForFunction((S) => [...document.querySelectorAll('#rq-xs option')].some(o => o.value === S), S);
+    await p.waitForFunction(() => document.querySelectorAll('#rq-xk option').length > 1); await p.selectOption('#rq-xk', 'split');
+    await p.waitForFunction((S) => [...document.querySelectorAll('#rq-xa option')].some(o => o.value === S), S);
     await card('איציק לחמני').locator('[data-rq-xgo]').dblclick();
     await card('איציק לחמני').locator('.rq-flow:not(.rq-chk)').waitFor();
     const t = await card('איציק לחמני').locator('.rq-flow:not(.rq-chk)').innerText();
     assert.ok(t.includes('הועברה לפיצול') && t.includes(DATE.split('-').reverse().join('.')) && t.includes('ממתינה למסירה'), t);
-    assert.strictEqual(await card('איציק לחמני').locator('[data-rq-xfer]').count(), 0, 'הכפתור יורד אחרי ההעברה');
-    const q = await api('GET', '/api/docs/loan_requests/Qitzik'); assert.strictEqual(q.xfer.splitId, S); assert.strictEqual(q.xfer.workId, W);
+    assert.strictEqual((await card('איציק לחמני').locator('[data-rq-xfer]').innerText()).trim(), 'שנה לשונית', 'אחרי ההעברה — ״שנה לשונית״');
+    const q = await api('GET', '/api/docs/loan_requests/Qitzik'); assert.strictEqual(q.xfer.splitId, S); assert.strictEqual(q.xfer.kind, 'split');
     assert.strictEqual(q.note, '2500 כפול 3'); assert.strictEqual(q.amount, 6000);
   });
   await step('פיצול: הבקשה פעם אחת תחת ״בקשות הלוואה״ עם השם, הסכום, תאריך הבקשה וההערה; שורות וסכומי הפיצול לא השתנו', async () => {
@@ -58,7 +59,8 @@ const numOf = (t) => +String(t).replace(/[^\d.-]/g, '');
     assert.ok(t.includes('איציק לחמני') && t.includes('6,000') && t.includes('25.11.2026') && t.includes('2500 כפול 3') && t.includes('ממתינה למסירה'), t);
     assert.strictEqual(JSON.stringify((await api('GET', '/api/accounts/' + S)).records), splitBefore);
   });
-  await step('איסוף יום: מופיעה אוטומטית פעם אחת, ״ממתינה למסירה״, הוצאה 0 ₪ — הסכום לא בגביות ולא בהוצאות', async () => {
+  await step('אחרי ״שנה לשונית״ לאיסוף יום: מופיעה שם פעם אחת, ״ממתינה למסירה״, הוצאה 0 ₪ — הסכום לא בגביות ולא בהוצאות', async () => {
+    await api('POST', '/api/loan-req/xfer', { id: 'Qitzik', kind: 'work', date: DATE, accId: W, opId: 'tow' }); // ״שנה לשונית״ → איסוף יום
     await p.goto(URL + '/#/acc/' + W); await p.waitForSelector('#lrq-panel .lrq-item');
     assert.strictEqual(await p.locator('#lrq-panel .lrq-item').count(), 1);
     const t = await p.locator('#lrq-panel .lrq-item').innerText();
@@ -92,12 +94,12 @@ const numOf = (t) => +String(t).replace(/[^\d.-]/g, '');
     assert.ok(r.already); assert.strictEqual(r.given.c, 'אושר');
     assert.strictEqual((await loanExp()).length, 1); assert.strictEqual((await collExp()).length, 1);
   });
-  await step('אחרי יציאה וכניסה מחדש: אותם נתונים באיסוף יום, ״אושרה ונמסרה ללקוח״ בפיצול ובבקשות', async () => {
+  await step('אחרי יציאה וכניסה מחדש: אותם נתונים באיסוף יום, ״אושרה ונמסרה ללקוח״ בבקשות; בפיצול כבר לא (הועברה לאיסוף)', async () => {
     await p.reload(); await p.waitForSelector('#lrq-panel .lrq-item');
     assert.strictEqual(await wg('אושר', '.wg-exp'), 6000); assert.strictEqual(await wg('אושר', '.wg-net'), netBefore - 6000);
     assert.strictEqual(await p.locator('#lrq-panel .lrq-item').count(), 1); assert.strictEqual(await p.locator('[data-lrok]').count(), 0);
-    await p.goto(URL + '/#/acc/' + S); await p.waitForSelector('#lrq-panel .lrq-item');
-    assert.match(await p.locator('#lrq-panel .lrq-item').innerText(), /אושרה ונמסרה ללקוח[\s\S]*אושר[\s\S]*\d{2}:\d{2}/);
+    await p.goto(URL + '/#/acc/' + S); await p.waitForSelector('.band'); await p.waitForTimeout(300);
+    assert.strictEqual(await p.locator('#lrq-panel .lrq-item', { hasText: 'איציק לחמני' }).count(), 0, 'הועברה לאיסוף יום — לא מוצגת יותר בפיצול');
     await p.goto(URL + '/#/requests-manage'); await card('איציק לחמני').locator('.rq-flow:not(.rq-chk)').waitFor();
     assert.match(await card('איציק לחמני').locator('.rq-flow:not(.rq-chk)').innerText(), /אושרה ונמסרה ללקוח[\s\S]*אושר/);
   });
@@ -111,7 +113,7 @@ const numOf = (t) => +String(t).replace(/[^\d.-]/g, '');
   });
   await step('אין קליטה בכלל: הודעה ברורה בשורה, הבקשה נשארת ״ממתינה למסירה״, ואז ״אשר״ שוב — הוצאה אחת', async () => {
     await api('POST', '/api/docs/loan_requests', { id: 'Qron', data: { name: 'רונן בוריסוב', amount: 3200, date: '2026-11-25', note: 'חידוש', created: '', updated: '' }, opId: 'q3' });
-    await api('POST', '/api/loan-req/xfer', { id: 'Qron', date: DATE, opId: 'x3' });
+    await api('POST', '/api/loan-req/xfer', { id: 'Qron', kind: 'work', date: DATE, opId: 'x3' });
     await p.goto(URL + '/#/acc/' + W); await p.waitForSelector('#lrq-panel .lrq-item');
     const it = p.locator('#lrq-panel .lrq-item', { hasText: 'רונן בוריסוב' });
     await p.waitForFunction(() => [...document.querySelectorAll('[data-lrc] option')].some(o => o.textContent === 'טל'));
@@ -126,7 +128,7 @@ const numOf = (t) => +String(t).replace(/[^\d.-]/g, '');
     const a = await api('GET', '/api/accounts/' + W); assert.strictEqual(a.expenses.filter(x => x.lr === 'Qron').length, 1);
   });
   await step('נשמר בשרת אבל התשובה אבדה: המסך מציג את המצב האמיתי או ״נסה שוב״ — הוצאה אחת בלבד', async () => {
-    await api('POST', '/api/loan-req/xfer', { id: 'Qliot', date: DATE, opId: 'x2' });
+    await api('POST', '/api/loan-req/xfer', { id: 'Qliot', kind: 'work', date: DATE, opId: 'x2' });
     await p.goto(URL + '/#/acc/' + W); await p.reload(); await p.waitForSelector('#lrq-panel .lrq-item');
     const it = p.locator('#lrq-panel .lrq-item', { hasText: 'ליאור נבא' });
     await p.waitForFunction(() => [...document.querySelectorAll('[data-lrc] option')].some(o => o.textContent === 'טל'));

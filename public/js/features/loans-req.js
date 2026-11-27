@@ -9,7 +9,9 @@ import { route, more } from '../registry.js';
 import { r2, sum, num, normName } from '../calc.js';
 
 const isoLabel = dmy;
-const RQ = { list: [], state: 'wait', edit: null, delFor: null, q: '', busy: false, flash: null, flT: null, xFor: null, xDate: '', xSplit: '', xOp: '', xBusy: false, xErr: '', splits: null };
+const RQ = { list: [], state: 'wait', edit: null, delFor: null, q: '', busy: false, flash: null, flT: null, xFor: null, xDate: '', xKind: '', xAcc: '', xOp: '', xBusy: false, xErr: '', accs: null, targets: null };
+// שם הלשונית כפי שמופיע בתוכנה (נטען מהשרת — /api/loan-req/targets)
+const tabName = (k) => ((RQ.targets || []).find(t => t.kind === k) || {}).name || ({ split: 'פיצול', work: 'איסוף יום', morning: 'חשבון בוקר', collectors: 'חשבון גובים' })[k] || k;
 const rqCanWrite = () => !!App.can.finance;
 const rqCanDel = () => App.me && App.me.role === 'owner';
 const rqCntTxt = n => n === 1 ? 'בקשה אחת' : fmt(n) + ' בקשות';
@@ -58,37 +60,45 @@ function rqItemHTML(r, can) {
   if (can) {
     act = RQ.delFor === r.id
       ? '<div class="ln-confirm"><span>למחוק את הבקשה של ' + esc(r.name) + ' על ' + money(num(r.amount)) + '?</span><button class="btn danger sm" type="button" data-rq-yes="' + esc(r.id) + '"' + (RQ.busy ? ' disabled' : '') + '>' + (RQ.busy ? 'מוחק…' : 'כן, מחק') + '</button><button class="btn plain sm" type="button" data-rq-no="1"' + (RQ.busy ? ' disabled' : '') + '>ביטול</button></div>'
-      : (RQ.xFor === r.id && !r.xfer ? rqXferForm(r) : '<div class="rq-act">' + (!r.xfer ? '<button class="btn sm" type="button" data-rq-xfer="' + esc(r.id) + '">העבר ללשונית פיצול</button>' : '') + '<button class="btn ghost sm" type="button" data-rq-edit="' + esc(r.id) + '">עריכה</button>' + (rqCanDel() ? '<button class="btn danger sm" type="button" data-rq-del="' + esc(r.id) + '">מחיקה</button>' : '') + '</div>');
+      : (RQ.xFor === r.id ? rqXferForm(r) : '<div class="rq-act">' + '<button class="btn sm' + (r.xfer ? ' ghost' : '') + '" type="button" data-rq-xfer="' + esc(r.id) + '">' + (r.xfer ? 'שנה לשונית' : 'העבר ללשונית') + '</button>' + '<button class="btn ghost sm" type="button" data-rq-edit="' + esc(r.id) + '">עריכה</button>' + (rqCanDel() ? '<button class="btn danger sm" type="button" data-rq-del="' + esc(r.id) + '">מחיקה</button>' : '') + '</div>');
   }
-  const flow = r.xfer ? '<div class="rq-flow"><span class="pill acc">הועברה לפיצול</span><span>תאריך עבודה: <b class="num">' + esc(isoLabel(r.xfer.date)) + '</b></span>' + lreqStatus(r) + '</div>' : '';
+  const flow = r.xfer ? '<div class="rq-flow rq-dest"><span class="pill acc">הועברה ל' + esc(tabName(r.xfer.kind || 'split')) + '</span>' + '<span>תאריך עבודה: <b class="num">' + esc(isoLabel(r.xfer.date)) + '</b></span>' + lreqStatus(r) + '</div>' : '';
   return '<div class="rq-item' + (RQ.flash === r.id ? ' flash' : '') + (RQ.edit === r.id && !$('#rq-form').hidden ? ' editing' : '') + '" data-rq-id="' + esc(r.id) + '"><span class="rq-nm">' + esc(r.name) + '</span><span class="rq-amt">' + money(num(r.amount)) + '</span>' +
     '<div class="rq-meta">' + meta.join('') + '</div>' + (String(r.note || '').trim() ? '<div class="rq-note">' + esc(r.note) + '</div>' : '') + (chkLine(r) ? '<div class="rq-flow rq-chk">' + chkLine(r) + '</div>' : '') + flow + act + '</div>';
 }
-// ״העבר ללשונית פיצול״: תאריך העבודה (ברירת מחדל היום) והפיצול של אותו תאריך
+// ״העבר ללשונית״ / ״שנה לשונית״: בוחרים לשונית (מהרשימה של התוכנה), תאריך עבודה וחשבון של אותו תאריך, ומאשרים ״העבר ל…״
 function rqXferForm(r) {
-  const ss = (RQ.splits || []).filter(a => a.date === RQ.xDate);
-  return '<div class="rq-xf"><label class="rq-fld">תאריך העבודה<input class="in" type="date" id="rq-xd" value="' + esc(RQ.xDate) + '"' + (RQ.xBusy ? ' disabled' : '') + '></label>' +
-    '<label class="rq-fld">לפיצול<select class="in" id="rq-xs"' + (RQ.xBusy ? ' disabled' : '') + '>' + (ss.length ? ss.map(a => '<option value="' + esc(a.id) + '"' + (RQ.xSplit === a.id ? ' selected' : '') + '>' + esc(a.title || 'פיצול') + '</option>').join('') : '<option value="">פיצול חדש לתאריך הזה</option>') + '</select></label>' +
-    '<button class="btn" type="button" data-rq-xgo="' + esc(r.id) + '"' + (RQ.xBusy ? ' disabled' : '') + '>' + (RQ.xBusy ? 'מעביר…' : 'העבר') + '</button><button class="btn plain" type="button" data-rq-xno="1"' + (RQ.xBusy ? ' disabled' : '') + '>ביטול</button>' +
+  const dis = RQ.xBusy ? ' disabled' : '', T = RQ.targets || [];
+  const accs = (RQ.accs || []).filter(a => a.kind === RQ.xKind && a.date === RQ.xDate);
+  const cur = r.xfer ? (r.xfer.kind || 'split') : '';
+  return '<div class="rq-xf">' + (r.xfer ? '<div class="small" style="flex-basis:100%">עכשיו ב<b>' + esc(tabName(cur)) + '</b> · ' + esc(isoLabel(r.xfer.date)) + '</div>' : '') +
+    '<label class="rq-fld">לאיזו לשונית?<select class="in" id="rq-xk"' + dis + '><option value="">' + (T.length ? 'בחר לשונית…' : 'טוען…') + '</option>' + T.map(t => '<option value="' + esc(t.kind) + '"' + (RQ.xKind === t.kind ? ' selected' : '') + '>' + esc(t.name) + '</option>').join('') + '</select></label>' +
+    '<label class="rq-fld">תאריך העבודה<input class="in" type="date" id="rq-xd" value="' + esc(RQ.xDate) + '"' + dis + '></label>' +
+    (RQ.xKind ? '<label class="rq-fld">חשבון<select class="in" id="rq-xa"' + dis + '>' + (accs.length ? accs.map(a => '<option value="' + esc(a.id) + '"' + (RQ.xAcc === a.id ? ' selected' : '') + '>' + esc(a.title || tabName(RQ.xKind)) + '</option>').join('') : '<option value="">' + (RQ.xKind === 'morning' ? 'אין חשבון בוקר לתאריך הזה' : esc(tabName(RQ.xKind)) + ' חדש לתאריך הזה') + '</option>') + '</select></label>' : '') +
+    (RQ.xKind ? '<button class="btn" type="button" data-rq-xgo="' + esc(r.id) + '"' + dis + '>' + (RQ.xBusy ? 'מעביר…' : 'העבר ל' + esc(tabName(RQ.xKind))) + '</button>' : '') + '<button class="btn plain" type="button" data-rq-xno="1"' + dis + '>ביטול</button>' +
     (RQ.xErr ? '<div class="note err" role="alert" style="flex-basis:100%">' + esc(RQ.xErr) + '</div>' : '') + '</div>';
 }
 async function rqXferOpen(id) {
-  RQ.xFor = id; RQ.xDate = RQ.xDate || todayISO(); RQ.xSplit = ''; RQ.xErr = ''; RQ.xOp = uid(); rqRender();
-  if (!RQ.splits) { try { RQ.splits = await get('/api/accounts?kind=split'); } catch { RQ.splits = []; } }
+  const r = rqGet(id);
+  RQ.xFor = id; RQ.xDate = (r && r.xfer && r.xfer.date) || RQ.xDate || todayISO(); RQ.xKind = ''; RQ.xAcc = ''; RQ.xErr = ''; RQ.xOp = uid(); rqRender();
+  try { const [t, a] = await Promise.all([get('/api/loan-req/targets'), get('/api/accounts')]); RQ.targets = t; RQ.accs = a; } catch { RQ.targets = RQ.targets || []; RQ.accs = RQ.accs || []; }
   rqXferPick(); rqRender();
 }
-function rqXferPick() { const ss = (RQ.splits || []).filter(a => a.date === RQ.xDate); if (!ss.some(a => a.id === RQ.xSplit)) RQ.xSplit = ss[0] ? ss[0].id : ''; }
+function rqXferPick() { const ss = (RQ.accs || []).filter(a => a.kind === RQ.xKind && a.date === RQ.xDate); if (!ss.some(a => a.id === RQ.xAcc)) RQ.xAcc = ss[0] ? ss[0].id : ''; }
 async function rqXferGo(id) {
   const r = rqGet(id); if (!r || RQ.xBusy) return;
+  if (!RQ.xKind) { RQ.xErr = 'בחר לשונית.'; return rqRender(); }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(RQ.xDate)) { RQ.xErr = 'בחר תאריך עבודה.'; return rqRender(); }
+  const name = tabName(RQ.xKind), sig = RQ.xKind + '|' + RQ.xDate + '|' + RQ.xAcc;
+  if (RQ.xSig !== sig) { RQ.xSig = sig; RQ.xOp = uid(); } // אותו יעד בניסיון חוזר — אותו מזהה פעולה (לא מועבר פעמיים)
   RQ.xBusy = true; RQ.xErr = ''; rqRender();
   try {
-    const out = await save('POST', '/api/loan-req/xfer', { id, date: RQ.xDate, splitId: RQ.xSplit || undefined, opId: RQ.xOp }, { label: 'העברת בקשה לפיצול', queue: false });
+    const out = await save('POST', '/api/loan-req/xfer', { id, kind: RQ.xKind, date: RQ.xDate, accId: RQ.xAcc || undefined, opId: RQ.xOp }, { label: 'העברת בקשה ל' + name, queue: false });
     r.xfer = out.xfer; if (out.version) r._version = out.version;
-    RQ.xBusy = false; RQ.xFor = null; RQ.splits = null; RQ.flash = id; rqRender();
-    toast(out.already ? 'הבקשה כבר הועברה לפיצול של ' + isoLabel(out.xfer.date) : 'הבקשה של ' + r.name + ' הועברה לפיצול של ' + isoLabel(out.xfer.date));
+    RQ.xBusy = false; RQ.xFor = null; RQ.accs = null; RQ.flash = id; rqRender();
+    toast(out.already ? 'הבקשה כבר נמצאת ב' + name + ' של ' + isoLabel(out.xfer.date) : 'הבקשה של ' + r.name + (out.moved ? ' עברה ל' : ' הועברה ל') + name + ' של ' + isoLabel(out.xfer.date));
     clearTimeout(RQ.flT); RQ.flT = setTimeout(() => { RQ.flash = null; rqRender(); }, 2600);
-  } catch (e) { RQ.xBusy = false; RQ.xErr = 'ההעברה לא נשמרה: ' + failMsg(e).replace(/ הפעולה תישלח.*$/, '') + ' לחץ שוב ״העבר״ — הבקשה לא תועבר פעמיים.'; rqRender(); }
+  } catch (e) { RQ.xBusy = false; RQ.xErr = 'ההעברה לא נשמרה: ' + failMsg(e).replace(/ הפעולה תישלח.*$/, '') + ' לחץ שוב — הבקשה לא תועבר פעמיים.'; rqRender(); }
 }
 // שורת הסיכום: תמיד הסכום של כל הבקשות, ובזמן חיפוש גם הסכום של הבקשות שתואמות
 function rqRenderSum(all, hits, q) {
@@ -232,7 +242,8 @@ async function renderRequestsPage(view) {
   });
   $('#rq-list').addEventListener('change', e => {
     if (e.target.id === 'rq-xd') { RQ.xDate = e.target.value; rqXferPick(); rqRender(); }
-    else if (e.target.id === 'rq-xs') RQ.xSplit = e.target.value;
+    else if (e.target.id === 'rq-xk') { RQ.xKind = e.target.value; RQ.xErr = ''; rqXferPick(); rqRender(); }
+    else if (e.target.id === 'rq-xa') RQ.xAcc = e.target.value;
   });
   RQ.xFor = null; RQ.xBusy = false; RQ.xErr = '';
   rqRender();

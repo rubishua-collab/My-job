@@ -34,7 +34,7 @@ const wait = (ms) => new Promise(r => setTimeout(r, ms));
   ];
   for (const [id, name, amount, date, note, xd, c] of reqs) {
     await api('POST', '/api/docs/loan_requests', { id, data: { name, amount, date, note, phone: '', created: '', updated: '' }, opId: 'q' + id });
-    await api('POST', '/api/loan-req/xfer', { id, date: xd, opId: 'x' + id });
+    await api('POST', '/api/loan-req/xfer', { id, kind: 'work', date: xd, opId: 'x' + id });
     if (c) await api('POST', '/api/loan-req/give', { id, c, chk: 5, opId: 'g' + id });
   }
   const before = await api('GET', '/api/accounts/' + W);

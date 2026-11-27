@@ -45,10 +45,10 @@ function panel(ctx, work) {
   const L = ctx.a._lreq || []; if (!L.length) return '';
   css();
   return `<div class="card" id="lrq-panel"><div class="row sp"><h2>בקשות הלוואה</h2><span class="small muted">${L.length === 1 ? 'בקשה אחת' : L.length + ' בקשות'}</span></div>
-    <p class="small muted" style="margin:0">${work ? 'הסכום לא נכלל בגביות. אחרי אישור המסירה נרשמת הוצאה אחת ״מתן הלוואה״ על שם הגובה שמסר.' : 'מוצג גם ב״איסוף יום״ של אותו תאריך. לא נכלל בסכומי הפיצול, בגביות או בהוצאות.'}</p>
-    ${L.map(q => itemHTML(q, work)).join('')}</div>`;
+    <p class="small muted" style="margin:0">${work || L.some(q => q.xfer && (q.xfer.kind || 'split') === ctx.a.kind) ? 'הסכום לא נכלל בגביות או בהוצאות. אחרי אישור המסירה נרשמת הוצאה אחת ״מתן הלוואה״ על שם הגובה שמסר, באיסוף היום של התאריך.' : 'מוצג גם ב״איסוף יום״ של אותו תאריך. לא נכלל בסכומי הפיצול, בגביות או בהוצאות.'}</p>
+    ${L.map(q => itemHTML(q, work || !!(q.xfer && (q.xfer.kind || 'split') === ctx.a.kind))).join('')}</div>`; // אישור המסירה — באיסוף יום, או בלשונית שהבקשה שובצה אליה
 }
-function repaint(ctx, focus) { const el = $('#lrq-panel', ctx.view); if (!el) return; el.outerHTML = panel(ctx, true); bindWork(ctx); if (focus) { const i = $(`[data-lrk="${window.CSS.escape(focus)}"]`, ctx.view); if (i) { i.scrollIntoView({ block: 'center' }); i.focus(); } } }
+function repaint(ctx, focus) { const el = $('#lrq-panel', ctx.view); if (!el) return; el.outerHTML = panel(ctx, ctx.a.kind === 'work'); bindWork(ctx); if (focus) { const i = $(`[data-lrk="${window.CSS.escape(focus)}"]`, ctx.view); if (i) { i.scrollIntoView({ block: 'center' }); i.focus(); } } }
 function bindWork(ctx) {
   const box = $('#lrq-panel', ctx.view); if (!box) return;
   if (!COLLS && (ctx.a._lreq || []).some(q => !q.given)) collectorsList().then(l => { COLLS = l; repaint(ctx); });
@@ -72,5 +72,7 @@ function bindWork(ctx) {
     }
   });
 }
-accountPanel('split', (ctx) => panel(ctx, false));
+accountPanel('split', (ctx) => panel(ctx, false), bindWork);
 accountPanel('work', (ctx) => panel(ctx, true), bindWork);
+accountPanel('morning', (ctx) => panel(ctx, false), bindWork);
+accountPanel('collectors', (ctx) => panel(ctx, false), bindWork);

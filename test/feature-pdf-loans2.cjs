@@ -30,7 +30,7 @@ const wait = (ms) => new Promise(r => setTimeout(r, ms));
   const { id: W } = await api('POST', '/api/accounts', { kind: 'work', date: DATE, opId: 'w' });
   { const a = await api('GET', '/api/accounts/' + W); const E = []; for (let i = 0; i < 18; i++) E.push({ _k: 'e' + i, n: 'לקוח ' + (i + 1), a: 1000 + 100 * i, c: ['אושר', 'בן', 'שליח בן'][i % 3], t: String(9 + (i % 9)).padStart(2, '0') + ':00', s: i % 3 ? '' : 'נאסף' }); await api('PUT', '/api/accounts/' + W, { data: { ...strip(a), entries: E }, baseVersion: a._version, opId: 'wf' }); }
   await api('POST', '/api/accounts', { kind: 'collectors', date: DATE, opId: 'c' });
-  const mkReq = async (id, name, amount, date, note, chk) => { await api('POST', '/api/docs/loan_requests', { id, data: { name, amount, date, note, phone: '', chk: chk ?? '', created: '', updated: '' }, opId: 'q' + id }); await api('POST', '/api/loan-req/xfer', { id, date: DATE, opId: 'x' + id }); };
+  const mkReq = async (id, name, amount, date, note, chk) => { await api('POST', '/api/docs/loan_requests', { id, data: { name, amount, date, note, phone: '', chk: chk ?? '', created: '', updated: '' }, opId: 'q' + id }); await api('POST', '/api/loan-req/xfer', { id, kind: 'work', date: DATE, opId: 'x' + id }); };
   await mkReq('Qliot', 'ליאור נבא', 10000, '2026-11-24', '1650 כפול 10', 10);
   await mkReq('Qron', 'רונן בוריסוב', 3200, '2026-11-25', 'חידוש', 1);
   await mkReq('Qd1', 'דנה כהן', 5000, '2026-11-26', 'שבועי 500', 10);
