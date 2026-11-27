@@ -2,6 +2,7 @@
 // יומן תשלומים, מחיקה עם אישור, טלפון, PDF ללקוח ושליחה בוואטסאפ; ולוח בקרה של תיק ההלוואות במסך ״היום״.
 // מקור: app.html — לשונית 1454-1491, קוד 6509-7087, לוח בקרה 5699-5845. נוסחאות הכסף מיובאות מ-calc.js כמו שהן.
 // כל שמירה עוברת דרך /api/docs/loans (גרסה + מזהה פעולה), כך שלחיצה כפולה או ניסיון חוזר לא רושמים פעמיים, וכל שינוי נרשם ביומן השינויים.
+import { termsFieldsHTML, termsOutHTML, mountTerms } from './loan-terms.js';
 import { get, save } from '../api.js';
 import { $, $$, esc, fmt, money, dmy, todayISO, toast, openSheet } from '../ui.js';
 import { App, onLive } from '../app.js';
@@ -112,42 +113,17 @@ let cssDone = false;
 export function lnCss() { if (cssDone) return; cssDone = true; const s = document.createElement('style'); s.textContent = CSS; document.head.appendChild(s); }
 
 // ---------------- טופס הלוואה חדשה (מקור: 6578-6641) ----------------
-function lnSetType(t) { LN.type = t; $('#ln-seg-m').setAttribute('aria-pressed', String(t === 'month')); $('#ln-seg-w').setAttribute('aria-pressed', String(t === 'week')); $('#ln-rate-l').textContent = t === 'month' ? 'ריבית לחודש (%)' : 'ריבית לשבוע (%)'; $('#ln-pay-l').textContent = t === 'month' ? 'החזר חודשי קבוע (₪)' : 'החזר שבועי קבוע (₪)'; lnPreview(); }
-function lnSetMode(m) { LN.mode = m; $('#ln-seg-n').setAttribute('aria-pressed', String(m === 'n')); $('#ln-seg-p').setAttribute('aria-pressed', String(m === 'pay')); $('#ln-l-n').hidden = m !== 'n'; $('#ln-l-p').hidden = m !== 'pay'; lnPreview(); }
-export function lnFormLoan() {
-  const L = { name: $('#ln-f-name').value.trim(), phone: $('#ln-f-phone').value.trim(), amount: parseFloat($('#ln-f-amount').value), rate: parseFloat($('#ln-f-rate').value), type: LN.type, date: $('#ln-f-date').value || todayISO(), mode: LN.mode };
-  if (LN.mode === 'pay') { L.payAmt = parseFloat($('#ln-f-pay').value); const s = isNaN(L.rate) ? null : lnSchedule(L); L.n = s ? s.rows.length : 0; }
-  else L.n = parseInt($('#ln-f-n').value, 10);
-  return L;
-}
-function lnPreviewSummary() {
-  const L = lnFormLoan(), s = lnSchedule(Object.assign({}, L, { rate: isNaN(L.rate) ? 0 : L.rate }));
-  const unit = L.type === 'month' ? 'חודשי' : 'שבועי', box = $('#ln-prev');
-  if (!s || isNaN(L.rate)) {
-    let m = L.mode === 'pay' ? 'מלא סכום, ריבית והחזר קבוע כדי לראות את החישוב' : 'מלא סכום, ריבית ומספר תשלומים כדי לראות את החישוב', bad = false;
-    if (L.mode === 'pay' && L.amount > 0 && !isNaN(L.rate) && L.payAmt > 0 && L.payAmt <= lnR2(L.amount * L.rate / 100)) { m = 'ההחזר נמוך מדי: הריבית הראשונה היא ' + lnFmt(lnR2(L.amount * L.rate / 100)) + ', ההחזר חייב להיות גבוה ממנה כדי שהקרן תרד'; bad = true; }
-    box.innerHTML = '<div class="msg' + (bad ? ' bad' : '') + '">' + esc(m) + '</div>'; return;
-  }
-  const last = s.rows[s.rows.length - 1];
-  const it = (l, v) => '<div><span>' + l + '</span><b class="num">' + v + '</b></div>';
-  let h = it('תשלום ' + unit + ' קבוע', lnFmt(s.pay)) + it('סה״כ ריבית', lnFmt(s.totalInt)) + it('סה״כ להחזר', lnFmt(s.totalPay)) + it('תאריך התשלום האחרון', lnD(last.date));
-  if (L.mode === 'pay') h += it('מספר תשלומים', s.rows.length) + it('תשלום אחרון (סוגר)', lnFmt(last.payment));
-  box.innerHTML = h;
-}
-function lnPreviewTable() {
-  const L = lnFormLoan(), box = $('#ln-sched-wrap');
-  const s = isNaN(L.rate) ? null : lnSchedule(L);
-  if (!s) { box.hidden = true; $('#ln-sched').innerHTML = ''; return; }
-  box.hidden = false;
-  $('#ln-sched').innerHTML = '<table class="ln-tbl"><thead><tr><th>#</th><th>תאריך</th><th>יתרת פתיחה</th><th>תשלום</th><th>ריבית</th><th>קרן</th><th>יתרת סגירה</th></tr></thead><tbody>' +
-    s.rows.map(x => '<tr><td><span class="num">' + x.i + '</span></td><td><span class="num">' + lnD(x.date) + '</span></td><td>' + lnMoney(x.open) + '</td><td>' + lnMoney(x.payment) + '</td><td>' + lnMoney(x.interest) + '</td><td>' + lnMoney(x.principal) + '</td><td>' + lnMoney(x.close) + '</td></tr>').join('') +
-    '</tbody><tfoot><tr><td colspan="3">סה״כ</td><td>' + lnMoney(s.totalPay) + '</td><td>' + lnMoney(s.totalInt) + '</td><td>' + lnMoney(L.amount) + '</td><td></td></tr></tfoot></table>';
-}
-function lnPreview() { lnPreviewSummary(); lnPreviewTable(); }
+// תנאי ההלוואה ולוח הסילוקין — הרכיב המשותף (loan-terms.js), אותו רכיב שבבקשות להלוואה
+let LNT = null;
+function lnSetType(t) { LNT && LNT.setType(t); }
+function lnSetMode(m) { LNT && LNT.setMode(m); }
+const lnBase = () => ({ name: $('#ln-f-name').value.trim(), phone: $('#ln-f-phone').value.trim(), amount: parseFloat($('#ln-f-amount').value), date: $('#ln-f-date').value || todayISO() });
+export function lnFormLoan() { return LNT.loan(); }
+function lnPreview() { LNT && LNT.render(); }
 function lnFormMsg(t) { const m = $('#ln-form-msg'); m.hidden = !t; m.textContent = t || ''; }
 function lnOpenForm() {
-  $('#ln-form').hidden = false; ['name', 'phone', 'amount', 'rate', 'n', 'pay'].forEach(k => { $('#ln-f-' + k).value = ''; }); $('#ln-f-date').value = todayISO(); lnFormMsg('');
-  lnSetMode('n'); lnSetType('month'); $('#ln-f-name').focus();
+  $('#ln-form').hidden = false; ['name', 'phone', 'amount'].forEach(k => { $('#ln-f-' + k).value = ''; }); $('#ln-f-date').value = todayISO(); lnFormMsg('');
+  LNT.set({}); $('#ln-f-name').focus();
 }
 async function lnSave() {
   const L = lnFormLoan();
@@ -424,15 +400,10 @@ async function renderLoansPage(view, args) {
       <label class="ln-fld" for="ln-f-name">שם הלווה<input class="in" id="ln-f-name" type="text" autocomplete="off" placeholder="לדוגמה: משה כהן"></label>
       <label class="ln-fld" for="ln-f-phone">טלפון וואטסאפ<input class="in n" id="ln-f-phone" type="tel" inputmode="tel" autocomplete="off" placeholder="050-0000000"></label>
       <label class="ln-fld" for="ln-f-amount">סכום ההלוואה (₪)<input class="in n" id="ln-f-amount" type="number" inputmode="decimal" min="0" step="any"></label>
-      <div class="ln-fld"><span>סוג</span><div class="ln-seg" role="group" aria-label="סוג ההלוואה"><button type="button" id="ln-seg-m" aria-pressed="true">חודשית</button><button type="button" id="ln-seg-w" aria-pressed="false">שבועית</button></div></div>
-      <label class="ln-fld" for="ln-f-rate"><span id="ln-rate-l">ריבית לחודש (%)</span><input class="in n" id="ln-f-rate" type="number" inputmode="decimal" min="0" step="any"></label>
-      <div class="ln-fld"><span>חישוב לפי</span><div class="ln-seg" role="group" aria-label="חישוב לפי"><button type="button" id="ln-seg-n" aria-pressed="true">מספר תשלומים</button><button type="button" id="ln-seg-p" aria-pressed="false">החזר קבוע</button></div></div>
-      <label class="ln-fld" for="ln-f-n" id="ln-l-n">מספר תשלומים<input class="in n" id="ln-f-n" type="number" inputmode="numeric" min="1" step="1"></label>
-      <label class="ln-fld" for="ln-f-pay" id="ln-l-p" hidden><span id="ln-pay-l">החזר חודשי קבוע (₪)</span><input class="in n" id="ln-f-pay" type="number" inputmode="decimal" min="0" step="any"></label>
+      ${termsFieldsHTML('ln')}
       <label class="ln-fld" for="ln-f-date">תאריך מתן ההלוואה<input class="in" id="ln-f-date" type="date"></label>
     </div>
-    <div class="ln-prev" id="ln-prev" aria-live="polite"></div>
-    <div id="ln-sched-wrap" hidden><h3 style="margin-bottom:8px">לוח הסילוקין</h3><div class="tbl-wrap ln-sched" id="ln-sched"></div></div>
+    ${termsOutHTML('ln')}
     <div class="row" style="margin-top:10px"><button class="btn" id="ln-save" type="button">שמור הלוואה</button><button class="btn plain" id="ln-cancel" type="button">ביטול</button></div>
     <div class="note err" id="ln-form-msg" hidden></div>
   </div>
@@ -440,9 +411,8 @@ async function renderLoansPage(view, args) {
     <div id="ln-state" class="note info" hidden></div>
     <div class="ln-items" id="ln-list"><div class="empty small">טוען הלוואות…</div></div></div>
   <div class="card" id="ln-detail" hidden></div>`;
-  ['name', 'amount', 'rate', 'n', 'pay', 'date'].forEach(k => $('#ln-f-' + k).addEventListener('input', lnPreview));
-  $('#ln-seg-m').onclick = () => lnSetType('month'); $('#ln-seg-w').onclick = () => lnSetType('week');
-  $('#ln-seg-n').onclick = () => lnSetMode('n'); $('#ln-seg-p').onclick = () => lnSetMode('pay');
+  LNT = mountTerms(view, 'ln', { base: lnBase });
+  ['name', 'amount', 'date'].forEach(k => $('#ln-f-' + k).addEventListener('input', lnPreview));
   const nb = $('#ln-new'); if (nb) nb.onclick = lnOpenForm;
   $('#ln-cancel').onclick = () => { $('#ln-form').hidden = true; };
   $('#ln-save').onclick = lnSave;

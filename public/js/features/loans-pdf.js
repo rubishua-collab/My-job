@@ -43,7 +43,8 @@ function host() {
 }
 
 // מקור: lnSheetPages, שורות 6873-6900 (ללא שינוי)
-export function lnSheetPages(L){
+// opts.title — כותרת (״הצעת הלוואה ולוח תשלומים״ לפני מסירה); opts.extra — [[תווית, ערך]] נוספים (חידוש: קיזוז וסכום למסירה)
+export function lnSheetPages(L,opts={}){
   const s=lnSchedule(L), unit=L.type==='week'?'שבוע':'חודש', paid=L.paid||{};
   const first=20, rest=30, chunks=[s.rows.slice(0,first)];
   for(let i=first;i<s.rows.length;i+=rest)chunks.push(s.rows.slice(i,i+rest));
@@ -52,17 +53,17 @@ export function lnSheetPages(L){
   return chunks.map((rows,pi)=>{
     const last=pi===chunks.length-1;
     return '<div class="ln-sheet">'+
-      (pi===0?'<div class="hd"><div><h3>לוח סילוקין</h3><div class="dt">הופק ב-<span class="num">'+lnD(todayISO())+'</span></div></div><div class="who"><div class="dt">לווה</div><b>'+esc(L.name)+'</b></div></div>'+
+      (pi===0?'<div class="hd"><div><h3>'+esc(opts.title||'לוח סילוקין')+'</h3><div class="dt">הופק ב-<span class="num">'+lnD(todayISO())+'</span></div></div><div class="who"><div class="dt">לווה</div><b>'+esc(L.name)+'</b></div></div>'+
       '<div class="info">'+
         '<div><span>סכום ההלוואה</span><b>'+m(L.amount)+'</b></div>'+
         '<div><span>ריבית ל'+unit+'</span><b class="num">'+esc(L.rate)+'%</b></div>'+
         '<div><span>מספר תשלומים</span><b>'+s.rows.length+' ('+(L.type==='week'?'שבועיים':'חודשיים')+')</b></div>'+
-        '<div><span>תאריך מתן</span><b class="num">'+lnD(L.date)+'</b></div>'+
+        (opts.title?'':'<div><span>תאריך מתן</span><b class="num">'+lnD(L.date)+'</b></div>')+'<div><span>תשלום ראשון</span><b class="num">'+lnD(s.rows[0].date)+'</b></div>'+
         '<div><span>תשלום קבוע</span><b>'+m(s.pay)+'</b></div>'+
         '<div><span>סה״כ ריבית</span><b>'+m(s.totalInt)+'</b></div>'+
         '<div><span>סה״כ להחזר</span><b>'+m(s.totalPay)+'</b></div>'+
-        '<div><span>תשלום אחרון</span><b class="num">'+lnD(s.rows[s.rows.length-1].date)+'</b></div>'+
-      '</div>':'<div class="hd cont"><h3>לוח סילוקין · '+esc(L.name)+' (המשך)</h3></div>')+
+        '<div><span>תשלום אחרון</span><b class="num">'+lnD(s.rows[s.rows.length-1].date)+'</b></div>'+(opts.extra||[]).map(([l,v])=>'<div><span>'+esc(l)+'</span><b>'+m(v)+'</b></div>').join('')+
+      '</div>':'<div class="hd cont"><h3>'+esc(opts.title||'לוח סילוקין')+' · '+esc(L.name)+' (המשך)</h3></div>')+
       '<table>'+head+'<tbody>'+rows.map(x=>'<tr><td><span class="num">'+x.i+'</span></td><td><span class="num">'+lnD(x.date)+'</span></td><td>'+m(x.open)+'</td><td>'+m(x.payment)+'</td><td>'+m(x.interest)+'</td><td>'+m(x.principal)+'</td><td>'+m(x.close)+'</td><td class="pd">'+(paid[x.i]?'שולם':(lnPart(L,x.i).a>0?'חלקי '+lnFmt(lnPart(L,x.i).a):''))+'</td></tr>').join('')+'</tbody>'+
       (last?'<tfoot><tr><td colspan="3">סה״כ</td><td>'+m(s.totalPay)+'</td><td>'+m(s.totalInt)+'</td><td>'+m(L.amount)+'</td><td></td><td></td></tr></tfoot>':'')+'</table>'+
       '<div class="ft"><span>חישוב בריבית יורדת על יתרת הקרן</span><span>עמוד '+(pi+1)+' מתוך '+chunks.length+'</span></div>'+
@@ -71,12 +72,12 @@ export function lnSheetPages(L){
 }
 
 // מקור: lnBuildPdf, שורות 6901-6917. הספריות נטענות מקומית (public/vendor)
-export async function lnBuildPdf(L){
+export async function lnBuildPdf(L,opts={}){
   await Promise.all([loadVendor('html2canvas.min.js'), loadVendor('jspdf.umd.min.js')]);
   if(!window.html2canvas||!window.jspdf) throw new Error('ספריית ה-PDF לא נטענה');
   try{ await document.fonts.ready; }catch(e){}
   const h=host(), pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
-  const pages=lnSheetPages(L);
+  const pages=lnSheetPages(L,opts);
   try{
     for(let i=0;i<pages.length;i++){
       h.innerHTML=pages[i];

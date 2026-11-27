@@ -208,7 +208,7 @@ export function lnSchedule(L){
     let principal=lnR2(pay-interest), payment=pay;
     if(i===n){principal=lnR2(bal);payment=lnR2(principal+interest)}
     const close=lnR2(bal-principal);
-    rows.push({i,date:lnAddPeriod(L.date,L.type,i),open:lnR2(bal),payment,interest,principal,close:Math.max(0,close)});
+    rows.push({i,date:L.first?lnAddPeriod(L.first,L.type,i-1):lnAddPeriod(L.date,L.type,i),open:lnR2(bal),payment,interest,principal,close:Math.max(0,close)});
     bal=close;
   }
   const tot=rows.reduce((a,x)=>({pay:a.pay+x.payment,int:a.int+x.interest}),{pay:0,int:0});
@@ -225,7 +225,7 @@ export function lnSchedulePay(L){
     let principal=lnR2(pay-interest), payment=pay;
     if(lnR2(bal+interest)<=pay){principal=bal;payment=lnR2(bal+interest)}
     const close=lnR2(bal-principal);
-    rows.push({i,date:lnAddPeriod(L.date,L.type,i),open:bal,payment,interest,principal,close:Math.max(0,close)});
+    rows.push({i,date:L.first?lnAddPeriod(L.first,L.type,i-1):lnAddPeriod(L.date,L.type,i),open:bal,payment,interest,principal,close:Math.max(0,close)});
     bal=close;
   }
   if(bal>0.004) return null;

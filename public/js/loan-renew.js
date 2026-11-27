@@ -3,6 +3,20 @@
 // דוגמה: 5,000 ב-10 תשלומים של 750, שולמו 5 → יתרה 3,750. חידוש על 5,000 → ללקוח 1,250.
 import { lnSchedule, lnPart, r2, num } from './calc.js';
 
+// תנאי הלוואה (מהרכיב המשותף) + סכום/שם/תאריך → אובייקט הלוואה, כמו שנשמר ב״הלוואות״. משמש גם את השרת באישור המסירה
+export function loanFromTerms(t, { amount, name = '', phone = '', date } = {}) {
+  t = t || {};
+  const L = { name, phone, amount: +amount, rate: parseFloat(t.rate), type: t.type === 'week' ? 'week' : 'month', date: date || t.date || new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Jerusalem' }), mode: t.mode === 'pay' ? 'pay' : 'n', ...(t.first ? { first: t.first } : {}) };
+  if (L.mode === 'pay') { L.payAmt = parseFloat(t.payAmt); const s = isNaN(L.rate) ? null : lnSchedule(L); L.n = s ? s.rows.length : 0; }
+  else L.n = parseInt(t.n, 10);
+  return L;
+}
+// צילום הלוח לשמירה בבקשה (מה שהוצג ונשלח ללקוח)
+export function schedSnap(L) {
+  const s = lnSchedule(L); if (!s) return null;
+  return { pay: s.pay, totalPay: s.totalPay, totalInt: s.totalInt, n: s.rows.length, rows: s.rows.map(x => ({ i: x.i, date: x.date, open: x.open, payment: x.payment, interest: x.interest, principal: x.principal, close: x.close })) };
+}
+
 // יתרת החוב = סכום התשלומים שעוד לא שולמו (פחות תשלומים חלקיים שנרשמו עליהם)
 export function loanOwe(L) {
   const s = L && lnSchedule(L); if (!s) return { owe: 0, rows: [] };

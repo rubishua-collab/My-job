@@ -5,7 +5,8 @@
 // באיסוף היום ובחשבון הגובים (עותק מקושר xk), כמו ״הוסף הוצאה״. מזהה ההוצאה נגזר ממזהה הבקשה (xL + מזהה),
 // כך שלחיצה כפולה, ניסיון חוזר אחרי ניתוק או פתיחה משני מכשירים לא יוצרים הוצאה נוספת.
 import { num, r2, cleanColl, CHANGE, NOC_SP } from '../../public/js/calc.js';
-import { loanOwe, renewCalc, termsFrom, solveRate } from '../../public/js/loan-renew.js';
+import { loanOwe, renewCalc, termsFrom, solveRate, loanFromTerms } from '../../public/js/loan-renew.js';
+import { lnSchedule } from '../../public/js/calc.js';
 import { mainWork } from './day-expense.js';
 import { KIND_NAMES } from '../data.js';
 
@@ -112,8 +113,11 @@ export async function register(ctx) {
       // ההלוואה החדשה (מזהה לפי הבקשה — לחיצה חוזרת לא יוצרת שנייה): הסכום שנרשם, ותנאי ההחזר מהפירוט (״750 כפול 10״) או ממספר השיקים
       const newLoanId = 'LR' + d.id;
       if (!getDoc('loans', newLoanId)) {
-        const T = termsFrom(q, loanA);
-        const L = { name: String(q.name || '').trim(), phone: q.phone || '', amount: loanA, rate: T.rate, n: T.n, type: 'month', date, mode: 'n', paid: {}, created: new Date(t).toISOString(), fromReq: d.id, ...(T.need ? { needTerms: 1 } : {}), ...(R.prev ? { renewOf: R.prev.id, offsetIn: offset } : {}), note: q.note || '' };
+        // לפי הלוח ששמרת בבקשה (אותם תנאים ותאריכים → אותו לוח); בלי לוח שמור — מהפירוט / ממספר השיקים
+        const LT = q.terms ? loanFromTerms(q.terms, { amount: loanA, name: String(q.name || '').trim(), phone: q.phone || '', date: q.terms.date || date }) : null;
+        const T = LT && !isNaN(LT.rate) && lnSchedule(LT) ? null : termsFrom(q, loanA);
+        const base = LT && !T ? { ...LT } : { name: String(q.name || '').trim(), phone: q.phone || '', amount: loanA, rate: T.rate, n: T.n, type: 'month', date, mode: 'n', ...(T.need ? { needTerms: 1 } : {}) };
+        const L = { ...base, paid: {}, created: new Date(t).toISOString(), fromReq: d.id, ...(R.prev ? { renewOf: R.prev.id, offsetIn: offset } : {}), note: q.note || '' };
         putDoc('loans', newLoanId, L, { user, action: R.prev ? 'הלוואה חדשה (חידוש)' : 'הלוואה חדשה', item: L.name, note: loanA + ' ₪' });
       }
       // ההלוואה הקודמת: היתרה ״קוזזה בחידוש״ — כל תשלום פתוח מסומן כסגור, כדי שלא יישאר לגבייה

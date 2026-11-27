@@ -3,7 +3,11 @@
 import { get, save, uid } from '../api.js';
 import { lreqStatus, chkLine } from './loan-flow.js';
 import { chkOk } from './loans-box.js';
-import { renewCalc, loanOwe } from '../loan-renew.js';
+import { renewCalc, loanOwe, loanFromTerms, schedSnap } from '../loan-renew.js';
+import { termsFieldsHTML, termsOutHTML, mountTerms, tableHTML } from './loan-terms.js';
+import { lnCss } from './loans.js';
+import { lnBuildPdf, lnFmt, lnD } from './loans-pdf.js';
+import { openSheet } from '../ui.js';
 import { $, $$, esc, fmt, money, dmy, todayISO, toast } from '../ui.js';
 import { App, onLive } from '../app.js';
 import { route, more } from '../registry.js';
@@ -69,11 +73,11 @@ function rqItemHTML(r, can) {
   if (can) {
     act = RQ.delFor === r.id
       ? '<div class="ln-confirm"><span>למחוק את הבקשה של ' + esc(r.name) + ' על ' + money(num(r.amount)) + '?</span><button class="btn danger sm" type="button" data-rq-yes="' + esc(r.id) + '"' + (RQ.busy ? ' disabled' : '') + '>' + (RQ.busy ? 'מוחק…' : 'כן, מחק') + '</button><button class="btn plain sm" type="button" data-rq-no="1"' + (RQ.busy ? ' disabled' : '') + '>ביטול</button></div>'
-      : (RQ.xFor === r.id ? rqXferForm(r) : '<div class="rq-act">' + '<button class="btn sm' + (r.xfer ? ' ghost' : '') + '" type="button" data-rq-xfer="' + esc(r.id) + '">' + (r.xfer ? 'שנה לשונית' : 'העבר ללשונית') + '</button>' + '<button class="btn ghost sm" type="button" data-rq-edit="' + esc(r.id) + '">עריכה</button>' + (rqCanDel() ? '<button class="btn danger sm" type="button" data-rq-del="' + esc(r.id) + '">מחיקה</button>' : '') + '</div>');
+      : (RQ.xFor === r.id ? rqXferForm(r) : '<div class="rq-act">' + '<button class="btn sm' + (r.xfer ? ' ghost' : '') + '" type="button" data-rq-xfer="' + esc(r.id) + '">' + (r.xfer ? 'שנה לשונית' : 'העבר ללשונית') + '</button>' + (r.sched ? '<button class="btn sm" type="button" data-rq-pdf="' + esc(r.id) + '">שלח ללקוח PDF</button>' : '') + '<button class="btn ghost sm" type="button" data-rq-edit="' + esc(r.id) + '">עריכה</button>' + (rqCanDel() ? '<button class="btn danger sm" type="button" data-rq-del="' + esc(r.id) + '">מחיקה</button>' : '') + '</div>');
   }
   const flow = r.xfer ? '<div class="rq-flow rq-dest"><span class="pill acc">הועברה ל' + esc(tabName(r.xfer.kind || 'split')) + '</span>' + '<span>תאריך עבודה: <b class="num">' + esc(isoLabel(r.xfer.date)) + '</b></span>' + lreqStatus(r) + '</div>' : '';
   return '<div class="rq-item' + (RQ.flash === r.id ? ' flash' : '') + (RQ.edit === r.id && !$('#rq-form').hidden ? ' editing' : '') + '" data-rq-id="' + esc(r.id) + '"><span class="rq-nm">' + esc(r.name) + '</span><span class="rq-amt">' + money(num(r.amount)) + '</span>' +
-    '<div class="rq-meta">' + meta.join('') + '</div>' + (String(r.note || '').trim() ? '<div class="rq-note">' + esc(r.note) + '</div>' : '') + amountsHTML(r) + (chkLine(r) ? '<div class="rq-flow rq-chk">' + chkLine(r) + '</div>' : '') + flow + act + '</div>';
+    '<div class="rq-meta">' + meta.join('') + '</div>' + (String(r.note || '').trim() ? '<div class="rq-note">' + esc(r.note) + '</div>' : '') + amountsHTML(r) + schedHTML(r) + (chkLine(r) ? '<div class="rq-flow rq-chk">' + chkLine(r) + '</div>' : '') + flow + act + '</div>';
 }
 // ״העבר ללשונית״ / ״שנה לשונית״: בוחרים לשונית (מהרשימה של התוכנה), תאריך עבודה וחשבון של אותו תאריך, ומאשרים ״העבר ל…״
 function rqXferForm(r) {
@@ -129,6 +133,34 @@ function rqLoanForm() {
   if (!(amount > 0)) { calc.innerHTML = '<span class="small muted">הזן סכום כדי לראות את הסכום למסירה</span>'; return; }
   calc.innerHTML = amountsHTML(Object.assign({ id: RQ.edit }, r));
 }
+// הלוח ששמרת בבקשה (צילום מלא — תאריכים וסכומים בדיוק כמו בשמירה)
+function schedHTML(r) {
+  if (!r.sched || !r.terms) return '';
+  const S = r.sched, unit = r.terms.type === 'week' ? 'שבועי' : 'חודשי';
+  return '<details class="rq-sch" data-rq-sch="' + esc(r.id) + '"><summary>' + (r.given ? 'לוח התשלומים' : 'הצעת לוח תשלומים') + ': ' + S.n + ' תשלומים · ' + unit + ' ' + esc(lnFmt(S.pay)) + ' · סה״כ להחזר ' + esc(lnFmt(S.totalPay)) + ' · ראשון ' + esc(lnD(S.rows[0].date)) + '</summary>' +
+    '<div class="small muted" style="margin:4px 0">ריבית ' + esc(r.terms.rate) + '% ל' + (r.terms.type === 'week' ? 'שבוע' : 'חודש') + ' · סה״כ ריבית ' + esc(lnFmt(S.totalInt)) + '</div><div class="tbl-wrap ln-sched">' + tableHTML({ amount: r.given && r.given.loanA != null ? r.given.loanA : r.amount }, S) + '</div></details>';
+}
+// ״שלח ללקוח PDF״: מהלוח השמור — צפייה, הורדה ושיתוף הקובץ עצמו (וואטסאפ בטלפון)
+async function rqPdf(id) {
+  const r = rqGet(id); if (!r || !r.terms) return;
+  const R = renewCalc(r, loanBy), amount = R.amount;
+  const L = loanFromTerms(r.terms, { amount, name: r.name, phone: r.phone, date: r.terms.date });
+  const title = r.given ? 'לוח סילוקין' : 'הצעת הלוואה ולוח תשלומים';
+  const extra = (R.kind === 'renew' ? [['קיזוז חוב קודם', R.offset]] : []).concat([[r.given ? 'הלקוח קיבל בפועל' : 'סכום למסירה ללקוח', R.hand]]);
+  const fname = (r.given ? 'לוח-סילוקין-' : 'הצעת-הלוואה-') + String(r.name || '').replace(/[\\/:*?"<>|\s]+/g, '-') + '.pdf';
+  const s = openSheet('<div class="hd"><h2>' + esc(title) + ' · ' + esc(r.name) + '</h2><button class="x" data-close>×</button></div><div id="rqp-st" class="small muted">מכין את ה-PDF…</div><div id="rqp-b" class="row" style="flex-wrap:wrap;gap:8px;margin-top:10px"></div>');
+  let blob; try { blob = await lnBuildPdf(L, { title, extra }); } catch (e) { s.el.querySelector('#rqp-st').innerHTML = '<span class="neg">לא הצלחתי ליצור PDF: ' + esc(e.message || '') + '</span>'; return; }
+  window.__rqPdf = blob; // לבדיקות
+  const url = URL.createObjectURL(blob), file = new File([blob], fname, { type: 'application/pdf' });
+  const text = title + ' — ' + r.name + ': ' + (r.sched ? r.sched.n + ' תשלומים של ' + lnFmt(r.sched.pay) : '');
+  s.el.querySelector('#rqp-st').textContent = 'הקובץ מוכן: ' + fname + ' (' + Math.round(blob.size / 1024) + ' KB)';
+  s.el.querySelector('#rqp-b').innerHTML = '<a class="btn ghost" id="rqp-view" href="' + url + '" target="_blank" rel="noopener">צפייה</a><a class="btn ghost" id="rqp-dl" href="' + url + '" download="' + esc(fname) + '">הורדה</a><button class="btn wa" type="button" id="rqp-share">שיתוף בוואטסאפ</button>';
+  s.el.querySelector('#rqp-share').onclick = async () => {
+    try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+    s.el.querySelector('#rqp-dl').click(); const ph = String(r.phone || '').replace(/\D/g, '').replace(/^0/, '972');
+    window.open('https://wa.me/' + (ph.length >= 11 ? ph : '') + '?text=' + encodeURIComponent(text + ' (הקובץ ירד — צרף אותו בשיחה)'), '_blank', 'noopener');
+  };
+}
 // שורת הסיכום: תמיד הסכום של כל הבקשות, ובזמן חיפוש גם הסכום של הבקשות שתואמות
 function rqRenderSum(all, hits, q) {
   const el = $('#rq-sum'); if (!el) return;
@@ -174,6 +206,7 @@ function rqFillForm(r) {
   $('#rq-f-chk').value = r && chkOk(r.chk) ? String(+r.chk) : '';
   $$('input[name="rq-f-lk"]').forEach(i => { i.checked = i.value === ((r && r.lk) || 'new'); i.disabled = !!(r && r.given); });
   RQ.fPrev = (r && r.prevLoan) || ''; rqLoanForm();
+  if (RQ.LT) { RQ.LT.set((r && r.terms) || {}); $$('#rq-terms input, #rq-terms button').forEach(x => { x.disabled = !!(r && r.given); }); }
   rqFormTitles(); rqFormMsg(''); rqAmtPrev();
 }
 function rqOpenForm(r) {
@@ -197,6 +230,15 @@ async function rqSave() {
   const now = new Date().toISOString(), id = old ? old.id : 'Q' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const doc = { name, amount, date, phone: $('#rq-f-phone').value.trim(), note: $('#rq-f-note').value.trim(), created: old && old.created ? old.created : now, updated: now };
   doc.chk = chkRaw ? +chkRaw : '';
+  if (old && old.given) { if (old.terms) doc.terms = old.terms; if (old.sched) doc.sched = old.sched; } // אחרי המסירה הלוח נעול — ההלוואה כבר נפתחה לפיו
+  else {
+    const t = RQ.LT.get(), any = String(t.rate).trim() || String(t.mode === 'pay' ? t.payAmt : t.n).trim();
+    if (any) {
+      const L = loanFromTerms(t, { amount, name, date }), sn = !isNaN(L.rate) ? schedSnap(L) : null;
+      if (!sn) { rqFormMsg('תנאי ההלוואה לא שלמים: ' + (t.mode === 'pay' ? 'ריבית והחזר קבוע (ההחזר גבוה מהריבית הראשונה).' : 'ריבית ומספר תשלומים.') + ' מלא אותם, או נקה אותם כדי לשמור בלי לוח.'); return; }
+      doc.terms = { ...t, date }; doc.sched = sn;
+    }
+  }
   const lk = ($('input[name="rq-f-lk"]:checked') || {}).value || 'new';
   if (old && old.given) { doc.lk = old.lk || 'new'; if (old.prevLoan) doc.prevLoan = old.prevLoan; } // אחרי המסירה סוג ההלוואה והקיזוז נעולים
   else { doc.lk = lk; if (lk === 'renew') { const pv = $('#rq-f-prev').value; if (!pv) { rqFormMsg('בחידוש הלוואה — בחר את ההלוואה הקודמת של הלקוח.'); $('#rq-f-prev').focus(); RQ.busy = false; $('#rq-save').disabled = false; rqFormTitles(); return; } doc.prevLoan = pv; } }
@@ -230,7 +272,7 @@ async function rqDelete(id) {
 }
 
 async function renderRequestsPage(view) {
-  css();
+  css(); lnCss();
   RQ.state = 'wait'; RQ.edit = null; RQ.delFor = null; RQ.busy = false;
   view.innerHTML = `<div class="band"><div class="grow"><div class="eyebrow">רישום בלבד — לא נכנס להלוואות, לקרן ולגבייה</div><h1>בקשות להלוואה</h1></div>
     <button class="btn" id="rq-new" type="button">+ הוספת בקשה</button></div>
@@ -247,6 +289,9 @@ async function renderRequestsPage(view) {
     <div class="rq-fld" style="margin-top:10px"><span>סוג ההלוואה</span><div class="rq-lk" role="radiogroup"><label><input type="radio" name="rq-f-lk" value="new" checked> הלוואה חדשה</label><label><input type="radio" name="rq-f-lk" value="renew"> חידוש הלוואה</label></div></div>
     <label class="rq-fld" id="rq-f-prevw" hidden style="margin-top:6px">ההלוואה הקודמת של הלקוח<select class="in" id="rq-f-prev"><option value="">בחר הלוואה…</option></select></label>
     <div class="rq-amts" id="rq-f-calc" style="margin-top:6px"></div>
+    <div class="rq-terms" id="rq-terms"><h3 style="margin:12px 0 4px">תנאי ההלוואה ולוח הסילוקין</h3>
+      <p class="small muted" style="margin:0 0 6px">שם הלקוח וסכום ההלוואה נלקחים מהבקשה. בחידוש הלוח מחושב על סכום ההלוואה החדשה. בשלב הבקשה הלוח הוא הצעה בלבד — ההלוואה נפתחת לפיו רק באישור המסירה.</p>
+      <div class="grid">${termsFieldsHTML('rq-t')}</div>${termsOutHTML('rq-t')}</div>
     <label class="rq-fld" for="rq-f-chk" style="margin-top:10px">לכמה שיקים חולקה ההלוואה?<input class="in n" id="rq-f-chk" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="למשל 10"><span class="small muted">אפשר לשמור בלי מספר ולהשלים בהמשך. חובה לפני אישור מסירה.</span></label>
     <p class="small muted"><span class="rq-req">*</span> שדה חובה. התאריך מתמלא בתאריך של היום, ואפשר לשנות אותו.</p>
     <div class="row"><button class="btn" id="rq-save" type="button">שמור בקשה</button><button class="btn plain" id="rq-cancel" type="button">ביטול</button></div>
@@ -265,7 +310,9 @@ async function renderRequestsPage(view) {
   $('#rq-f-amount').addEventListener('input', () => { rqAmtPrev(); rqFormMsg(''); });
   $('#rq-f-amount').addEventListener('blur', e => { const v = e.target.value.trim(), a = r2(num(v)); if (v && a > 0) { const f = fmt(a); if (f !== v) e.target.value = f; } });
   $('#rq-f-name').addEventListener('input', () => { rqFormMsg(''); rqLoanForm(); });
-  $('#rq-f-amount').addEventListener('input', () => rqLoanForm());
+  $('#rq-f-amount').addEventListener('input', () => { rqLoanForm(); RQ.LT.render(); });
+  RQ.LT = mountTerms(view, 'rq-t', { base: () => ({ amount: r2(num($('#rq-f-amount').value)), name: $('#rq-f-name').value.trim(), phone: $('#rq-f-phone').value.trim(), date: $('#rq-f-date').value || todayISO() }) });
+  ['#rq-f-name', '#rq-f-date'].forEach(k => $(k).addEventListener('input', () => RQ.LT.render()));
   $$('input[name="rq-f-lk"]').forEach(i => i.addEventListener('change', () => rqLoanForm()));
   $('#rq-f-prev').addEventListener('change', () => { RQ.fPrev = $('#rq-f-prev').value; rqLoanForm(); });
   const qi = $('#rq-q');
@@ -273,6 +320,7 @@ async function renderRequestsPage(view) {
   $('#rq-qclr').onclick = () => { qi.value = ''; RQ.q = ''; rqRender(); qi.focus(); };
   $('#rq-list').addEventListener('click', e => {
     const ed = e.target.closest('[data-rq-edit]'); if (ed) { const r = rqGet(ed.getAttribute('data-rq-edit')); if (r) { RQ.delFor = null; rqOpenForm(r); } return; }
+    const pf = e.target.closest('[data-rq-pdf]'); if (pf) { rqPdf(pf.getAttribute('data-rq-pdf')); return; }
     const xf = e.target.closest('[data-rq-xfer]'); if (xf) { RQ.delFor = null; rqXferOpen(xf.getAttribute('data-rq-xfer')); return; }
     const xg = e.target.closest('[data-rq-xgo]'); if (xg) { rqXferGo(xg.getAttribute('data-rq-xgo')); return; }
     if (e.target.closest('[data-rq-xno]')) { if (!RQ.xBusy) { RQ.xFor = null; RQ.xErr = ''; rqRender(); } return; }
